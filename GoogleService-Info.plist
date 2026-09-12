@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyAC9Y4FT9lrB2V3G9Xtev8SNRdgxGV5hn4</string>
+	<key>GCM_SENDER_ID</key>
+	<string>595442235811</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.mooby.trucomineiro</string>
+	<key>PROJECT_ID</key>
+	<string>truco-mineiro-wjf</string>
+	<key>STORAGE_BUCKET</key>
+	<string>truco-mineiro-wjf.firebasestorage.app</string>
+	<key>DATABASE_URL</key>
+	<string>https://truco-mineiro-wjf-default-rtdb.firebaseio.com</string>
+	<key>IS_ADS_ENABLED</key>
+	<false/>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<true/>
+	<key>IS_APPINVITE_ENABLED</key>
+	<false/>
+	<key>IS_GCM_ENABLED</key>
+	<true/>
+	<key>IS_SIGNIN_ENABLED</key>
+	<false/>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:595442235811:ios:0000000000000000ce28216</string>
+</dict>
+</plist>

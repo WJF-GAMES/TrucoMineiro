@@ -1,0 +1,19 @@
+{
+  "parameters": {
+    "maintenance_mode": { "defaultValue": { "value": "false" }, "valueType": "BOOLEAN" },
+    "minimum_supported_version": { "defaultValue": { "value": "1.0.0" }, "valueType": "STRING" },
+    "ai_easy_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+    "ai_normal_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+    "ai_hard_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+    "online_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+    "matchmaking_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+    "friends_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+    "league_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+    "store_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+    "daily_reward_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+    "xp_multiplier": { "defaultValue": { "value": "1" }, "valueType": "NUMBER" },
+    "matchmaking_bot_fill_seconds": { "defaultValue": { "value": "20" }, "valueType": "NUMBER" },
+    "matchmaking_timeout_seconds": { "defaultValue": { "value": "90" }, "valueType": "NUMBER" }
+  },
+  "version": { "description": "TrucoX initial template" }
+}

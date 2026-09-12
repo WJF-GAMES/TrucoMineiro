@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Truco Mineiro",
+    "slug": "truco-mineiro",
+    "scheme": "trucomineiro",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#00221a",
+    "newArchEnabled": true,
+    "splash": { "image": "./assets/splash-icon.png", "resizeMode": "contain", "backgroundColor": "#00221a" },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.mooby.trucomineiro",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": { "UIBackgroundModes": ["remote-notification"] }
+    },
+    "android": {
+      "package": "com.mooby.trucomineiro",
+      "googleServicesFile": "./google-services.json",
+      "adaptiveIcon": { "backgroundColor": "#00221a", "foregroundImage": "./assets/android-icon-foreground.png" },
+      "predictiveBackGestureEnabled": false,
+      "softwareKeyboardLayoutMode": "pan"
+    },
+    "plugins": [
+      "expo-font",
+      "expo-dev-client",
+      ["expo-splash-screen", { "backgroundColor": "#00221a", "image": "./assets/splash-icon.png", "imageWidth": 200 }],
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
+      "@react-native-firebase/messaging",
+      "@react-native-firebase/app-check",
+      "@react-native-firebase/crashlytics",
+      "@react-native-firebase/perf",
+      ["expo-build-properties", { "ios": { "useFrameworks": "static" }, "android": { "minSdkVersion": 24 } }]
+    ]
+  }
+}

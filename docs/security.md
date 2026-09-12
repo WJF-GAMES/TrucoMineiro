@@ -1,0 +1,56 @@
+# Segurança
+
+## Princípios
+- Cliente **nunca** altera XP, vitórias, derrotas, liga, ranking, recompensas, moedas ou resultado. Somente Functions (Admin SDK).
+- Regras **deny by default** em Firestore (`firestore.rules`), RTDB (`database.rules.json`) e Storage (`storage.rules`).
+- Functions críticas (`authedCallable`) validam: Authentication, App Check (fora do emulador), payload (validadores explícitos), ownership (uid vs. assento/sala/solicitação), estado (`status`, `phase`, `availableActions`) e concorrência (transações Firestore/RTDB).
+
+## Idempotência
+| Operação | Mecanismo |
+|---|---|
+| finalizeMatch / progressão online | `matchHistory/{matchId}` criado na mesma transação que atualiza perfil/stats — segunda chamada devolve `alreadyProcessed` |
+| claimReward | `rewards/{uid}_{rewardId}` |
+| purchaseItem | `ownedItems` verificado dentro da transação |
+| submitGameAction | `appliedActionIds[clientActionId]` no state da sessão |
+| joinRoom / startMatch | transação RTDB; já-membro / já-iniciada retornam o mesmo resultado |
+
+## Anti-trapaça no modo IA
+O cliente envia `seed`, `aiSeed`, `difficulty` e a lista de ações. O servidor re-executa a partida com o mesmo engine e exige que cada ação de IA seja
+idêntica à decisão determinística da IA — qualquer divergência ou ação humana inválida rejeita a partida.
+
+## Dados sensíveis
+- Analytics e Crashlytics nunca recebem telefone, OTP, tokens ou credenciais.
+- Service Account não existe no app; `google-services.json` contém apenas chaves públicas do cliente.
+
+## App Check — estado atual
+
+O enforcement é **controlado por `ENFORCE_APP_CHECK`** (`functions/.env`, hoje `false`) e lido em
+`functions/src/lib/admin.ts`. Motivo: com `enforceAppCheck: true` antes do App Check estar configurado
+no projeto, **todas as callables rejeitam o cliente**:
+
+```
+Failed to validate AppCheck token. FirebaseAppCheckError: Decoding App Check token failed.
+{"verifications":{"app":"INVALID","auth":"VALID"},"message":"Callable request verification failed"}
+```
+
+Isso aconteceu no primeiro deploy: o login funcionava, mas `bootstrapUser`/`updateProfile` eram
+recusados e nenhum perfil era criado (Firestore ficava vazio). Com a flag desligada o log passa a
+dizer `Allowing request with invalid AppCheck token because enforcement is disabled` e tudo funciona.
+
+Para ligar (recomendado antes de publicar nas lojas):
+1. Console → App Check → habilitar a API e registrar o app Android com **Play Integrity** (exige os SHA).
+2. Registrar o debug token (impresso no logcat) para os builds de desenvolvimento.
+3. `ENFORCE_APP_CHECK=true` em `functions/.env` e redeploy das functions.
+
+## Diagnóstico
+
+`diagnostics` (HTTP, mesmo `SEED_SECRET` do `seedCatalog`) devolve a contagem de `profiles`, `users`,
+`playerStats`, `leagues` e `seasons` e os primeiros perfis — serve para conferir, de fora do app, se as
+Functions realmente escreveram:
+```
+curl -H "x-seed-secret: <segredo>" https://southamerica-east1-truco-mineiro-wjf.cloudfunctions.net/diagnostics
+```
+
+## Pendências
+- Registrar SHA-1/SHA-256 do app no Console para Play Integrity (já necessário para Phone Auth em release).
+- Ligar o App Check (passos acima) antes da publicação.

@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "595442235811",
+    "firebase_url": "https://truco-mineiro-wjf-default-rtdb.firebaseio.com",
+    "project_id": "truco-mineiro-wjf",
+    "storage_bucket": "truco-mineiro-wjf.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:595442235811:android:60f71a40973ce0a2e28216",
+        "android_client_info": {
+          "package_name": "com.mooby.trucomineiro"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB8pJxihNMJAjg5jlAfeG5VLP9MKverKqU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
