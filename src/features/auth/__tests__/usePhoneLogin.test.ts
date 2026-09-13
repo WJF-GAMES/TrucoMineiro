@@ -1,6 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { usePhoneLogin, LOGIN_MESSAGES } from '../usePhoneLogin';
-import { useNetworkStore } from '@/stores/networkStore';
 import { useAuthStore } from '@/stores/authStore';
 
 jest.mock('@/services/firebase/auth', () => {
@@ -24,7 +23,6 @@ const login = (onCodeSent = jest.fn()) => renderHook(() => usePhoneLogin(onCodeS
 beforeEach(() => {
   jest.clearAllMocks();
   signIn.mockResolvedValue(CONFIRMATION);
-  useNetworkStore.setState({ connected: true, wasConnected: true });
   useAuthStore.setState({ pendingPhone: null, confirmation: null });
 });
 
@@ -83,38 +81,15 @@ describe('usePhoneLogin', () => {
     expect(result.current.error).toBeNull();
   });
 
-  it('does not send after losing a connection it had', async () => {
-    useNetworkStore.setState({ connected: false, wasConnected: true });
+  it('shows the human message of an AuthError (inclusive a de rede)', async () => {
+    signIn.mockRejectedValueOnce(new AuthError('Sem conexão. Verifique sua internet.'));
     const { result } = await login();
     await act(async () => result.current.changePhone(VALID));
     await act(async () => {
       await result.current.submit();
     });
 
-    expect(signIn).not.toHaveBeenCalled();
-    expect(result.current.error).toBe(LOGIN_MESSAGES.offline);
-  });
-
-  it('still tries when the connection was never established', async () => {
-    // Sem RTDB (firewall/emulador) o app nunca marca "online"; bloquear aqui impediria o login.
-    useNetworkStore.setState({ connected: false, wasConnected: false });
-    const { result } = await login();
-    await act(async () => result.current.changePhone(VALID));
-    await act(async () => {
-      await result.current.submit();
-    });
-    expect(signIn).toHaveBeenCalledWith('+5561996289726');
-  });
-
-  it('shows the human message of an AuthError', async () => {
-    signIn.mockRejectedValueOnce(new AuthError('Muitas tentativas. Aguarde.'));
-    const { result } = await login();
-    await act(async () => result.current.changePhone(VALID));
-    await act(async () => {
-      await result.current.submit();
-    });
-
-    expect(result.current.error).toBe('Muitas tentativas. Aguarde.');
+    expect(result.current.error).toBe('Sem conexão. Verifique sua internet.');
     expect(result.current.loading).toBe(false);
   });
 

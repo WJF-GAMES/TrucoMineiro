@@ -33,6 +33,8 @@ Nenhum foi gerado pelo ChatGPT nesta rodada (acesso à conversa exige login huma
 | intro hero | assets/images/hero/intro_hero.png | PNG | Introdução | Logo + personagem + mesa (a faixa de benefícios é UI) | recorte de `references/introducao.png` via `scripts/extract-screen-assets.py` | sim | sim | não | 1419×1683 |
 | login header | assets/images/hero/login_header.png | PNG | Login | Paisagem mineira + logo + slogan | recorte de `references/login.png` (idem) | sim | sim | não | 1396×948 |
 | login footer | assets/images/hero/login_footer.png | PNG | Login | Vegetação do rodapé (a frase é UI, apagada do recorte) | recorte de `references/login.png` (idem) | não | sim | não | 1396×464 |
+| otp top | assets/images/hero/otp_top.png | PNG (alpha na base) | OTP | Paisagem noturna + lampião + placa | recorte de `references/otp.png` via `scripts/extract-screen-assets.py` | não | sim | não | 1396×780 |
+| otp bottom | assets/images/hero/otp_bottom.png | PNG | OTP | Vegetação + mesa de truco | recorte de `references/otp.png` (idem) | não | sim | não | 1396×674 |
 | app icon (iOS) | assets/icon.png | PNG (opaco, sem alpha) | Launcher iOS / App Store | Ícone do app sangrando até a borda (o iOS aplica o squircle) | `references/app-icon.png` via `scripts/generate-app-icons.py` | não | sim | não | 1024×1024 |
 | adaptive foreground | assets/android-icon-foreground.png | PNG (alpha) | Launcher Android | Badge reduzido a 52,7% do canvas para caber inteiro até na máscara circular | idem | não | sim | não | 1024×1024 |
 | adaptive background | assets/android-icon-background.png | PNG | Launcher Android | Campo verde full-bleed (degradê radial do tabuleiro) | idem | não | sim | não | 1024×1024 |

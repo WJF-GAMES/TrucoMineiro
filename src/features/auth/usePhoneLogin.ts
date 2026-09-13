@@ -2,13 +2,11 @@ import { useCallback, useRef, useState } from 'react';
 import { COUNTRIES, Country, formatAsYouType, toE164 } from '@/utils/phone';
 import { AuthError, signInWithPhoneNumber } from '@/services/firebase/auth';
 import { useAuthStore } from '@/stores/authStore';
-import { useNetworkStore } from '@/stores/networkStore';
 import { logEvent } from '@/services/firebase/analytics';
 import { haptic } from '@/utils/haptics';
 
 export const LOGIN_MESSAGES = {
   invalid: 'Informe um número de telefone válido.',
-  offline: 'Sem conexão. Verifique sua internet e tente novamente.',
   unknown: 'Não foi possível enviar o código. Tente novamente.',
 } as const;
 
@@ -28,6 +26,11 @@ interface PhoneLogin {
  *
  * A tela só desenha; quem fala com o Firebase é `services/firebase/auth`.
  * O número só vira E.164 aqui e nunca é logado (analytics recebe apenas o evento).
+ *
+ * Sem checagem de rede antes de enviar: o estado do Realtime Database não diz se o Auth
+ * está acessível (visto na prática com o RTDB fora do ar e o login funcionando), e um
+ * falso "sem conexão" travaria o acesso. Quem erra por rede é o próprio Firebase, e o
+ * `AuthError` dele já vira "Sem conexão. Verifique sua internet.".
  */
 export function usePhoneLogin(onCodeSent: () => void): PhoneLogin {
   const [country, setCountry] = useState<Country>(COUNTRIES[0]!);
@@ -58,15 +61,6 @@ export function usePhoneLogin(onCodeSent: () => void): PhoneLogin {
     if (sending.current) return;
     if (!e164) {
       setError(LOGIN_MESSAGES.invalid);
-      haptic.error();
-      return;
-    }
-    // Só corta o envio quando o app JÁ esteve online e caiu. Se nunca conectou
-    // (RTDB bloqueado por firewall, emulador sem Suite), deixa o Firebase tentar:
-    // um erro de rede dele vira a mesma mensagem, sem falso negativo.
-    const net = useNetworkStore.getState();
-    if (!net.connected && net.wasConnected) {
-      setError(LOGIN_MESSAGES.offline);
       haptic.error();
       return;
     }

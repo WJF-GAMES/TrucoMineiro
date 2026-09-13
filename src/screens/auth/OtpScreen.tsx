@@ -1,15 +1,26 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { colors, spacing } from '@/design-system';
 import { images } from '@/assets';
-import { AppText, IconButton, OtpInput, PrimaryButton, Screen, Surface } from '@/components';
+import { AppText, IconButton, OtpInput, PrimaryButton, Surface } from '@/components';
 import { useAuthStore } from '@/stores/authStore';
 import { AuthError, confirmCode, signInWithPhoneNumber } from '@/services/firebase/auth';
 import { logEvent } from '@/services/firebase/analytics';
 import { toast } from '@/stores/toastStore';
 import { maskPhone } from '@/utils/phone';
+import { OTP_LENGTH } from '@/utils/otp';
 import { USE_EMULATORS } from '@/services/firebase/app';
 import { haptic } from '@/utils/haptics';
 import type { RootScreenProps } from '@/navigation/types';
@@ -17,7 +28,13 @@ import type { RootScreenProps } from '@/navigation/types';
 type Status = 'idle' | 'verifying' | 'invalid' | 'expired' | 'resending';
 const RESEND_SECONDS = 45;
 
+/** Proporções naturais das artes recortadas de references/otp.png. */
+const TOP_RATIO = 1396 / 780;
+const BOTTOM_RATIO = 1396 / 674;
+
 export function OtpScreen({ navigation }: RootScreenProps<'Otp'>) {
+  const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
   const pendingPhone = useAuthStore((s) => s.pendingPhone);
   const confirmation = useAuthStore((s) => s.confirmation);
   const setPending = useAuthStore((s) => s.setPending);
@@ -52,9 +69,11 @@ export function OtpScreen({ navigation }: RootScreenProps<'Otp'>) {
       // Auth listener switches the navigator to onboarding/main.
     } catch (e) {
       const err = e instanceof AuthError ? e : null;
-      setStatus(err?.code === 'code-expired' ? 'expired' : 'invalid');
-      setMessage(err?.message ?? 'Código inválido.');
-      setCode('');
+      const expired = err?.code === 'code-expired';
+      setStatus(expired ? 'expired' : 'invalid');
+      setMessage(err?.message ?? 'O código informado não é válido.');
+      // Código expirado não serve mais; num código errado o usuário só corrige o dígito.
+      if (expired) setCode('');
       haptic.error();
     } finally {
       submitting.current = false;
@@ -68,6 +87,7 @@ export function OtpScreen({ navigation }: RootScreenProps<'Otp'>) {
       return;
     }
     setStatus('resending');
+    setCode('');
     try {
       const c = await signInWithPhoneNumber(pendingPhone);
       setPending(pendingPhone, c);
@@ -83,149 +103,207 @@ export function OtpScreen({ navigation }: RootScreenProps<'Otp'>) {
     }
   };
 
+  const waiting = seconds > 0;
+  // No mockup a paisagem ocupa ~31% da tela; em telas altas ela cresce até lá (cover corta
+  // um pouco das laterais) para o lampião e a placa aparecerem inteiros.
+  const naturalTop = width / TOP_RATIO;
+  const topHeight = Math.min(Math.max(naturalTop, height * 0.31), naturalTop * 1.3);
+
   return (
-    <Screen testID="screen-otp">
+    <View style={styles.root} testID="screen-otp">
+      <StatusBar style="light" />
+      <Image
+        source={images.otpTop}
+        style={[styles.top, { height: topHeight }]}
+        contentFit="cover"
+        contentPosition="top"
+        pointerEvents="none"
+      />
+      <Image
+        source={images.otpBottom}
+        style={[styles.bottom, { height: width / BOTTOM_RATIO }]}
+        contentFit="cover"
+        pointerEvents="none"
+      />
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}
       >
-        <View style={styles.topRow}>
-          <IconButton
-            icon="chevron-back"
-            boxed={false}
-            size={28}
-            color={colors.text}
-            accessibilityLabel="Voltar"
-            onPress={() => navigation.goBack()}
-          />
-          <Image source={images.logo} style={styles.logo} contentFit="contain" />
-          <View style={{ width: 28 }} />
-        </View>
-
-        <AppText variant="display" center style={styles.title}>
-          Digite o código
-        </AppText>
-        <AppText variant="body" center color={colors.textSecondary}>
-          Enviamos um SMS com 6 dígitos para{'\n'}
-          <AppText variant="bodyBold">{pendingPhone ? maskPhone(pendingPhone) : ''}</AppText>
-        </AppText>
-
-        <View style={styles.otp}>
-          <OtpInput
-            value={code}
-            onChange={(v) => {
-              setCode(v);
-              // Typing again clears the previous failure so the red state never lingers.
-              if (status === 'invalid' || status === 'expired') {
-                setStatus('idle');
-                setMessage(null);
-              }
-              if (v.length === 6 && status !== 'verifying') verify(v);
-            }}
-            error={status === 'invalid' || status === 'expired'}
-          />
-        </View>
-
-        {message ? (
-          <View style={styles.msgRow}>
-            <Ionicons name="alert-circle" size={16} color={colors.dangerSoft} />
-            <AppText variant="small" color={colors.dangerSoft} style={{ marginLeft: 6 }}>
-              {message}
-            </AppText>
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            { paddingTop: insets.top + spacing.headerTop, paddingBottom: insets.bottom + 16 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.topRow}>
+            <IconButton
+              icon="chevron-back"
+              boxed={false}
+              size={28}
+              color={colors.text}
+              accessibilityLabel="Voltar"
+              onPress={() => navigation.goBack()}
+            />
+            <Image source={images.logo} style={styles.logo} contentFit="contain" />
+            <View style={styles.topRowSpacer} />
           </View>
-        ) : status === 'verifying' ? (
-          <AppText variant="small" center color={colors.textSecondary} style={styles.msg}>
-            Verificando...
-          </AppText>
-        ) : (
-          <AppText variant="small" center color={colors.textSecondary} style={styles.msg}>
-            O código chega em instantes.
-          </AppText>
-        )}
 
-        <PrimaryButton
-          label="Confirmar"
-          onPress={() => verify(code)}
-          loading={status === 'verifying'}
-          disabled={code.length < 6}
-          style={styles.cta}
-          testID="otp-confirm"
-        />
+          {/* Título começa sobre a paisagem, como no mockup; a sobra vai toda para baixo. */}
+          <View style={{ height: height * 0.06 }} />
 
-        <Surface style={styles.resendCard}>
-          <View style={{ flex: 1 }}>
-            <AppText variant="bodyBold">Não recebeu?</AppText>
-            <AppText variant="small" color={colors.textSecondary}>
-              {seconds > 0 ? `Reenviar em ${seconds}s` : 'Você já pode pedir um novo código.'}
-            </AppText>
+          <AppText variant="display" center style={styles.title}>
+            Digite o código
+          </AppText>
+          <AppText variant="body" center color={colors.textSecondary} style={styles.subtitle}>
+            Enviamos um SMS com 6 dígitos para{'\n'}
+            <AppText variant="bodyBold">{pendingPhone ? maskPhone(pendingPhone) : ''}</AppText>
+          </AppText>
+
+          <View style={styles.otp}>
+            <OtpInput
+              value={code}
+              onChange={(v) => {
+                setCode(v);
+                // Editar limpa a falha anterior para o vermelho não ficar preso na tela.
+                if (status === 'invalid' || status === 'expired') {
+                  setStatus('idle');
+                  setMessage(null);
+                }
+              }}
+              error={status === 'invalid' || status === 'expired'}
+            />
           </View>
+
+          {message ? (
+            <View style={styles.msgRow}>
+              <Ionicons name="alert-circle" size={16} color={colors.dangerSoft} />
+              <AppText variant="small" color={colors.dangerSoft} style={styles.msgText}>
+                {message}
+              </AppText>
+            </View>
+          ) : (
+            <AppText variant="small" center color={colors.textSecondary} style={styles.msg}>
+              {status === 'verifying' ? 'Verificando...' : 'O código chega em instantes.'}
+            </AppText>
+          )}
+
+          <PrimaryButton
+            label="Confirmar"
+            onPress={() => verify(code)}
+            loading={status === 'verifying'}
+            disabled={code.length < OTP_LENGTH}
+            style={styles.cta}
+            testID="otp-confirm"
+          />
+
+          <Surface style={styles.resendCard}>
+            <View style={styles.resendLeft}>
+              <AppText variant="bodyBold">Não recebeu?</AppText>
+              <AppText variant="small" color={colors.textSecondary} style={styles.resendHint}>
+                {waiting ? 'O SMS pode demorar um pouco.' : 'Você já pode pedir um novo código.'}
+              </AppText>
+            </View>
+            <View style={styles.resendDivider} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Reenviar código"
+              accessibilityState={{ disabled: waiting || status === 'resending' }}
+              disabled={waiting || status === 'resending'}
+              onPress={resend}
+              hitSlop={8}
+              style={styles.resendRight}
+            >
+              <AppText variant="small" color={colors.textMuted}>
+                {waiting ? `Reenviar em ${seconds}s` : 'Novo código'}
+              </AppText>
+              <AppText
+                variant="bodyBold"
+                color={waiting ? colors.textMuted : colors.primaryBright}
+                style={styles.resendAction}
+              >
+                {status === 'resending' ? 'Enviando...' : 'Reenviar'}
+              </AppText>
+            </Pressable>
+          </Surface>
+
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Reenviar código"
-            disabled={seconds > 0 || status === 'resending'}
-            onPress={resend}
-            hitSlop={8}
+            onPress={() => {
+              clearPending();
+              navigation.navigate('Login');
+            }}
+            style={styles.changePhone}
           >
-            <AppText
-              variant="bodyBold"
-              color={seconds > 0 ? colors.textMuted : colors.primaryBright}
-            >
-              {status === 'resending' ? 'Enviando...' : 'Reenviar'}
+            <Ionicons name="call" size={16} color={colors.text} />
+            <AppText variant="bodyBold" style={styles.changePhoneText}>
+              Alterar telefone
             </AppText>
           </Pressable>
-        </Surface>
 
-        {USE_EMULATORS ? (
-          <AppText variant="caption" center color={colors.gold} style={styles.devHint}>
-            Emulator Suite ativo: o código é gerado pelo emulador (veja o log em
-            127.0.0.1:4000/auth), não o número de teste do Console.
-          </AppText>
-        ) : null}
+          {USE_EMULATORS ? (
+            <AppText variant="caption" center color={colors.gold} style={styles.devHint}>
+              Emulator Suite ativo: o código é gerado pelo emulador (veja o log em
+              127.0.0.1:4000/auth), não o número de teste do Console.
+            </AppText>
+          ) : null}
 
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            clearPending();
-            navigation.navigate('Login');
-          }}
-          style={styles.changePhone}
-        >
-          <Ionicons name="call" size={16} color={colors.textSecondary} />
-          <AppText variant="smallBold" color={colors.textSecondary} style={{ marginLeft: 6 }}>
-            Alterar telefone
-          </AppText>
-        </Pressable>
+          <View style={styles.spacerBottom} />
+        </ScrollView>
       </KeyboardAvoidingView>
-    </Screen>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.bgTop },
   flex: { flex: 1 },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: spacing.headerTop,
+  top: { position: 'absolute', top: 0, left: 0, right: 0 },
+  bottom: { position: 'absolute', bottom: 0, left: 0, right: 0 },
+  content: { paddingHorizontal: spacing.screen, flexGrow: 1 },
+  spacerBottom: { flex: 1 },
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  topRowSpacer: { width: 28 },
+  logo: { width: 130, height: 52 },
+  title: {
+    marginTop: spacing.lg,
+    fontSize: 32,
+    lineHeight: 38,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
   },
-  logo: { width: 120, height: 48 },
-  title: { marginTop: spacing.xl, marginBottom: 6 },
+  subtitle: { marginTop: 8, fontSize: 15, lineHeight: 22 },
   otp: { marginTop: spacing.xxl },
+  msg: { marginTop: spacing.lg },
   msgRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: spacing.md,
   },
-  msg: { marginTop: spacing.md },
+  msgText: { marginLeft: 6 },
   cta: { marginTop: spacing.xl },
-  resendCard: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.lg },
-  devHint: { marginTop: spacing.md, paddingHorizontal: spacing.lg },
+  resendCard: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.xl },
+  resendLeft: { flex: 1 },
+  resendHint: { marginTop: 2 },
+  resendDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    marginHorizontal: spacing.md,
+    backgroundColor: colors.divider,
+  },
+  resendRight: { alignItems: 'flex-end' },
+  resendAction: { marginTop: 2 },
   changePhone: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.lg,
+    marginTop: spacing.xl,
     padding: 8,
   },
+  changePhoneText: { marginLeft: 8 },
+  devHint: { marginTop: spacing.md, paddingHorizontal: spacing.lg },
 });

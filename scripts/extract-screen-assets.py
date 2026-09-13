@@ -6,6 +6,8 @@ ARTE deles — nunca a interface, que é construída em React Native (textos, ca
   references/introducao.png -> assets/images/hero/intro_hero.png     (logo + personagem + mesa)
   references/login.png      -> assets/images/hero/login_header.png   (paisagem + logo + slogan)
                             -> assets/images/hero/login_footer.png   (vegetação do rodapé)
+  references/otp.png        -> assets/images/hero/otp_top.png        (paisagem + lampião + placa)
+                            -> assets/images/hero/otp_bottom.png     (vegetação + mesa)
 
 Rodar: python scripts/extract-screen-assets.py
 """
@@ -70,7 +72,31 @@ def login_art() -> None:
     save(out, 'login_footer.png')
 
 
+def otp_art() -> None:
+    """Cenário da tela de código: faixa de cima (paisagem, lampião, placa) e vegetação de baixo.
+
+    Tudo que é interface no print (seta, logo, títulos) é apagado — a tela desenha por cima.
+    """
+    src = Image.open(REFS / 'otp.png').convert('RGB')
+
+    top = src.crop((0, 0, src.width, 520))
+    px = np.array(top).astype(float)
+    erase(px, (140, 235, src.width, 519), 230, 519)       # títulos sobre fundo liso
+    erase(px, (315, 92, 620, 215), 86, 220)               # logo (a UI redesenha por cima)
+    erase(px, (55, 105, 115, 172), 100, 176)              # seta de voltar
+    # A base dissolve no fundo da tela (no mockup a paisagem some sem linha de corte).
+    out = Image.fromarray(px.round().astype('uint8')).convert('RGBA')
+    fade = np.ones((out.height, out.width), float)
+    ramp_h = int(out.height * 0.42)
+    fade[-ramp_h:] = (np.linspace(1, 0, ramp_h) ** 0.9)[:, None]
+    out.putalpha(Image.fromarray((fade * 255).round().astype('uint8')))
+    save(out, 'otp_top.png')
+
+    save(src.crop((0, 1240, src.width, src.height)), 'otp_bottom.png')
+
+
 if __name__ == '__main__':
     OUT.mkdir(parents=True, exist_ok=True)
     intro_hero()
     login_art()
+    otp_art()

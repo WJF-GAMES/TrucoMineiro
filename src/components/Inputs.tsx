@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, fontFamily, radius } from '@/design-system';
+import { colors, fontFamily, radius, shadows } from '@/design-system';
 import { AppText } from './AppText';
 import { CountryFlag } from './CountryFlag';
 import { PHONE_PLACEHOLDER, type Country } from '@/utils/phone';
+import { OTP_LENGTH, sanitizeOtp } from '@/utils/otp';
 
 const inputFont = { fontFamily: fontFamily.semibold, fontSize: 16, color: colors.text };
 
@@ -137,11 +138,19 @@ export function PhoneInput({
   );
 }
 
-/** Six-digit OTP boxes backed by one hidden input (supports SMS autofill). */
+/**
+ * Código de 6 dígitos: um único TextInput real por cima de 6 células visuais.
+ *
+ * O input precisa ser do tamanho das células e opaco (só o texto e o cursor são
+ * transparentes). Um campo 1x1 com `opacity: 0` é ignorado pelo autofill do Android
+ * e pela sugestão do teclado no iOS — era por isso que o código do SMS não aparecia.
+ * `autoComplete="sms-otp"` (Android) e `textContentType="oneTimeCode"` (iOS) fazem o
+ * sistema oferecer o código; nenhuma permissão de leitura de SMS é usada.
+ */
 export function OtpInput({
   value,
   onChange,
-  length = 6,
+  length = OTP_LENGTH,
   error,
   autoFocus = true,
 }: {
@@ -154,48 +163,60 @@ export function OtpInput({
   const ref = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
   useEffect(() => {
-    if (autoFocus) setTimeout(() => ref.current?.focus(), 250);
+    // Espera a transição de tela terminar, senão o foco se perde no meio da animação.
+    if (!autoFocus) return;
+    const t = setTimeout(() => ref.current?.focus(), 250);
+    return () => clearTimeout(t);
   }, [autoFocus]);
   const digits = value.split('');
   return (
-    <Pressable
-      onPress={() => ref.current?.focus()}
-      accessibilityLabel="Código de verificação"
-      style={styles.otpRow}
-    >
-      {Array.from({ length }).map((_, i) => {
-        const active = focused && digits.length === i;
-        return (
-          <View
-            key={i}
-            style={[
-              styles.otpBox,
-              active && styles.otpActive,
-              error && styles.fieldError,
-              digits[i] ? styles.otpFilled : null,
-            ]}
-          >
-            <AppText variant="h1" style={{ fontSize: 24 }}>
-              {digits[i] ?? ''}
-            </AppText>
-          </View>
-        );
-      })}
+    <View style={styles.otpWrap}>
+      {/* O campo fica ATRÁS das células: no Android o texto dele ainda aparece por cima
+          mesmo com `color: 'transparent'` (o IME desenha o texto em composição). */}
       <TextInput
         ref={ref}
         testID="otp-input"
+        accessibilityLabel={`Código de verificação de ${length} dígitos`}
         value={value}
-        onChangeText={(t) => onChange(t.replace(/\D/g, '').slice(0, length))}
+        onChangeText={(t) => onChange(sanitizeOtp(t, length))}
         keyboardType="number-pad"
+        inputMode="numeric"
         textContentType="oneTimeCode"
         autoComplete="sms-otp"
+        importantForAutofill="yes"
         maxLength={length}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        style={styles.hidden}
+        style={styles.otpInput}
         caretHidden
+        selectionColor="transparent"
       />
-    </Pressable>
+      <View
+        style={styles.otpRow}
+        pointerEvents="none"
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        {Array.from({ length }).map((_, i) => {
+          const active = focused && digits.length === i;
+          return (
+            <View
+              key={i}
+              style={[
+                styles.otpBox,
+                active && styles.otpActive,
+                error && styles.fieldError,
+                digits[i] ? styles.otpFilled : null,
+              ]}
+            >
+              <AppText variant="h1" style={styles.otpDigit}>
+                {digits[i] ?? ''}
+              </AppText>
+            </View>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 
@@ -232,10 +253,32 @@ const styles = StyleSheet.create({
   phoneRow: { flexDirection: 'row', gap: 10 },
   country: { paddingHorizontal: 12, minHeight: 56 },
   dial: { fontSize: 16, marginLeft: 8 },
-  otpRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
+  otpWrap: { position: 'relative', height: 60 },
+  otpRow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  otpDigit: { fontSize: 24 },
+  // Cobre as células inteiras: o autofill precisa de um campo visível e do tamanho real.
+  // Ocupa a área toda das células: o autofill precisa de um campo visível e do tamanho real.
+  // `color: 'transparent'` não basta no Android (o IME desenha o texto em composição),
+  // então a fonte também é reduzida: o campo continua do tamanho real para o autofill.
+  otpInput: {
+    height: '100%',
+    width: '100%',
+    color: 'transparent',
+    fontSize: 1,
+    textAlign: 'center',
+  },
   otpBox: {
     flex: 1,
-    height: 60,
+    height: '100%',
     borderRadius: radius.input,
     backgroundColor: colors.input,
     borderWidth: 1,
@@ -243,7 +286,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  otpActive: { borderColor: colors.primaryBright },
+  otpActive: {
+    borderColor: colors.primaryBright,
+    borderWidth: 2,
+    backgroundColor: colors.primaryGlow,
+    ...shadows.glowGreen,
+  },
   otpFilled: { borderColor: colors.cardBorderStrong },
-  hidden: { position: 'absolute', opacity: 0, width: 1, height: 1 },
 });

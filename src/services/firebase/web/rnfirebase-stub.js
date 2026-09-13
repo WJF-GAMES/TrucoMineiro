@@ -72,8 +72,22 @@ export const onAuthStateChanged = (_auth, cb) => {
   if (typeof cb === 'function') setTimeout(() => cb(null), 0);
   return noop;
 };
+/**
+ * Não existe verificação por SMS no browser. Em vez de estourar um erro (que apareceria
+ * como falha de login numa tela válida), devolvemos uma confirmação de mentira: o fluxo
+ * Login -> OTP continua navegável para inspeção visual, e confirmar o código avisa que
+ * a etapa real só roda no app.
+ */
 export const signInWithPhoneNumber = async () => {
-  throw new Error('Login por telefone não está disponível na build web.');
+  console.warn('[web] envio de SMS simulado: teste o login de verdade no Android/iOS.');
+  return {
+    verificationId: 'web-preview',
+    confirm: async () => {
+      const err = new Error('Confirmação de SMS indisponível na build web.');
+      err.code = 'auth/invalid-verification-code';
+      throw err;
+    },
+  };
 };
 export const signOut = asyncNoop;
 

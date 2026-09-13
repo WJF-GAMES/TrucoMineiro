@@ -17,6 +17,8 @@ CHECKS = [
     ('src/screens/intro/IntroScreen.tsx', r'HERO_RATIO = (\d+) / (\d+)', 'assets/images/hero/intro_hero.png'),
     ('src/screens/auth/LoginScreen.tsx', r'HERO_RATIO = (\d+) / (\d+)', 'assets/images/hero/login_header.png'),
     ('src/screens/auth/LoginScreen.tsx', r'FOOTER_RATIO = (\d+) / (\d+)', 'assets/images/hero/login_footer.png'),
+    ('src/screens/auth/OtpScreen.tsx', r'TOP_RATIO = (\d+) / (\d+)', 'assets/images/hero/otp_top.png'),
+    ('src/screens/auth/OtpScreen.tsx', r'BOTTOM_RATIO = (\d+) / (\d+)', 'assets/images/hero/otp_bottom.png'),
     ('src/screens/home/HomeScreen.tsx', r'banner: \{[^}]*aspectRatio: (\d+) / (\d+)', 'assets/images/banners/temporada_minas.png'),
     ('src/screens/league/LeagueScreen.tsx', r'banner: \{[^}]*aspectRatio: (\d+) / (\d+)', 'assets/images/banners/temporada_minas.png'),
 ]

@@ -9,6 +9,8 @@ export const images = {
   introHero: require('../../assets/images/hero/intro_hero.png'),
   loginHeader: require('../../assets/images/hero/login_header.png'),
   loginFooter: require('../../assets/images/hero/login_footer.png'),
+  otpTop: require('../../assets/images/hero/otp_top.png'),
+  otpBottom: require('../../assets/images/hero/otp_bottom.png'),
   modeIa: require('../../assets/images/cards/mode_ia.png'),
   modeOnline: require('../../assets/images/cards/mode_online.png'),
   bannerAmigos: require('../../assets/images/banners/amigos_turma.png'),
