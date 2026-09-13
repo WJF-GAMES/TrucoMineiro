@@ -18,6 +18,8 @@ wipe()  { timeout 30 "$ADB" shell pm clear $PKG > /dev/null; }
 launch() {
   timeout 20 "$ADB" shell am force-stop $PKG
   if [ "${DEV_CLIENT:-0}" = "1" ]; then
+    # O reverse some sempre que o emulador reinicia; sem ele o dev client não acha o Metro.
+    timeout 15 "$ADB" reverse tcp:8081 tcp:8081 > /dev/null
     timeout 30 "$ADB" shell am start -a android.intent.action.VIEW       -d "trucomineiro://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081" $PKG > /dev/null
     local n=0
     until timeout 20 "$ADB" logcat -d 2>/dev/null | grep -q 'Running "main"'; do

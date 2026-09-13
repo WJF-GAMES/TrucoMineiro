@@ -13,11 +13,17 @@ import { GameTable } from './GameTable';
 import { StateView } from '@/components';
 import { Screen } from '@/components/Screen';
 import { buildMatchAnalysis, type MatchAnalysis } from '@/features/game/matchAnalysis';
+import { TRICK_RESOLVE_PAUSE_MS } from '@/features/game/trickPresentation';
 import { AdService, useGameSessionGuard, usePreloadRewarded } from '@/ads';
 import type { RootScreenProps } from '@/navigation/types';
 
 /** How long the online result screen waits for the server-side rewards before showing without them. */
 const REWARD_WAIT_MS = 4000;
+/**
+ * A última vaza da partida ainda está sendo mostrada (quarta carta, vencedora, recolhimento) quando
+ * o motor declara MATCH_ENDED: o resultado só entra depois dela, senão a carta decisiva some.
+ */
+const RESULT_DELAY_MS = TRICK_RESOLVE_PAUSE_MS + 500;
 
 export function GameScreen(props: RootScreenProps<'Game'>) {
   const { params } = props.route;
@@ -51,6 +57,7 @@ function AiGame({
     async (state: MatchState, record: AiMatchRecord) => {
       if (finishing.current) return;
       finishing.current = true;
+      const finishedAt = Date.now();
       const won = state.winner === teamOf(0);
       logEvent('match_completed', { mode: 'ai', difficulty, won });
       logEvent(won ? 'match_won' : 'match_lost', { mode: 'ai', difficulty });
@@ -82,6 +89,7 @@ function AiGame({
             : 'Sua progressão será atualizada quando a conexão voltar.',
         );
       }
+      // finalizeAiMatch já consumiu parte do tempo da apresentação; o resto espera aqui.
       setTimeout(() => {
         navigation.replace('MatchResult', {
           mode: 'ai',
@@ -92,7 +100,7 @@ function AiGame({
           ...progression,
           rematch: { mode: 'ai', difficulty },
         });
-      }, 900);
+      }, Math.max(0, RESULT_DELAY_MS - (Date.now() - finishedAt)));
     },
     [navigation, difficulty],
   );
@@ -135,7 +143,7 @@ function OnlineGame({ navigation, sessionId }: RootScreenProps<'Game'> & { sessi
       const earned = controller.progression;
       // The server writes the rewards right after finishing the match; wait for them, but never
       // hold the player on a finished table — after REWARD_WAIT_MS we move on without the numbers.
-      const delay = earned ? 900 : REWARD_WAIT_MS;
+      const delay = earned ? RESULT_DELAY_MS : REWARD_WAIT_MS;
       const t = setTimeout(() => {
         navigated.current = true;
         logEvent('match_completed', { mode: 'online', won });

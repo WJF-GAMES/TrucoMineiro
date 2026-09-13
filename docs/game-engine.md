@@ -53,3 +53,32 @@ ordem, mão ou resultado. O cliente continua sem ser autoridade.
   andada por trás do baralho.
 - **Prazo**: local por padrão (`CEREMONY_TIMING`), porque nenhuma regra depende dele. Quando o
   servidor passar a publicar um prazo por etapa, basta alimentar `serverDeadlineAt` no hook.
+
+## Apresentação da vaza (UI)
+
+O motor resolve a vaza **no mesmo `applyAction`** da quarta carta: `currentRound` chega à UI já
+vazio e, quando a mão termina, a view seguinte já é de outra mão. Desenhar só `currentRound` fazia
+a última carta nunca aparecer e a mesa esvaziar antes de alguém entender quem levou.
+
+- `src/domain/game/rules/strength.ts#leadingPlay` — carta que está ganhando numa vaza parcial
+  (mesma comparação do `resolveRound`; marca empate entre adversários).
+- `src/features/game/trickPresentation.ts` — reducer puro: reconstrói as quatro cartas a partir de
+  `ROUND_ENDED` + `view.rounds` (mão continua) ou do lote de `CARD_PLAYED` (mão acabou), segura a
+  vaza (`holdMs`), recolhe (`collectMs`) e limpa. `TRICK_RESOLVE_PAUSE_MS` é o tempo que os bots
+  (IA local e `advanceBots` online) esperam depois de uma vaza fechar.
+- `useTrickPresentation.ts` — deriva a apresentação no render em que view/lote mudam (deduplica
+  lotes repetidos por `view.version`) e só usa timers para o relógio segurar → recolher → vazio.
+- `src/screens/game/TrickCard.tsx` — a carta voa do assento de quem jogou, recebe "Ganhando"
+  (verde) ou "Vencedora" (dourado + troféu), as perdedoras escurecem, e todas recolhem na direção
+  de quem levou.
+- Enquanto a vaza fechada está na mesa (`isHolding`), o jogador não joga, a cerimônia da mão nova
+  espera e as cartas novas ficam escondidas.
+- `useAiGame` publica **view e eventos no mesmo estado**: a mesa nunca vê uma view sem o lote dela.
+
+## Relógio de turno (UI)
+
+`src/features/game/turnTimer.ts` + `useTurnTimer.ts`: 25 s por decisão (carta, resposta ao truco,
+mão de onze), prazo absoluto derivado de `view.version` (sobrevive a re-render e background). Ao
+estourar, o cliente faz **pelo próprio assento** a jogada mais conservadora entre as
+`availableActions` — carta mais fraca, correr, entregar a mão de onze — e o motor/servidor valida
+como qualquer ação. Anel + "12s" só no jogador local; os outros assentos não mostram relógio falso.

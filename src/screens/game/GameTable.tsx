@@ -2,11 +2,19 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import Animated, { FadeInDown, FadeOut, ZoomIn } from 'react-native-reanimated';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  FadeOut,
+  LinearTransition,
+  ZoomIn,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, gradients, radius, spacing } from '@/design-system';
 import {
   AppText,
+  CountdownRing,
+  CountdownText,
   IconButton,
   PlayerAvatar,
   PrimaryButton,
@@ -14,12 +22,17 @@ import {
   StateView,
   Surface,
 } from '@/components';
-import { Card, cardId, nextStake, Seat, stakeName, teamOf, GameEvent } from '@/domain/game';
+import { cardId, nextStake, Seat, stakeName, teamOf, GameEvent } from '@/domain/game';
 import type { TableController, TablePlayer } from '@/features/game/types';
 import { relativePosition, type TablePosition } from '@/features/game/seatLayout';
 import { useShuffleCeremony } from '@/features/game/useShuffleCeremony';
+import { useTrickPresentation } from '@/features/game/useTrickPresentation';
+import { isHolding, type TrickPresentation } from '@/features/game/trickPresentation';
+import { useTurnTimer } from '@/features/game/useTurnTimer';
+import { TURN_TIMING, formatTurnClock } from '@/features/game/turnTimer';
 import { PlayingCard } from './PlayingCard';
 import { DraggableCard } from './DraggableCard';
+import { TrickCard, type TrickCardStatus } from './TrickCard';
 import { CeremonyStagePill, TableCeremony } from './TableCeremony';
 import { haptic } from '@/utils/haptics';
 
@@ -54,11 +67,10 @@ export function GameTable({ controller, onExit }: Props) {
           'TRUCO_ACCEPTED',
           'RAN',
           'HAND_ENDED',
-          'ROUND_ENDED',
           'MAO_DE_ONZE_DECLINED',
         ].includes(e.type),
       );
-    const text = last ? describeEvent(last, bySeat, mySeat) : null;
+    const text = last ? describeEvent(last, bySeat, mySeat, controller.recentEvents) : null;
     if (text) setBanner({ text: text.text, color: text.color, key: (banner?.key ?? 0) + 1 });
   }
 
@@ -75,9 +87,13 @@ export function GameTable({ controller, onExit }: Props) {
    * Precisa ficar antes dos `return` de loading/erro: é um hook.
    */
   const tableLive = status === 'playing' || status === 'reconnecting';
+  // A vaza que fechou a mão anterior ainda está na mesa: a cerimônia da mão nova espera por ela.
+  const trick = useTrickPresentation(view, controller.recentEvents);
+  const holding = isHolding(trick);
   const freshHand =
     tableLive &&
     !!view &&
+    !holding &&
     view.rounds.length === 0 &&
     view.currentRound.length === 0 &&
     view.myCards.length === 3;
@@ -87,6 +103,16 @@ export function GameTable({ controller, onExit }: Props) {
     mySeat,
     eligible: freshHand,
     paused: status === 'reconnecting',
+  });
+
+  // Relógio da jogada local: só corre quando é o jogador quem decide e a mesa está livre.
+  const myMove = availableActions.length > 0 && !holding && !ceremony.active && !busy;
+  const deadlineAt = useTurnTimer({
+    view,
+    mySeat,
+    myMove,
+    paused: status === 'reconnecting',
+    act,
   });
 
   // Enquanto o baralho está sendo embaralhado ninguém joga — nem os bots. Sem isto a mão já
@@ -115,17 +141,22 @@ export function GameTable({ controller, onExit }: Props) {
   const us = view.scores[myTeam];
   const them = view.scores[myTeam === 0 ? 1 : 0];
   const isMyTurn = view.phase === 'PLAY' && view.turnSeat === mySeat;
-  const canPlay = availableActions.includes('PLAY_CARD') && !busy;
-  const canTruco = availableActions.includes('REQUEST_TRUCO') && !busy;
+  const canPlay = availableActions.includes('PLAY_CARD') && !busy && !holding;
+  const canTruco = availableActions.includes('REQUEST_TRUCO') && !busy && !holding;
   const responding = availableActions.includes('ACCEPT_TRUCO');
   const maoDeOnze = availableActions.includes('ACCEPT_MAO_DE_ONZE');
   const nextValue =
     view.phase === 'TRUCO_RESPONSE' ? (view.proposedValue ?? 3) : (nextStake(view.handValue) ?? 12);
   const turnPlayer = bySeat.get(view.turnSeat);
 
-  const seatAt = (pos: TablePosition) => players.find((p) => relativePosition(p.seat, mySeat) === pos);
-  const playedBy = (seat?: Seat): Card | null =>
-    seat === undefined ? null : (view.currentRound.find((p) => p.seat === seat)?.card ?? null);
+  const seatAt = (pos: TablePosition) =>
+    players.find((p) => relativePosition(p.seat, mySeat) === pos);
+  const me = bySeat.get(mySeat);
+  // Enquanto a última vaza da mão ainda está na mesa, a view já é da mão seguinte: as cartas
+  // novas só aparecem depois da cerimônia, senão o jogador as veria antes de embaralhar.
+  // (Quando a mão acaba sem vaza — correram, mão de onze — a cerimônia entra no efeito seguinte,
+  // no mesmo lote de eventos, então não há quadro em que as cartas novas apareçam antes dela.)
+  const handCards = trick.handEnded && holding ? [] : view.myCards;
 
   const top = seatAt('top');
   const left = seatAt('left');
@@ -156,23 +187,40 @@ export function GameTable({ controller, onExit }: Props) {
             <AppText variant="caption" color={colors.textSecondary}>
               NÓS
             </AppText>
-            <AppText variant="stat" color={colors.primaryBright} testID="score-us">
-              {us}
-            </AppText>
+            <Animated.View key={`us-${us}`} entering={ZoomIn.duration(260)}>
+              <AppText variant="stat" color={colors.primaryBright} testID="score-us">
+                {us}
+              </AppText>
+            </Animated.View>
           </View>
           <View style={styles.scoreMid}>
             {ceremony.active ? (
-              <CeremonyStagePill stage={ceremony.stage} />
+              <Animated.View
+                key="stage"
+                entering={FadeIn.duration(200)}
+                exiting={FadeOut.duration(160)}
+              >
+                <CeremonyStagePill stage={ceremony.stage} />
+              </Animated.View>
             ) : (
-              <>
+              <Animated.View
+                key="hand"
+                entering={FadeIn.duration(220)}
+                exiting={FadeOut.duration(160)}
+                style={styles.scoreMid}
+              >
                 <AppText variant="caption" color={colors.textSecondary}>
                   MÃO {view.handNumber}
                 </AppText>
-                <View style={styles.valuePill}>
-                  <AppText variant="smallBold" color={colors.textDark}>
+                <Animated.View
+                  key={`value-${view.handValue}`}
+                  entering={ZoomIn.duration(320)}
+                  style={styles.valuePill}
+                >
+                  <AppText variant="smallBold" color={colors.textDark} testID="hand-value">
                     VALE {view.handValue}
                   </AppText>
-                </View>
+                </Animated.View>
                 <View style={styles.rounds}>
                   {[0, 1, 2].map((i) => {
                     const r = view.rounds[i];
@@ -186,179 +234,274 @@ export function GameTable({ controller, onExit }: Props) {
                     return <View key={i} style={[styles.roundDot, { backgroundColor: c }]} />;
                   })}
                 </View>
-              </>
+              </Animated.View>
             )}
           </View>
           <View style={styles.scoreSide}>
             <AppText variant="caption" color={colors.textSecondary}>
               ELES
             </AppText>
-            <AppText variant="stat" color={colors.dangerSoft} testID="score-them">
-              {them}
-            </AppText>
+            <Animated.View key={`them-${them}`} entering={ZoomIn.duration(260)}>
+              <AppText variant="stat" color={colors.dangerSoft} testID="score-them">
+                {them}
+              </AppText>
+            </Animated.View>
           </View>
         </Surface>
         <View style={{ width: 44 }} />
       </View>
 
-      {ceremony.active ? (
-        <TableCeremony
-          ceremony={ceremony}
-          players={players}
-          mySeat={mySeat}
-          reconnecting={status === 'reconnecting'}
-        />
-      ) : (
-        <>
-        {/* Table: three opponents around the felt and the played cards in a cross */}
-        <View style={styles.table}>
-          <View style={styles.seatTop}>
-            <SeatInfo player={top} view={view} row />
-          </View>
-          <View style={styles.seatLeft}>
-            <SeatInfo player={left} view={view} />
-          </View>
-          <View style={styles.seatRight}>
-            <SeatInfo player={right} view={view} />
-          </View>
-
-          <View style={styles.cross} pointerEvents="none">
-            <PlayedSlot card={playedBy(top?.seat)} style={styles.crossTop} />
-            <PlayedSlot card={playedBy(left?.seat)} style={styles.crossLeft} />
-            <PlayedSlot card={playedBy(right?.seat)} style={styles.crossRight} />
-            <PlayedSlot card={playedBy(mySeat)} style={styles.crossBottom} mine />
-          </View>
-        </View>
-
-        {/* Status line */}
-        <View style={styles.statusLine}>
-          {status === 'reconnecting' ? (
-            <View style={styles.statusPill}>
-              <Ionicons name="cloud-offline" size={14} color={colors.gold} />
-              <AppText variant="smallBold" style={{ marginLeft: 6 }}>
-                Reconectando...
-              </AppText>
-            </View>
-          ) : view.phase === 'TRUCO_RESPONSE' ? (
-            <AppText variant="smallBold" color={colors.gold} center>
-              {view.trucoRequesterTeam === myTeam
-                ? `Aguardando resposta ao ${stakeName(view.proposedValue ?? 3)}...`
-                : `Pediram ${stakeName(view.proposedValue ?? 3)}! Aceitar, aumentar ou correr?`}
-            </AppText>
-          ) : view.phase === 'MAO_DE_ONZE' ? (
-            <AppText variant="smallBold" color={colors.gold} center>
-              {view.maoDeOnzeTeam === myTeam
-                ? 'Mão de onze! Jogar valendo 3 ou entregar 1?'
-                : 'Os adversários decidem a mão de onze...'}
-            </AppText>
-          ) : isMyTurn ? (
-            <AppText variant="smallBold" color={colors.primaryBright} center>
-              Sua vez! Escolha uma carta.
-            </AppText>
-          ) : (
-            <AppText variant="small" color={colors.textSecondary} center>
-              Vez de {turnPlayer?.nickname ?? '...'}
-            </AppText>
-          )}
-        </View>
-
-        {/* My hand */}
-        <View style={[styles.handArea, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-          <View style={styles.meRow}>
-            <PlayerAvatar
-              avatarId={bySeat.get(mySeat)?.avatarId}
-              size={38}
-              ringColor={isMyTurn ? colors.primaryBright : colors.cardBorderStrong}
+      {/* Cerimônia e mesa se sobrepõem no mesmo espaço e trocam por crossfade: sem isso a
+          distribuição terminava num corte seco, com a mesa inteira montando de uma vez. */}
+      <View style={styles.body}>
+        {ceremony.active ? (
+          <Animated.View
+            key="ceremony"
+            style={StyleSheet.absoluteFill}
+            entering={FadeIn.duration(240)}
+            exiting={FadeOut.duration(260)}
+          >
+            <TableCeremony
+              ceremony={ceremony}
+              players={players}
+              mySeat={mySeat}
+              reconnecting={status === 'reconnecting'}
             />
-            <AppText variant="smallBold" style={{ marginLeft: 8, flex: 1 }} numberOfLines={1}>
-              {bySeat.get(mySeat)?.nickname ?? 'Você'}
-            </AppText>
-            <AppText variant="caption" color={colors.textSecondary}>
-              {bySeat.get(seatAt('top')?.seat ?? mySeat) ? `parceiro: ${top?.nickname ?? '-'}` : ''}
-            </AppText>
-          </View>
-          <View style={styles.hand} testID="my-hand">
-            {view.myCards.map((c, i) => (
-              <Animated.View key={cardId(c)} entering={FadeInDown.delay(i * 80)}>
-                <DraggableCard
-                  card={c}
-                  width={82}
-                  onPlay={
-                    canPlay
-                      ? () => act({ type: 'PLAY_CARD', seat: mySeat, cardId: cardId(c) })
-                      : undefined
-                  }
-                  disabled={!canPlay}
-                  dimmed={!canPlay && view.phase === 'PLAY'}
-                  highlighted={canPlay}
-                />
-              </Animated.View>
-            ))}
-          </View>
+          </Animated.View>
+        ) : (
+          <Animated.View
+            key="table"
+            style={styles.tableBody}
+            entering={FadeIn.duration(320)}
+            exiting={FadeOut.duration(160)}
+          >
+            {/* Table: three opponents around the felt and the played cards in a cross */}
+            <View style={styles.table}>
+              <View style={styles.seatTop}>
+                <SeatInfo player={top} view={view} row partner />
+              </View>
+              <View style={styles.seatLeft}>
+                <SeatInfo player={left} view={view} />
+              </View>
+              <View style={styles.seatRight}>
+                <SeatInfo player={right} view={view} />
+              </View>
 
-          {/* Actions come strictly from availableActions */}
-          <View style={styles.actions}>
-            {maoDeOnze ? (
-              <>
-                <PrimaryButton
-                  label="Jogar (vale 3)"
-                  size="md"
-                  style={styles.actionBtn}
-                  onPress={() => act({ type: 'ACCEPT_MAO_DE_ONZE', seat: mySeat })}
-                  disabled={busy}
+              <View style={styles.cross} pointerEvents="none">
+                <PlayedSlot
+                  seat={top?.seat}
+                  pos="top"
+                  trick={trick}
+                  mySeat={mySeat}
+                  style={styles.crossTop}
                 />
-                <SecondaryButton
-                  label="Entregar 1"
-                  size="md"
-                  style={styles.actionBtn}
-                  onPress={() => act({ type: 'DECLINE_MAO_DE_ONZE', seat: mySeat })}
-                  disabled={busy}
+                <PlayedSlot
+                  seat={left?.seat}
+                  pos="left"
+                  trick={trick}
+                  mySeat={mySeat}
+                  style={styles.crossLeft}
                 />
-              </>
-            ) : responding ? (
-              <>
-                <PrimaryButton
-                  label="Aceitar"
-                  size="md"
-                  style={styles.actionBtn}
-                  onPress={() => act({ type: 'ACCEPT_TRUCO', seat: mySeat })}
-                  disabled={busy}
-                  testID="action-accept"
+                <PlayedSlot
+                  seat={right?.seat}
+                  pos="right"
+                  trick={trick}
+                  mySeat={mySeat}
+                  style={styles.crossRight}
                 />
-                {availableActions.includes('RAISE') ? (
+                <PlayedSlot
+                  seat={mySeat}
+                  pos="bottom"
+                  trick={trick}
+                  mySeat={mySeat}
+                  style={styles.crossBottom}
+                  mine
+                />
+              </View>
+
+              {/* Eu: avatar com o anel do tempo, e o relógio ao lado quando é minha vez */}
+              <View style={styles.seatMe} testID={`seat-${mySeat}`}>
+                <View style={styles.meAvatarRow}>
+                  <View style={styles.meClockSpacer} />
+                  {deadlineAt !== null ? (
+                    <CountdownRing
+                      deadlineAt={deadlineAt}
+                      totalMs={TURN_TIMING.turnMs}
+                      size={58}
+                      strokeWidth={3.5}
+                    >
+                      <PlayerAvatar
+                        avatarId={me?.avatarId}
+                        size={48}
+                        ringColor={colors.primaryBright}
+                      />
+                    </CountdownRing>
+                  ) : (
+                    <View style={styles.meAvatarIdle}>
+                      <PlayerAvatar
+                        avatarId={me?.avatarId}
+                        size={48}
+                        ringColor={isMyTurn ? colors.primaryBright : colors.cardBorderStrong}
+                      />
+                    </View>
+                  )}
+                  <View style={styles.meClockSpacer}>
+                    {deadlineAt !== null ? (
+                      <CountdownText
+                        deadlineAt={deadlineAt}
+                        warningMs={TURN_TIMING.warningMs}
+                        format={formatTurnClock}
+                        testID="turn-clock"
+                      />
+                    ) : null}
+                  </View>
+                </View>
+                <AppText variant="smallBold" numberOfLines={1}>
+                  Você
+                </AppText>
+              </View>
+            </View>
+
+            {/* Status line */}
+            <View style={styles.statusLine}>
+              {status === 'reconnecting' ? (
+                <View style={styles.statusPill}>
+                  <Ionicons name="cloud-offline" size={14} color={colors.gold} />
+                  <AppText variant="smallBold" style={{ marginLeft: 6 }}>
+                    Reconectando...
+                  </AppText>
+                </View>
+              ) : view.phase === 'TRUCO_RESPONSE' ? (
+                <AppText variant="smallBold" color={colors.gold} center>
+                  {view.trucoRequesterTeam === myTeam
+                    ? `Aguardando resposta ao ${stakeName(view.proposedValue ?? 3)}...`
+                    : `Pediram ${stakeName(view.proposedValue ?? 3)}! Aceitar, aumentar ou correr?`}
+                </AppText>
+              ) : view.phase === 'MAO_DE_ONZE' ? (
+                <AppText variant="smallBold" color={colors.gold} center>
+                  {view.maoDeOnzeTeam === myTeam
+                    ? 'Mão de onze! Jogar valendo 3 ou entregar 1?'
+                    : 'Os adversários decidem a mão de onze...'}
+                </AppText>
+              ) : holding && trick.resolved ? (
+                <AppText
+                  variant="smallBold"
+                  color={
+                    trick.resolved.winner === null
+                      ? colors.gold
+                      : trick.resolved.winner === myTeam
+                        ? colors.primaryBright
+                        : colors.dangerSoft
+                  }
+                  center
+                  testID="trick-result"
+                >
+                  {trick.resolved.winner === null
+                    ? 'Rodada empatada'
+                    : trick.resolved.winnerSeat === mySeat
+                      ? 'Você venceu a rodada!'
+                      : `${bySeat.get(trick.resolved.winnerSeat)?.nickname ?? '...'} venceu a rodada`}
+                </AppText>
+              ) : isMyTurn ? (
+                <AppText variant="smallBold" color={colors.primaryBright} center>
+                  Sua vez! Escolha uma carta.
+                </AppText>
+              ) : (
+                <AppText variant="small" color={colors.textSecondary} center>
+                  Vez de {turnPlayer?.nickname ?? '...'}
+                </AppText>
+              )}
+            </View>
+
+            {/* My hand */}
+            <View style={[styles.handArea, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+              <View style={styles.hand} testID="my-hand">
+                {handCards.map((c, i) => (
+                  <Animated.View
+                    key={cardId(c)}
+                    entering={FadeInDown.delay(i * 80)}
+                    layout={LinearTransition.duration(220)}
+                  >
+                    <DraggableCard
+                      card={c}
+                      width={82}
+                      onPlay={
+                        canPlay
+                          ? () => act({ type: 'PLAY_CARD', seat: mySeat, cardId: cardId(c) })
+                          : undefined
+                      }
+                      disabled={!canPlay}
+                      dimmed={!canPlay && view.phase === 'PLAY'}
+                      highlighted={canPlay}
+                    />
+                  </Animated.View>
+                ))}
+              </View>
+
+              {/* Actions come strictly from availableActions */}
+              <View style={styles.actions}>
+                {maoDeOnze ? (
+                  <>
+                    <PrimaryButton
+                      label="Jogar (vale 3)"
+                      size="md"
+                      style={styles.actionBtn}
+                      onPress={() => act({ type: 'ACCEPT_MAO_DE_ONZE', seat: mySeat })}
+                      disabled={busy}
+                    />
+                    <SecondaryButton
+                      label="Entregar 1"
+                      size="md"
+                      style={styles.actionBtn}
+                      onPress={() => act({ type: 'DECLINE_MAO_DE_ONZE', seat: mySeat })}
+                      disabled={busy}
+                    />
+                  </>
+                ) : responding ? (
+                  <>
+                    <PrimaryButton
+                      label="Aceitar"
+                      size="md"
+                      style={styles.actionBtn}
+                      onPress={() => act({ type: 'ACCEPT_TRUCO', seat: mySeat })}
+                      disabled={busy}
+                      testID="action-accept"
+                    />
+                    {availableActions.includes('RAISE') ? (
+                      <SecondaryButton
+                        label={stakeName(nextStake(view.proposedValue ?? 3) ?? 12)}
+                        size="md"
+                        style={styles.actionBtn}
+                        onPress={() => act({ type: 'RAISE', seat: mySeat })}
+                        disabled={busy}
+                        testID="action-raise"
+                      />
+                    ) : null}
+                    <SecondaryButton
+                      label="Correr"
+                      size="md"
+                      style={styles.actionBtn}
+                      onPress={() => act({ type: 'RUN', seat: mySeat })}
+                      disabled={busy}
+                      testID="action-run"
+                    />
+                  </>
+                ) : canTruco ? (
                   <SecondaryButton
-                    label={stakeName(nextStake(view.proposedValue ?? 3) ?? 12)}
+                    label={CALL_LABELS[nextValue] ?? `Pedir ${nextValue}`}
                     size="md"
-                    style={styles.actionBtn}
-                    onPress={() => act({ type: 'RAISE', seat: mySeat })}
+                    icon="flame"
+                    style={styles.trucoBtn}
+                    onPress={() => act({ type: 'REQUEST_TRUCO', seat: mySeat })}
                     disabled={busy}
-                    testID="action-raise"
+                    testID="action-truco"
                   />
                 ) : null}
-                <SecondaryButton
-                  label="Correr"
-                  size="md"
-                  style={styles.actionBtn}
-                  onPress={() => act({ type: 'RUN', seat: mySeat })}
-                  disabled={busy}
-                  testID="action-run"
-                />
-              </>
-            ) : canTruco ? (
-              <SecondaryButton
-                label={CALL_LABELS[nextValue] ?? `Pedir ${nextValue}`}
-                size="md"
-                icon="flame"
-                style={styles.trucoBtn}
-                onPress={() => act({ type: 'REQUEST_TRUCO', seat: mySeat })}
-                disabled={busy}
-                testID="action-truco"
-              />
-            ) : null}
-          </View>
-        </View>
-        </>
-      )}
+              </View>
+            </View>
+          </Animated.View>
+        )}
+      </View>
 
       {/* Resultado da mão anterior. Fica fora do ramo acima porque a mão seguinte já começa com a
           cerimônia: sem isto o "+2 pra nós!" nunca chegaria a aparecer. */}
@@ -384,10 +527,12 @@ function SeatInfo({
   player,
   view,
   row,
+  partner,
 }: {
   player?: TablePlayer;
   view: NonNullable<TableController['view']>;
   row?: boolean;
+  partner?: boolean;
 }) {
   if (!player) return <View />;
   const isTurn = view.phase === 'PLAY' && view.turnSeat === player.seat;
@@ -416,6 +561,13 @@ function SeatInfo({
         <AppText variant="caption" numberOfLines={1} style={styles.seatName}>
           {player.nickname}
         </AppText>
+        {partner ? (
+          <View style={styles.partnerChip}>
+            <AppText variant="caption" color={colors.primaryBright}>
+              Parceiro
+            </AppText>
+          </View>
+        ) : null}
         <View style={styles.backs}>
           {Array.from({ length: count }).map((_, i) => (
             <PlayingCard
@@ -431,15 +583,48 @@ function SeatInfo({
   );
 }
 
-function PlayedSlot({ card, style, mine }: { card: Card | null; style: object; mine?: boolean }) {
+function PlayedSlot({
+  seat,
+  pos,
+  trick,
+  mySeat,
+  style,
+  mine,
+}: {
+  seat?: Seat;
+  pos: TablePosition;
+  trick: TrickPresentation;
+  mySeat: Seat;
+  style: object;
+  mine?: boolean;
+}) {
   const width = mine ? 60 : 54;
-  if (!card) {
+  const play = seat === undefined ? undefined : trick.plays.find((p) => p.seat === seat);
+  if (!play) {
     return <View style={[styles.slot, style, { width, height: Math.round(width * 1.45) }]} />;
   }
+  let status: TrickCardStatus = 'plain';
+  if (trick.resolved) {
+    if (trick.resolved.winner !== null)
+      status = trick.resolved.winnerSeat === play.seat ? 'winner' : 'loser';
+  } else if (trick.leadingSeat === play.seat) {
+    status = 'leading';
+  }
+  const collectTo =
+    trick.phase === 'collecting' && trick.resolved
+      ? relativePosition(trick.resolved.winnerSeat, mySeat)
+      : null;
   return (
-    <Animated.View entering={ZoomIn.duration(220)} style={style}>
-      <PlayingCard card={card} width={width} />
-    </Animated.View>
+    <TrickCard
+      key={cardId(play.card)}
+      card={play.card}
+      width={width}
+      from={pos}
+      status={status}
+      collectTo={collectTo}
+      style={[style, status === 'winner' || status === 'leading' ? styles.raised : null]}
+      testID={`played-${play.seat}`}
+    />
   );
 }
 
@@ -447,8 +632,16 @@ function describeEvent(
   e: GameEvent,
   bySeat: Map<Seat, TablePlayer>,
   mySeat: Seat,
+  batch: GameEvent[],
 ): { text: string; color: string } | null {
   const myTeam = teamOf(mySeat);
+  // Correr fecha a mão no mesmo lote: o que importa é quem correu, os pontos vêm junto.
+  const ran = batch.find((x) => x.type === 'RAN');
+  if (e.type === 'HAND_ENDED' && ran && ran.type === 'RAN') {
+    return teamOf(ran.seat) === myTeam
+      ? { text: `Corremos. +${ran.points} pra eles`, color: colors.dangerSoft }
+      : { text: `Correram! +${ran.points} pra nós`, color: colors.primaryBright };
+  }
   switch (e.type) {
     case 'TRUCO_REQUESTED':
     case 'TRUCO_RAISED':
@@ -459,14 +652,8 @@ function describeEvent(
       return teamOf(e.seat) === myTeam
         ? { text: 'CORREMOS', color: colors.dangerSoft }
         : { text: 'CORRERAM!', color: colors.primaryBright };
-    case 'ROUND_ENDED':
-      if (e.winner === null) return { text: 'EMPATOU', color: colors.gold };
-      return e.winner === myTeam
-        ? {
-            text: `${bySeat.get(e.winnerSeat)?.nickname ?? 'Nós'} levou!`,
-            color: colors.primaryBright,
-          }
-        : { text: 'Eles levaram', color: colors.dangerSoft };
+    // ROUND_ENDED não vira faixa: a própria mesa mostra a carta vencedora e a linha de status
+    // diz quem levou — a faixa só cobriria as cartas.
     case 'HAND_ENDED':
       if (e.result.winner === null) return { text: 'MÃO EMPATADA', color: colors.gold };
       return e.result.winner === myTeam
@@ -521,6 +708,8 @@ const styles = StyleSheet.create({
   rounds: { flexDirection: 'row', gap: 5, marginTop: 5 },
   roundDot: { width: 9, height: 9, borderRadius: 5 },
 
+  body: { flex: 1 },
+  tableBody: { flex: 1 },
   table: { flex: 1, position: 'relative' },
   seatTop: { position: 'absolute', top: 4, left: 0, right: 0, alignItems: 'center' },
   seatLeft: { position: 'absolute', left: spacing.sm, top: '38%' },
@@ -548,7 +737,7 @@ const styles = StyleSheet.create({
     width: CROSS,
     height: CROSS,
     alignSelf: 'center',
-    top: '26%',
+    top: '22%',
   },
   crossTop: { position: 'absolute', top: 0, left: CROSS / 2 - 27 },
   crossLeft: { position: 'absolute', left: 0, top: CROSS / 2 - 39 },
@@ -561,9 +750,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.12)',
   },
 
-  banner: { position: 'absolute', left: 0, right: 0, top: '40%', alignItems: 'center' },
-  // Durante a cerimônia o miolo da tela é do baralho: o aviso sobe para logo abaixo do placar.
-  bannerCeremony: { top: '15%' },
+  // Abaixo da cruz de cartas e acima do meu avatar: a faixa nunca cobre uma carta jogada.
+  banner: { position: 'absolute', left: 0, right: 0, top: '52%', alignItems: 'center' },
+  // Durante a cerimônia o aviso fica sobre o baralho, abaixo do título (avatares ficam livres).
+  bannerCeremony: { top: '46%' },
   bannerText: {
     fontSize: 30,
     textShadowColor: 'rgba(0,0,0,0.6)',
@@ -596,7 +786,20 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.cardBorder,
   },
-  meRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  seatMe: { position: 'absolute', bottom: 2, left: 0, right: 0, alignItems: 'center' },
+  meAvatarRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  meAvatarIdle: { width: 58, height: 58, alignItems: 'center', justifyContent: 'center' },
+  meClockSpacer: { width: 64, alignItems: 'flex-start', paddingLeft: 6 },
+  partnerChip: {
+    paddingHorizontal: 7,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(30, 227, 140, 0.5)',
+    backgroundColor: 'rgba(0, 40, 26, 0.7)',
+    marginTop: 2,
+  },
+  raised: { zIndex: 5 },
   hand: { flexDirection: 'row', justifyContent: 'center', gap: 10, minHeight: 122 },
   actions: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 10, minHeight: 48 },
   actionBtn: { minWidth: 104 },

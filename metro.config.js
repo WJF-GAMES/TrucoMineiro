@@ -23,10 +23,23 @@ config.resolver.blockList = [
  * inspecionada no navegador (Android/iOS continuam usando o SDK real).
  */
 const RNFIREBASE_WEB_STUB = path.resolve(__dirname, 'src/services/firebase/web/rnfirebase-stub.js');
+
+/**
+ * Mesma história para o Google Mobile Ads: o SDK importa componentes nativos (codegen) e o
+ * bundle web quebra só de encostar nele. Na web não existe anúncio — o stub mantém o módulo
+ * `src/ads` inteiro compilando, quieto.
+ */
+const ADS_WEB_STUB = path.resolve(__dirname, 'src/ads/web/google-mobile-ads-stub.js');
+
 const defaultResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (platform === 'web' && moduleName.startsWith('@react-native-firebase/')) {
-    return { type: 'sourceFile', filePath: RNFIREBASE_WEB_STUB };
+  if (platform === 'web') {
+    if (moduleName.startsWith('@react-native-firebase/')) {
+      return { type: 'sourceFile', filePath: RNFIREBASE_WEB_STUB };
+    }
+    if (moduleName === 'react-native-google-mobile-ads') {
+      return { type: 'sourceFile', filePath: ADS_WEB_STUB };
+    }
   }
   return (defaultResolveRequest ?? context.resolveRequest)(context, moduleName, platform);
 };

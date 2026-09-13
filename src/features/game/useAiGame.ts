@@ -9,6 +9,7 @@ import {
   applyAction,
   createMatch,
   createRng,
+  getAvailableActions,
   nextAIAction,
   viewForSeat,
 } from '@/domain/game';
@@ -17,9 +18,12 @@ import { useProfileStore } from '@/stores/profileStore';
 import { logEvent } from '@/services/firebase/analytics';
 import { setCrashContext } from '@/services/firebase/crashlytics';
 import type { TableController, TablePlayer } from './types';
+import { devLog } from '@/utils/devLog';
+import { TRICK_RESOLVE_PAUSE_MS } from './trickPresentation';
 
 const AI_DELAY_MS = 900;
-const ROUND_END_PAUSE_MS = 1400;
+// Depois de uma vaza fechar a mesa ainda mostra a quarta carta, a vencedora e o recolhimento.
+const ROUND_END_PAUSE_MS = TRICK_RESOLVE_PAUSE_MS;
 
 const BOT_NAMES: Record<AIDifficultyId, { seat: Seat; nickname: string; avatarId: AvatarId }[]> = {
   easy: [
@@ -57,17 +61,28 @@ export function useAiGame(
   onFinished: (state: MatchState, record: AiMatchRecord) => void,
 ): TableController {
   const profile = useProfileStore((s) => s.profile);
-  const [state, setState] = useState<MatchState>(() => createMatch(seed));
+  // View e eventos novos saem do mesmo objeto de estado: a mesa nunca vê a view de uma ação sem
+  // o lote de eventos dela (era assim que a vaza velha ficava na mesa por um render a mais).
+  const [snapshot, setSnapshot] = useState<{ state: MatchState; recentEvents: GameEvent[] }>(
+    () => ({ state: createMatch(seed), recentEvents: [] }),
+  );
+  const { state, recentEvents } = snapshot;
+  const apply = useCallback((action: GameAction) => {
+    devLog(action.type, { seat: action.seat, ...('cardId' in action ? { card: action.cardId } : {}) });
+    setSnapshot((prev) => {
+      const next = applyAction(prev.state, action);
+      const recentEvents = next.events.slice(prev.state.events.length);
+      devLog('EVENTS', recentEvents.map((e) => e.type).join(','), { version: next.version });
+      return { state: next, recentEvents };
+    });
+  }, []);
   const [busy, setBusy] = useState(false);
   const [botsPaused, setBotsPaused] = useState(false);
-  const [recentEvents, setRecentEvents] = useState<GameEvent[]>([]);
-  const eventCursor = useRef(0);
   const aiSeed = useMemo(() => (seed * 31 + 7) >>> 0, [seed]);
   const rng = useRef(createRng(aiSeed));
   const actions = useRef<GameAction[]>([]);
   const matchId = useMemo(() => `ai_${seed.toString(36)}_${aiSeed.toString(36)}`, [seed, aiSeed]);
   const finished = useRef(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const aiSeats = useMemo(() => {
     const ai: AIPlayer = aiForDifficulty(difficulty);
@@ -83,26 +98,24 @@ export function useAiGame(
     logEvent('match_started', { mode: 'ai', difficulty });
   }, [matchId, difficulty]);
 
-  // Publish new events after every state change.
   useEffect(() => {
-    const fresh = state.events.slice(eventCursor.current);
-    eventCursor.current = state.events.length;
-    if (fresh.length) setRecentEvents(fresh);
     if (state.status === 'FINISHED' && !finished.current) {
       finished.current = true;
       onFinished(state, { matchId, seed, aiSeed, difficulty, actions: actions.current });
     }
   }, [state, onFinished, matchId, seed, aiSeed, difficulty]);
 
-  // Drive AI turns with pacing.
+  // Drive AI turns with pacing. `busy` = há uma jogada de IA agendada. Ela é desligada na limpeza
+  // do efeito: assim uma pausa (cerimônia) que cancela o timer não deixa a mesa travada em "busy".
+  const commitBusy = useCallback((b: boolean) => setBusy(b), []);
   useEffect(() => {
     if (state.status !== 'PLAYING' || botsPaused) return;
+    // Truco pedido contra nós ou mão de onze: a dupla inteira pode responder, mas quem decide é o
+    // humano — senão a parceira IA responde em 900 ms e o jogador nunca vê os botões.
+    if (state.hand.phase !== 'PLAY' && getAvailableActions(state, 0).length > 0) return;
     const action = nextAIAction(state, aiSeats, rng.current);
-    if (!action) {
-      setBusy(false);
-      return;
-    }
-    setBusy(true);
+    if (!action) return;
+    commitBusy(true);
     const lastEvent = state.events[state.events.length - 1];
     const pause =
       lastEvent?.type === 'ROUND_ENDED' ||
@@ -110,14 +123,15 @@ export function useAiGame(
       lastEvent?.type === 'HAND_STARTED'
         ? ROUND_END_PAUSE_MS
         : AI_DELAY_MS;
-    timer.current = setTimeout(() => {
+    const timer = setTimeout(() => {
       actions.current.push(action);
-      setState((s) => applyAction(s, action));
+      apply(action);
     }, pause);
     return () => {
-      if (timer.current) clearTimeout(timer.current);
+      clearTimeout(timer);
+      commitBusy(false);
     };
-  }, [state, aiSeats, botsPaused]);
+  }, [state, aiSeats, botsPaused, apply, commitBusy]);
 
   const act = useCallback((action: GameAction) => {
     if (action.type === 'PLAY_CARD') logEvent('card_played', { mode: 'ai' });
@@ -126,8 +140,8 @@ export function useAiGame(
     if (action.type === 'ACCEPT_TRUCO') logEvent('truco_accepted', { mode: 'ai' });
     if (action.type === 'RUN') logEvent('truco_rejected', { mode: 'ai' });
     actions.current.push(action);
-    setState((s) => applyAction(s, action));
-  }, []);
+    apply(action);
+  }, [apply]);
 
   const view = useMemo(() => viewForSeat(state, 0), [state]);
   const players: TablePlayer[] = useMemo(

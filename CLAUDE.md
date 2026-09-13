@@ -13,6 +13,8 @@ npm run emulators         # auth 9099, functions 5001, firestore 8080, database 
 ./scripts/build-apk.sh    # APK release em dist/ (sem argumento = todas as ABIs; "x86_64" = só emulador)
 ./scripts/deploy.sh       # deploy de rules, indexes, functions, remote config + seed
 ./scripts/qa.sh <cmd>     # QA no emulador Android (launch, shot, tap, errors, otp_code)
+./scripts/qa-record.sh <nome> <s> [x y]  # grava a tela e gera folha de contato dos quadros
+./scripts/qa-autoplay.sh  # joga uma partida contra a IA no automático até MATCH_ENDED
 python scripts/visual-diff.py   # comparações com references/
 python scripts/generate-app-icons.py     # ícones iOS/Android a partir de references/app-icon.png
 python scripts/extract-screen-assets.py  # artes das telas a partir dos prints em references/

@@ -1,4 +1,5 @@
 import { cardId, parseCardId } from '../cards/card';
+import { leadingPlay } from '../rules/strength';
 import {
   applyAction,
   createMatch,
@@ -293,5 +294,32 @@ describe('seat view hides information', () => {
     expect(v.myCards.map(cardId)).toEqual(m.hand.hands[2]!.map(cardId));
     expect(v.cardCounts).toEqual([3, 3, 3, 3]);
     expect(JSON.stringify(v)).not.toContain(cardId(m.hand.hands[0]![0]!));
+  });
+});
+
+describe('leadingPlay', () => {
+  const p = (seat: 0 | 1 | 2 | 3, id: string) => ({ seat, card: parseCardId(id) });
+  it('a primeira carta lidera sozinha', () => {
+    expect(leadingPlay([p(0, '5O')])).toEqual({ seat: 0, card: parseCardId('5O'), tied: false });
+  });
+  it('a segunda assume, a terceira assume, a quarta assume', () => {
+    expect(leadingPlay([p(0, '5O'), p(1, 'KE')])?.seat).toBe(1);
+    expect(leadingPlay([p(0, '5O'), p(1, 'KE'), p(2, '3P')])?.seat).toBe(2);
+    expect(leadingPlay([p(0, '5O'), p(1, 'KE'), p(2, '3P'), p(3, '7O')])?.seat).toBe(3);
+  });
+  it('a primeira permanece quando ninguém a supera', () => {
+    expect(leadingPlay([p(0, '3O'), p(1, 'KE'), p(2, '2P'), p(3, 'AO')])?.seat).toBe(0);
+  });
+  it('manilha vence tudo e as manilhas se ordenam entre si', () => {
+    expect(leadingPlay([p(0, '3O'), p(1, '7O'), p(2, '4P'), p(3, '7C')])?.seat).toBe(2);
+  });
+  it('empate entre adversários fica marcado; entre parceiros não', () => {
+    expect(leadingPlay([p(0, '3O'), p(1, '3E')])?.tied).toBe(true);
+    expect(leadingPlay([p(0, '3O'), p(2, '3E')])?.tied).toBe(false);
+    // Carta maior depois do empate desempata.
+    expect(leadingPlay([p(0, '3O'), p(1, '3E'), p(2, '7O')])).toMatchObject({ seat: 2, tied: false });
+  });
+  it('mesa vazia', () => {
+    expect(leadingPlay([])).toBeNull();
   });
 });

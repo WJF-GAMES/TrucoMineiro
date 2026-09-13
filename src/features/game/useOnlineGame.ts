@@ -22,6 +22,7 @@ import { reportError, setCrashContext } from '@/services/firebase/crashlytics';
 import { toast } from '@/stores/toastStore';
 import type { TableController, TablePlayer } from './types';
 import { normalizeSeatView, normalizeSessionMeta, RemoteSeatView } from './normalizeSeatView';
+import { TRICK_RESOLVE_PAUSE_MS } from './trickPresentation';
 
 /**
  * Online match. The server (Cloud Functions) is the only authority: this hook subscribes to the
@@ -34,9 +35,24 @@ export function useOnlineGame(sessionId: string): TableController {
   const [view, setView] = useState<RemoteSeatView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [progression, setProgression] = useState<ProgressionResult | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [inFlight, setInFlight] = useState(false);
+  // Versão da view no momento em que a última ação foi aceita: até o snapshot seguinte chegar a
+  // mesa continua "ocupada" — senão o relógio do turno recomeça para uma decisão que já acabou.
+  const [ackedVersion, setAckedVersion] = useState<number | null>(null);
   const [botsPaused, setBotsPaused] = useState(false);
   const seq = useRef(0);
+  const busy = inFlight || (ackedVersion !== null && view?.version === ackedVersion);
+
+  // Segurança: se o snapshot nunca vier (rede), libera a mesa depois de alguns segundos.
+  useEffect(() => {
+    if (ackedVersion === null) return;
+    if (view && view.version !== ackedVersion) {
+      const release = setTimeout(() => setAckedVersion(null), 0);
+      return () => clearTimeout(release);
+    }
+    const t = setTimeout(() => setAckedVersion(null), 5000);
+    return () => clearTimeout(t);
+  }, [ackedVersion, view]);
 
   const mySeat = useMemo<Seat | null>(() => {
     if (!meta || !uid) return null;
@@ -85,7 +101,11 @@ export function useOnlineGame(sessionId: string): TableController {
     );
     const team = (s: number) => s % 2;
     let botMustAct = false;
+    // Resposta ao truco / mão de onze: se este cliente pode responder, o humano decide — o bot
+    // parceiro só entra se ninguém humano da dupla estiver na mesa para isso.
+    const iCanAnswer = view.availableActions.length > 0;
     if (view.phase === 'PLAY') botMustAct = botSeats.has(view.turnSeat);
+    else if (iCanAnswer) botMustAct = false;
     else if (view.phase === 'TRUCO_RESPONSE' && view.trucoRequesterTeam !== null)
       botMustAct = [...botSeats].some((s) => team(s) !== view.trucoRequesterTeam);
     else if (view.phase === 'MAO_DE_ONZE' && view.maoDeOnzeTeam !== null)
@@ -93,7 +113,11 @@ export function useOnlineGame(sessionId: string): TableController {
     if (!botMustAct) return;
     const lastEvent = view.recentEvents?.[view.recentEvents.length - 1];
     const pause =
-      lastEvent?.type === 'ROUND_ENDED' || lastEvent?.type === 'HAND_ENDED' ? 1500 : 900;
+      lastEvent?.type === 'ROUND_ENDED' ||
+      lastEvent?.type === 'HAND_ENDED' ||
+      lastEvent?.type === 'HAND_STARTED'
+        ? TRICK_RESOLVE_PAUSE_MS
+        : 900;
     const t = setTimeout(() => advanceBots(sessionId).catch(() => undefined), pause);
     return () => clearTimeout(t);
   }, [meta, view, sessionId, botsPaused]);
@@ -106,10 +130,12 @@ export function useOnlineGame(sessionId: string): TableController {
   const act = useCallback(
     async (action: GameAction) => {
       if (busy) return;
-      setBusy(true);
-      const clientActionId = `${uid ?? 'anon'}_${view?.version ?? 0}_${++seq.current}`;
+      setInFlight(true);
+      const version = view?.version ?? 0;
+      const clientActionId = `${uid ?? 'anon'}_${version}_${++seq.current}`;
       try {
         await submitGameAction(sessionId, action, clientActionId);
+        setAckedVersion(version);
         if (action.type === 'PLAY_CARD') logEvent('card_played', { mode: 'online' });
         if (action.type === 'REQUEST_TRUCO' || action.type === 'RAISE')
           logEvent('truco_requested', { mode: 'online' });
@@ -119,7 +145,7 @@ export function useOnlineGame(sessionId: string): TableController {
         reportError(e, 'submitGameAction');
         toast.error('Jogada não aceita', e instanceof FunctionsError ? e.message : undefined);
       } finally {
-        setBusy(false);
+        setInFlight(false);
       }
     },
     [busy, sessionId, uid, view?.version],

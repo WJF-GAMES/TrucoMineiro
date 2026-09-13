@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Seat } from '@/domain/game';
 import { haptic } from '@/utils/haptics';
+import { devLog } from '@/utils/devLog';
 import {
   CEREMONY_TIMING,
   CeremonyStage,
@@ -149,6 +150,7 @@ export function useShuffleCeremony({
         deadlineAt: total === null ? null : (serverDeadlineAt ?? Date.now() + total),
       };
       commit(next);
+      devLog('CEREMONY_STAGE', stage, { hand: next.handNumber, dealer: next.dealerSeat });
 
       if (stage === 'deal') {
         schedule(() => enterStageRef.current('done', next), CEREMONY_TIMING.dealMs);
@@ -186,6 +188,7 @@ export function useShuffleCeremony({
       if (!current || current.celebrating || current.stage === 'deal') return;
       clearTimers();
       commit({ ...current, celebrating: true, timedOut, swipes: SWIPES_DONE });
+      devLog('CEREMONY_COMPLETE', current.stage, { timedOut });
       if (actorSeatFor(current.stage, current.dealerSeat) === mySeat) {
         if (timedOut) haptic.error();
         else haptic.success();

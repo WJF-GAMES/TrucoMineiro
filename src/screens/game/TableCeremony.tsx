@@ -91,6 +91,7 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
           entering={FadeIn.duration(220)}
           exiting={FadeOut.duration(140)}
           accessibilityLiveRegion="polite"
+          style={styles.title}
         >
           <AppText variant={compact ? 'h2' : 'h1'} center>
             {copy.title}
@@ -111,22 +112,28 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
           </View>
 
           <View style={[styles.deckArea, { transform: [{ scale: deckScale }] }]}>
-            {showDeal ? (
-              <DealingCards durationMs={CEREMONY_TIMING.dealMs} />
-            ) : showCut ? (
-              <CutDeck
-                interactive={ceremony.iAmActor && !ceremony.celebrating && !reconnecting}
-                onCut={ceremony.finish}
-                done={ceremony.celebrating}
-              />
-            ) : (
-              <ShuffleDeck
-                interactive={ceremony.iAmActor && !ceremony.celebrating && !reconnecting}
-                progress={ceremony.progress}
-                onBump={ceremony.bump}
-                settled={ceremony.celebrating}
-              />
-            )}
+            <Animated.View
+              key={ceremony.stage}
+              entering={FadeIn.duration(180)}
+              exiting={FadeOut.duration(140)}
+            >
+              {showDeal ? (
+                <DealingCards durationMs={CEREMONY_TIMING.dealMs} />
+              ) : showCut ? (
+                <CutDeck
+                  interactive={ceremony.iAmActor && !ceremony.celebrating && !reconnecting}
+                  onCut={ceremony.finish}
+                  done={ceremony.celebrating}
+                />
+              ) : (
+                <ShuffleDeck
+                  interactive={ceremony.iAmActor && !ceremony.celebrating && !reconnecting}
+                  progress={ceremony.progress}
+                  onBump={ceremony.bump}
+                  settled={ceremony.celebrating}
+                />
+              )}
+            </Animated.View>
           </View>
 
           <View style={styles.sideSeat}>
@@ -181,7 +188,9 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
       </View>
 
       {/* Rodapé explicativo + ação principal */}
-      {!compact ? <StepsFooter stage={ceremony.stage} shufflerName={shufflerName} cutterName={cutterName} /> : null}
+      {!compact ? (
+        <StepsFooter stage={ceremony.stage} shufflerName={shufflerName} cutterName={cutterName} />
+      ) : null}
 
       <View style={styles.ctaSlot}>
         {copy.cta && !reconnecting ? (
@@ -313,12 +322,28 @@ function StepsFooter({
       ? [
           { icon: icons.shuffle, label: who(shufflerName, 'está embaralhando'), active: true },
           { icon: icons.cut, label: 'O baralho será cortado em seguida.', active: false },
-          { icon: icons.deal, label: 'Depois do corte, as cartas serão distribuídas.', active: false },
+          {
+            icon: icons.deal,
+            label: 'Depois do corte, as cartas serão distribuídas.',
+            active: false,
+          },
         ]
       : [
-          { icon: icons.cut, label: who(cutterName, stage === 'cut' ? 'está cortando' : 'cortou'), active: stage === 'cut' },
-          { icon: icons.shuffle, label: 'O corte define por onde as cartas serão distribuídas.', active: false },
-          { icon: icons.deal, label: 'Depois do corte, as cartas serão distribuídas.', active: stage === 'deal' },
+          {
+            icon: icons.cut,
+            label: who(cutterName, stage === 'cut' ? 'está cortando' : 'cortou'),
+            active: stage === 'cut',
+          },
+          {
+            icon: icons.shuffle,
+            label: 'O corte define por onde as cartas serão distribuídas.',
+            active: false,
+          },
+          {
+            icon: icons.deal,
+            label: 'Depois do corte, as cartas serão distribuídas.',
+            active: stage === 'deal',
+          },
         ];
   return (
     <View style={styles.steps}>
@@ -397,7 +422,9 @@ function statusLabel(seat: Seat, ceremony: ShuffleCeremony, dealerSeat: Seat): s
     return ceremony.stage === 'cut' ? 'Cortando...' : 'Embaralhando...';
   }
   if (ceremony.stage === 'deal') return 'Recebendo...';
-  return seatStatus(seat, ceremony.stage, dealerSeat) === 'next' ? 'Corta em seguida' : 'Aguardando...';
+  return seatStatus(seat, ceremony.stage, dealerSeat) === 'next'
+    ? 'Corta em seguida'
+    : 'Aguardando...';
 }
 
 interface Copy {
@@ -518,6 +545,8 @@ const styles = StyleSheet.create({
   seatStatusText: { marginLeft: 4, maxWidth: SIDE_SEAT_W - 18 },
 
   centre: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  // Acima das cartas da distribuição: elas passam por trás do texto, não por cima.
+  title: { zIndex: 2 },
   subtitle: { marginTop: 2 },
   deckRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', marginTop: 10 },
   deckArea: { flex: 1, alignItems: 'center', justifyContent: 'center' },

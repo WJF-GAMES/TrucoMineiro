@@ -1,4 +1,5 @@
 import { Card, Rank, cardId } from '../cards/card';
+import type { PlayedCard, Seat } from '../state/types';
 
 /**
  * Truco Mineiro uses fixed manilhas ("manilhas velhas"):
@@ -45,4 +46,28 @@ export function cardStrength(card: Card): number {
 /** Positive when a beats b, negative when b beats a, zero on a tie (same strength, non-manilha). */
 export function compareCards(a: Card, b: Card): number {
   return cardStrength(a) - cardStrength(b);
+}
+
+/** Carta que está ganhando numa vaza (parcial ou completa) — a mesma regra de `resolveRound`. */
+export interface LeadingPlay {
+  seat: Seat;
+  card: Card;
+  /** A melhor carta está empatada com uma do time adversário: ninguém "ganha" por enquanto. */
+  tied: boolean;
+}
+
+export function leadingPlay(plays: readonly PlayedCard[]): LeadingPlay | null {
+  if (plays.length === 0) return null;
+  let best: PlayedCard = plays[0]!;
+  let tied = false;
+  for (const p of plays.slice(1)) {
+    const cmp = compareCards(p.card, best.card);
+    if (cmp > 0) {
+      best = p;
+      tied = false;
+    } else if (cmp === 0 && p.seat % 2 !== best.seat % 2) {
+      tied = true;
+    }
+  }
+  return { seat: best.seat, card: best.card, tied };
 }
