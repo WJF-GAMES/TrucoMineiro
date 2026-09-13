@@ -7,6 +7,7 @@ import { logEvent } from '@/services/firebase/analytics';
 import { traced } from '@/services/firebase/perf';
 import { haptic } from '@/utils/haptics';
 import type { RootScreenProps } from '@/navigation/types';
+import { useMatchmakingGuard } from '@/ads';
 
 const ERRORS: Record<string, string> = {
   'not-found': 'Sala não encontrada. Confira o código.',
@@ -17,6 +18,8 @@ const ERRORS: Record<string, string> = {
 };
 
 export function JoinRoomScreen({ navigation }: RootScreenProps<'JoinRoom'>) {
+  // Entrada em sala conta como fluxo de partida: nenhum anúncio pode interromper.
+  useMatchmakingGuard();
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

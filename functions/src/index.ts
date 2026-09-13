@@ -15,12 +15,28 @@ export {
   rejoinMatch,
 } from './sessions';
 export { finalizeMatch } from './matches';
-export { claimReward, purchaseItem } from './economy';
 export {
   sendFriendRequest,
   respondFriendRequest,
+  cancelFriendRequest,
   removeFriend,
+  blockUser,
+  unblockUser,
   inviteFriendToRoom,
   onPresenceWritten,
 } from './social';
+export {
+  matchPhoneContacts,
+  createFriendInviteToken,
+  resolveFriendInviteToken,
+} from './contacts';
+export {
+  bootstrapLeagueSystemForUser,
+  ensureUserLeagueAssignment,
+  getLeagueScreenSnapshot,
+  getGlobalLeagueRanking,
+  leagueAdmin,
+  finalizeWeeklyLeagues,
+  refreshLeagueRankings,
+} from './leagues';
 export { seedCatalog, diagnostics } from './seed';

@@ -5,8 +5,8 @@ import type {
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
 import type { AIDifficultyId } from '@/domain/model/types';
+import type { MatchAnalysis } from '@/features/game/matchAnalysis';
 
-export type StoreTab = 'destaques' | 'avatares' | 'cartas' | 'temas' | 'moedas';
 export type StaticPageKind = 'terms' | 'privacy' | 'help' | 'about' | 'privacy_security' | 'tips';
 
 export type MainTabParamList = {
@@ -41,10 +41,11 @@ export type RootStackParamList = {
     coinsGained?: number;
     leaguePointsDelta?: number;
     leveledUp?: boolean;
+    /** Resumo da partida calculado a partir dos eventos do motor (conteúdo do Rewarded). */
+    analysis?: MatchAnalysis;
     rematch?:
       { mode: 'ai'; difficulty: AIDifficultyId } | { mode: 'online'; roomCode: string | null };
   };
-  Store: { tab?: StoreTab } | undefined;
   Profile: undefined;
   EditProfile: undefined;
   Settings: undefined;

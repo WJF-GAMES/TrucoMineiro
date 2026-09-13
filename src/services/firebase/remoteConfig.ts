@@ -11,11 +11,32 @@ export const remoteConfigDefaults = {
   matchmaking_enabled: true,
   friends_enabled: true,
   league_enabled: true,
-  store_enabled: true,
-  daily_reward_enabled: true,
   xp_multiplier: 1,
   matchmaking_bot_fill_seconds: 20,
   matchmaking_timeout_seconds: 90,
+
+  // Monetização por anúncios. Os defaults abaixo valem offline e antes do primeiro fetch;
+  // a documentação de cada um está em docs/ADMOB_MONETIZATION.md.
+  ads_enabled: true,
+  interstitial_enabled: true,
+  rewarded_enabled: true,
+  native_enabled: true,
+  app_open_enabled: false,
+  interstitial_min_matches_before_first: 2,
+  interstitial_every_n_matches: 3,
+  interstitial_cooldown_seconds: 180,
+  interstitial_max_per_session: 4,
+  interstitial_max_per_day: 8,
+  full_screen_global_cooldown_seconds: 180,
+  minimum_session_seconds_before_interstitial: 180,
+  native_home_enabled: true,
+  native_league_enabled: true,
+  native_friends_enabled: true,
+  native_profile_enabled: false,
+  rewarded_analysis_enabled: true,
+  rewarded_tip_enabled: true,
+  app_open_min_session_number: 4,
+  app_open_min_background_seconds: 21600,
 } as const;
 
 export type RemoteFlag = keyof typeof remoteConfigDefaults;

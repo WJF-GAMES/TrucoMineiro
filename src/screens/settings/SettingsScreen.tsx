@@ -3,22 +3,56 @@ import { Alert, StyleSheet } from 'react-native';
 import { spacing } from '@/design-system';
 import { GameHeader, MenuGroup, MenuItem, Screen } from '@/components';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { useAuthStore } from '@/stores/authStore';
+import { clearContactsSync } from '@/features/friends/contactsCache';
+import { openAppSettings } from '@/services/contacts';
 import { deleteAccount, FunctionsError } from '@/services/firebase/functions';
 import { signOut } from '@/services/firebase/auth';
 import { toast } from '@/stores/toastStore';
+import { ConsentManager, useAdStore } from '@/ads';
 import type { RootScreenProps } from '@/navigation/types';
 
 const THEME_LABEL = { auto: 'Automático', dark: 'Escuro', light: 'Claro' } as const;
 
 export function SettingsScreen({ navigation }: RootScreenProps<'Settings'>) {
   const settings = useSettingsStore();
+  const uid = useAuthStore((s) => s.user?.uid);
   const [deleting, setDeleting] = useState(false);
+  const adPrivacyRequired = useAdStore((s) => s.privacyOptionsRequired);
 
   const cycleTheme = () => {
     const order: (typeof settings.theme)[] = ['auto', 'dark', 'light'];
     const next = order[(order.indexOf(settings.theme) + 1) % order.length]!;
     settings.set({ theme: next });
     toast.info(`Tema: ${THEME_LABEL[next]}`, 'O Truco Mineiro usa a identidade escura oficial.');
+  };
+
+  /**
+   * O app não revoga permissão do sistema — isso é do SO. O que ele controla é o cache local
+   * da última sincronização, e é isso que este item apaga.
+   */
+  const confirmForgetContacts = () => {
+    Alert.alert(
+      'Sincronização de contatos',
+      'Isso apaga do aparelho o resultado da última sincronização. Sua agenda nunca foi enviada ' +
+        'nem guardada nos nossos servidores. Para revogar o acesso aos contatos, use as ' +
+        'configurações do sistema.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Abrir configurações',
+          onPress: () => void openAppSettings(),
+        },
+        {
+          text: 'Apagar',
+          style: 'destructive',
+          onPress: async () => {
+            if (uid) await clearContactsSync(uid);
+            toast.info('Sincronização apagada', 'Você pode sincronizar de novo quando quiser.');
+          },
+        },
+      ],
+    );
   };
 
   const confirmDelete = () => {
@@ -94,10 +128,28 @@ export function SettingsScreen({ navigation }: RootScreenProps<'Settings'>) {
 
       <MenuGroup style={styles.group}>
         <MenuItem
+          icon="people"
+          title="Sincronização de contatos"
+          subtitle="Apagar o resultado guardado neste aparelho"
+          onPress={confirmForgetContacts}
+          testID="settings-contacts"
+        />
+        <MenuItem
           icon="shield-half"
           title="Privacidade e Segurança"
           onPress={() => navigation.navigate('StaticPage', { kind: 'privacy_security' })}
         />
+        {/* Exigência do UMP: quem precisou dar consentimento tem de conseguir revê-lo a qualquer
+            momento. O item só aparece quando o próprio SDK diz que é necessário. */}
+        {adPrivacyRequired ? (
+          <MenuItem
+            icon="megaphone"
+            title="Privacidade de anúncios"
+            subtitle="Revisar suas escolhas de consentimento"
+            onPress={() => void ConsentManager.showPrivacyOptions()}
+            testID="settings-ad-privacy"
+          />
+        ) : null}
         <MenuItem
           icon="help-circle"
           title="Ajuda e Suporte"

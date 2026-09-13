@@ -48,9 +48,27 @@ Ambos têm testes que reproduzem o round-trip removendo as chaves vazias
 limita a leitura ao dono do assento). O app assina esse nó e leva XP / moedas / pontos de liga para a
 tela de resultado — no modo IA os mesmos números vêm da resposta de `finalizeMatch`.
 
+## Convite de sala para um amigo
+
+Fluxo completo dos dois lados:
+
+1. Na aba Amigos, "Jogar" (ou "Convidar", se o amigo estiver offline ou em partida) chama `createRoom`
+   e em seguida `inviteFriendToRoom`, que só aceita amizade existente. A Function grava
+   `invites/{amigo}/{code}` = `{code, from, fromNickname, createdAt}` e manda push.
+2. Quem recebe escuta esse nó ao vivo (`useRoomInvites`). Na aba Amigos ele aparece como
+   "Convites para jogar"; em qualquer outra tela, `useRoomInvitePrompt` abre um diálogo — exceto
+   durante Matchmaking/Lobby/Partida/Resultado, quando o convite fica guardado e é oferecido ao sair.
+3. "Entrar" chama `joinRoom(code)` e navega para o lobby. Entrar, recusar, ou passar de 15 minutos
+   apaga o nó; sala cheia ou partida já iniciada também apagam (o convite não serve mais). Sem
+   conexão o convite é mantido para uma segunda tentativa.
+
+As regras do RTDB deixam o dono apenas **ler e apagar** os seus convites (`".write"` só com
+`!newData.exists()`): ninguém cria convite para si mesmo nem escreve na caixa de outro.
+
 ## Limitações conhecidas
 - Não há timeout automático de turno para humanos ausentes (somente abandono explícito ou desconexão visível).
-- Assistir partidas de amigos ("Assistir") ainda não implementado (exibe aviso).
+- Assistir partidas de amigos não existe (nem no cliente nem no servidor): amigo em partida aparece
+  como "Na partida" e o botão dele convida para uma sala, que é o que o backend sabe fazer hoje.
 - **Testado com 1 humano + 3 bots** (criar sala → completar com IA → iniciar → partida até 12 pontos,
   com o servidor aplicando cada ação). Uma mesa com 2+ humanos reais exige dois dispositivos e ainda
   não foi exercitada; o matchmaking de 4 humanos também não (a fila precisa de 4 contas simultâneas).

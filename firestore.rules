@@ -9,23 +9,54 @@ service cloud.firestore {
     match /profiles/{uid} { allow read: if signedIn(); allow write: if false; }
     match /playerStats/{uid} { allow read: if signedIn(); allow write: if false; }
     match /userAchievements/{uid} { allow read: if isOwner(uid); allow write: if false; }
-    match /rewards/{id} { allow read: if signedIn() && resource.data.uid == request.auth.uid; allow write: if false; }
-    match /purchases/{id} { allow read: if signedIn() && resource.data.uid == request.auth.uid; allow write: if false; }
 
     match /matchHistory/{id} {
       allow read: if signedIn() && request.auth.uid in resource.data.playerIds;
       allow write: if false;
     }
 
-    match /leagues/{id} { allow read: if signedIn(); allow write: if false; }
     match /seasons/{id} { allow read: if signedIn(); allow write: if false; }
     match /achievements/{id} { allow read: if signedIn(); allow write: if false; }
+
+    // --- Sistema de ligas -----------------------------------------------------------------
+    // Catálogo público das 20 ligas (nome, ordem, assetKey, vizinhas).
+    match /leagueDefinitions/{leagueId} { allow read: if signedIn(); allow write: if false; }
+
+    // Progressão: cada um lê a sua. weeklyPoints, currentLeagueId, currentRank e o resultado da
+    // semana são decididos só pelas Functions — nenhuma escrita direta, em hipótese alguma.
+    match /playerProgress/{uid} { allow read: if isOwner(uid); allow write: if false; }
+
+    // O grupo da semana é visível para quem está logado: é o ranking que a tela mostra ao vivo.
+    // Os documentos não guardam nada sensível (apelido, avatar, bandeira e pontos).
+    match /weeklyLeagueGroups/{groupId} {
+      allow read: if signedIn();
+      allow write: if false;
+      match /members/{uid} { allow read: if signedIn(); allow write: if false; }
+    }
+
+    // Histórico semanal é privado do jogador.
+    match /leagueHistory/{uid}/weeks/{weekKey} { allow read: if isOwner(uid); allow write: if false; }
+
+    // Controle interno (idempotência e travas): invisível para o cliente.
+    match /processedLeagueEvents/{eventId} { allow read, write: if false; }
+    match /leagueProcessingLocks/{lockId} { allow read, write: if false; }
 
     match /friendships/{uid}/friends/{friendUid} { allow read: if isOwner(uid); allow write: if false; }
     match /friendRequests/{id} {
       allow read: if signedIn() && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
       allow write: if false;
     }
+
+    // Quem eu bloqueei é meu (a tela "Bloqueados" lê daqui).
+    match /blocks/{uid}/blocked/{targetUid} { allow read: if isOwner(uid); allow write: if false; }
+    // Espelho "quem me bloqueou": fechado para todos — saber disso é justamente o que o bloqueio evita.
+    match /blockedBy/{uid}/users/{otherUid} { allow read, write: if false; }
+
+    // Diretório de telefones (hashes), cota de sincronização e tokens de convite:
+    // só o Admin SDK toca. Leitura direta permitiria enumerar quem tem conta.
+    match /phoneIndex/{hash} { allow read, write: if false; }
+    match /contactSync/{uid} { allow read, write: if false; }
+    match /friendInviteTokens/{token} { allow read, write: if false; }
 
     match /{document=**} { allow read, write: if false; }
   }

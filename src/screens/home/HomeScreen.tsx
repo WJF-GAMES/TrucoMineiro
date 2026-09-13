@@ -18,17 +18,11 @@ import {
 } from '@/components';
 import { useProfileStore } from '@/stores/profileStore';
 import { logEvent } from '@/services/firebase/analytics';
-import { claimReward, FunctionsError } from '@/services/firebase/functions';
-import { flag } from '@/services/firebase/remoteConfig';
-import { toast } from '@/stores/toastStore';
 import { formatNumber, pct } from '@/utils/format';
 import { subscribeOnlineCount } from '@/services/firebase/rtdb';
-import { LEAGUE_NAMES } from '@/domain/model/leagues';
+import { leagueById } from '@/domain/model/leagues';
+import { NativeAdCard, SponsoredContentCard, usePreloadInterstitial } from '@/ads';
 import type { TabScreenProps } from '@/navigation/types';
-
-function todayId() {
-  return `daily_${new Date().toISOString().slice(0, 10)}`;
-}
 
 /**
  * Principal (Home). No reference exists for this screen in referencia.png, so it is composed
@@ -43,30 +37,14 @@ export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
   const loading = useProfileStore((s) => s.loading);
   const error = useProfileStore((s) => s.error);
   const [online, setOnline] = useState(0);
-  const [claiming, setClaiming] = useState(false);
-  const [claimed, setClaimed] = useState(false);
 
   useEffect(() => {
     logEvent('home_viewed');
     return subscribeOnlineCount(setOnline);
   }, []);
 
-  const claim = async () => {
-    setClaiming(true);
-    try {
-      const r = await claimReward(todayId());
-      setClaimed(true);
-      if (r.alreadyClaimed) toast.info('Recompensa já resgatada hoje');
-      else {
-        toast.success(`+${r.coins} moedas!`, 'Volte amanhã para mais.');
-        logEvent('reward_claimed', { coins: r.coins });
-      }
-    } catch (e) {
-      toast.error('Não deu certo', e instanceof FunctionsError ? e.message : undefined);
-    } finally {
-      setClaiming(false);
-    }
-  };
+  // O interstitial do fim de partida é carregado aqui, muito antes de ser necessário.
+  usePreloadInterstitial();
 
   return (
     <Screen scroll withTabBar testID="screen-home">
@@ -142,24 +120,9 @@ export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
         />
       </View>
 
-      {flag('daily_reward_enabled') ? (
-        <Surface style={styles.reward} strong>
-          <Image source={images.coinsMedium} style={styles.rewardImage} contentFit="contain" />
-          <View style={{ flex: 1 }}>
-            <AppText variant="h3">Recompensa diária</AppText>
-            <AppText variant="small" color={colors.textSecondary}>
-              Resgate suas moedas de hoje.
-            </AppText>
-          </View>
-          <PillButton
-            label={claimed ? 'Resgatado' : claiming ? '...' : 'Resgatar'}
-            variant={claimed ? 'muted' : 'gold'}
-            onPress={claim}
-            disabled={claimed || claiming}
-            testID="home-claim"
-          />
-        </Surface>
-      ) : null}
+      {/* Único Native Ad da Principal, entre os modos de jogo e a liga — longe dos CTAs de jogar
+          e da Bottom Navigation, para não haver clique acidental. */}
+      <NativeAdCard placement="home_native_primary" />
 
       <SectionTitle
         title="Sua liga"
@@ -169,12 +132,12 @@ export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
       <Pressable accessibilityRole="button" onPress={() => navigation.navigate('League')}>
         <Surface style={styles.league}>
           <Image
-            source={leagueShield[profile?.leagueId ?? 'bronze']}
+            source={leagueShield(profile?.leagueId)}
             style={styles.shield}
             contentFit="contain"
           />
           <View style={{ flex: 1, marginLeft: 12 }}>
-            <AppText variant="h3">Liga {LEAGUE_NAMES[profile?.leagueId ?? 'bronze']}</AppText>
+            <AppText variant="h3">Liga {leagueById(profile?.leagueId).displayName}</AppText>
             <AppText variant="small" color={colors.textSecondary}>
               {formatNumber(profile?.leaguePoints ?? 0)} pontos • {stats?.matches ?? 0} partidas •{' '}
               {pct(stats?.wins ?? 0, stats?.matches ?? 0)}% vitórias
@@ -192,6 +155,9 @@ export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
       >
         <Image source={images.bannerTemporada} style={styles.banner} contentFit="cover" />
       </Pressable>
+
+      {/* Rewarded opcional: conteúdo (dica de estratégia), nunca vantagem dentro da partida. */}
+      <SponsoredContentCard />
 
       <SectionTitle
         title="Chame a turma"
@@ -224,8 +190,6 @@ const styles = StyleSheet.create({
   sectionTitle: { marginTop: spacing.md, marginBottom: spacing.md },
   modes: { flexDirection: 'row', gap: 10 },
   pressed: { opacity: 0.85 },
-  reward: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.md },
-  rewardImage: { width: 56, height: 40, marginRight: 10 },
   league: { flexDirection: 'row', alignItems: 'center' },
   shield: { width: 46, height: 54 },
   bannerWrap: {

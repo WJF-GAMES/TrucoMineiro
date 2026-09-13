@@ -19,10 +19,11 @@ import {
 import { useProfileStore } from '@/stores/profileStore';
 import { useAuthStore } from '@/stores/authStore';
 import { getAchievements, subscribeUserAchievements } from '@/services/firebase/firestore';
-import { LEAGUE_NAMES } from '@/domain/model/leagues';
+import { leagueById } from '@/domain/model/leagues';
 import { formatNumber, pct } from '@/utils/format';
 import { traced } from '@/services/firebase/perf';
 import { toast } from '@/stores/toastStore';
+import { NativeAdCard } from '@/ads';
 import type { RootScreenProps } from '@/navigation/types';
 
 export function ProfileScreen({ navigation }: RootScreenProps<'Profile'>) {
@@ -97,12 +98,12 @@ export function ProfileScreen({ navigation }: RootScreenProps<'Profile'>) {
 
       <Surface style={styles.league}>
         <Image
-          source={leagueShield[profile?.leagueId ?? 'bronze']}
+          source={leagueShield(profile?.leagueId)}
           style={styles.shield}
           contentFit="contain"
         />
         <View style={{ marginLeft: 12 }}>
-          <AppText variant="h2">Liga {LEAGUE_NAMES[profile?.leagueId ?? 'bronze']}</AppText>
+          <AppText variant="h2">Liga {leagueById(profile?.leagueId).displayName}</AppText>
           <AppText variant="small" color={colors.textSecondary}>
             {formatNumber(profile?.leaguePoints ?? 0)} pontos
           </AppText>
@@ -145,16 +146,15 @@ export function ProfileScreen({ navigation }: RootScreenProps<'Profile'>) {
           onPress={() => navigation.navigate('MatchHistory')}
         />
         <MenuItem
-          icon="color-wand"
-          title="Personalização"
-          onPress={() => navigation.navigate('Store', { tab: 'avatares' })}
-        />
-        <MenuItem
           icon="person"
           title="Editar Perfil"
           onPress={() => navigation.navigate('EditProfile')}
         />
       </MenuGroup>
+
+      {/* Placement preparado, porém desligado no lançamento (`native_profile_enabled = false`):
+          enquanto a flag for falsa este componente não renderiza nem requisita nada. */}
+      <NativeAdCard placement="profile_native" />
     </Screen>
   );
 }

@@ -66,12 +66,21 @@ const FLAGS: Record<string, React.ReactNode> = {
   ),
 };
 
-export function CountryFlag({ country, width = 24 }: { country: Country; width?: number }) {
+interface Props {
+  /** Objeto do seletor de país (tela de login). */
+  country?: Country;
+  /** Alternativa para quem só tem o código ISO vindo do backend (ranking das ligas). */
+  code?: string;
+  width?: number;
+}
+
+export function CountryFlag({ country, code, width = 24 }: Props) {
   const height = Math.round((width * VB.h) / VB.w);
+  const iso = (country?.code ?? code ?? '').toUpperCase();
   return (
     <View style={[styles.frame, { width, height }]}>
       <Svg width={width} height={height} viewBox={`0 0 ${VB.w} ${VB.h}`}>
-        {FLAGS[country.code] ?? <Rect width={60} height={42} fill="#123a37" />}
+        {FLAGS[iso] ?? <Rect width={60} height={42} fill="#123a37" />}
       </Svg>
     </View>
   );

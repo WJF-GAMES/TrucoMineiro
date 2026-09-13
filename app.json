@@ -9,12 +9,21 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#00221a",
     "newArchEnabled": true,
-    "splash": { "image": "./assets/splash-icon.png", "resizeMode": "contain", "backgroundColor": "#00221a" },
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#00221a"
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.mooby.trucomineiro",
       "googleServicesFile": "./GoogleService-Info.plist",
-      "infoPlist": { "UIBackgroundModes": ["remote-notification"] }
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
+        "NSContactsUsageDescription": "O Truco Mineiro usa seus contatos apenas para encontrar amigos que já jogam com você. Nada da sua agenda é compartilhado."
+      }
     },
     "android": {
       "package": "com.mooby.trucomineiro",
@@ -26,20 +35,53 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "softwareKeyboardLayoutMode": "pan"
+      "softwareKeyboardLayoutMode": "pan",
+      "permissions": [
+        "android.permission.READ_CONTACTS"
+      ],
+      "blockedPermissions": [
+        "android.permission.WRITE_CONTACTS"
+      ]
     },
-    "web": { "bundler": "metro", "output": "single", "favicon": "./assets/favicon.png" },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
     "plugins": [
       "expo-font",
       "expo-dev-client",
-      ["expo-splash-screen", { "backgroundColor": "#00221a", "image": "./assets/splash-icon.png", "imageWidth": 200 }],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#00221a",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200
+        }
+      ],
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
       "@react-native-firebase/messaging",
       "@react-native-firebase/app-check",
       "@react-native-firebase/crashlytics",
       "@react-native-firebase/perf",
-      ["expo-build-properties", { "ios": { "useFrameworks": "static" }, "android": { "minSdkVersion": 24 } }]
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "O Truco Mineiro usa seus contatos apenas para encontrar amigos que já jogam com você. Nada da sua agenda é compartilhado."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          },
+          "android": {
+            "minSdkVersion": 24
+          }
+        }
+      ]
     ]
   }
 }

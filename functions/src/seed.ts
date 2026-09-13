@@ -1,10 +1,10 @@
 import { onRequest } from 'firebase-functions/v2/https';
 import { db, IS_EMULATOR, now, REGION, rtdb } from './lib/admin';
-import { LEAGUES } from './domain/model/leagues';
+import { seedLeagueDefinitionsInternal } from './leagues';
 import { ACHIEVEMENTS } from './progression';
 
 /**
- * Seeds static catalog collections (leagues, achievements, current season).
+ * Seeds static catalog collections (league definitions, achievements, current season).
  * Only callable in the emulator or with the SEED_SECRET header in production.
  */
 export const seedCatalog = onRequest({ region: REGION }, async (req, res) => {
@@ -13,11 +13,9 @@ export const seedCatalog = onRequest({ region: REGION }, async (req, res) => {
     res.status(403).send('forbidden');
     return;
   }
+  // As 20 ligas têm seu próprio seed idempotente (mesma função usada pela virada semanal).
+  const leagues = await seedLeagueDefinitionsInternal();
   const batch = db.batch();
-  for (const l of LEAGUES) {
-    const { id, ...data } = l;
-    batch.set(db.doc(`leagues/${id}`), data);
-  }
   for (const a of ACHIEVEMENTS) {
     const { id, ...data } = a;
     batch.set(db.doc(`achievements/${id}`), data);
@@ -30,7 +28,7 @@ export const seedCatalog = onRequest({ region: REGION }, async (req, res) => {
     endsAt: start + 30 * 86_400_000,
   });
   await batch.commit();
-  res.json({ ok: true, leagues: LEAGUES.length, achievements: ACHIEVEMENTS.length });
+  res.json({ ok: true, leagues, achievements: ACHIEVEMENTS.length });
 });
 
 /**

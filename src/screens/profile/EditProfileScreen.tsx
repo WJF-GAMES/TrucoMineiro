@@ -17,9 +17,6 @@ export function EditProfileScreen({ navigation }: RootScreenProps<'EditProfile'>
   const [avatarId, setAvatarId] = useState<AvatarId>(profile?.avatarId ?? 'joao');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const owned = profile?.ownedItems ?? [];
-  const canUse = (id: AvatarId) =>
-    id === 'joao' || id === 'maria' || owned.includes(`avatar_${id}`) || profile?.avatarId === id;
 
   const save = async () => {
     const r = nicknameSchema.safeParse(nickname);
@@ -60,31 +57,25 @@ export function EditProfileScreen({ navigation }: RootScreenProps<'EditProfile'>
         Escolha seu avatar
       </AppText>
       <View style={styles.avatars}>
-        {AVATAR_IDS.map((id) => {
-          const locked = !canUse(id);
-          return (
-            <Pressable
-              key={id}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: id === avatarId, disabled: locked }}
-              accessibilityLabel={avatarNames[id]}
-              onPress={() => {
-                if (locked)
-                  return toast.info('Avatar bloqueado', 'Compre esse avatar na Loja para usá-lo.');
-                haptic.selection();
-                setAvatarId(id);
-              }}
-              style={locked && { opacity: 0.4 }}
-            >
-              <PlayerAvatar
-                avatarId={id}
-                size={78}
-                ringColor={id === avatarId ? colors.primaryBright : 'rgba(120,200,170,0.35)'}
-                badge={id === avatarId ? 'check' : null}
-              />
-            </Pressable>
-          );
-        })}
+        {AVATAR_IDS.map((id) => (
+          <Pressable
+            key={id}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: id === avatarId }}
+            accessibilityLabel={avatarNames[id]}
+            onPress={() => {
+              haptic.selection();
+              setAvatarId(id);
+            }}
+          >
+            <PlayerAvatar
+              avatarId={id}
+              size={78}
+              ringColor={id === avatarId ? colors.primaryBright : 'rgba(120,200,170,0.35)'}
+              badge={id === avatarId ? 'check' : null}
+            />
+          </Pressable>
+        ))}
       </View>
       <PrimaryButton
         label="Salvar"

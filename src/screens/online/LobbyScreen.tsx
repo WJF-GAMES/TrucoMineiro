@@ -28,10 +28,13 @@ import { toast } from '@/stores/toastStore';
 import { logEvent } from '@/services/firebase/analytics';
 import { traced } from '@/services/firebase/perf';
 import type { RootScreenProps } from '@/navigation/types';
+import { useMatchmakingGuard } from '@/ads';
 
 const SEAT_LABEL = ['Você', 'Adversário', 'Parceiro', 'Adversário'];
 
 export function LobbyScreen({ navigation, route }: RootScreenProps<'Lobby'>) {
+  // Sala aguardando jogadores é antessala de partida: sem anúncio full-screen aqui.
+  useMatchmakingGuard();
   const { code } = route.params;
   const uid = useAuthStore((s) => s.user?.uid);
   const [room, setRoom] = useState<Room | null | undefined>(undefined);

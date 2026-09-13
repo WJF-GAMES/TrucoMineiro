@@ -5,10 +5,12 @@ import { colors, spacing } from '@/design-system';
 import { DangerButton, GameHeader, MenuCard, MenuGroup, MenuItem, Screen } from '@/components';
 import { signOut } from '@/services/firebase/auth';
 import { toast } from '@/stores/toastStore';
+import { AdsDebugPanel } from '@/ads';
 import type { TabScreenProps } from '@/navigation/types';
 
 export function MoreScreen({ navigation }: TabScreenProps<'More'>) {
   const [leaving, setLeaving] = useState(false);
+  const [adsDebugOpen, setAdsDebugOpen] = useState(false);
   const version = Application.nativeApplicationVersion ?? '1.0.0';
 
   const logout = () => {
@@ -34,13 +36,6 @@ export function MoreScreen({ navigation }: TabScreenProps<'More'>) {
     <Screen scroll withTabBar testID="screen-more">
       <GameHeader variant="title" title="Mais" />
       <View style={styles.group}>
-        <MenuCard
-          icon="cart"
-          title="Loja"
-          subtitle="Avatares, cartas e personalizações"
-          onPress={() => navigation.navigate('Store')}
-          testID="more-store"
-        />
         <MenuCard
           icon="person"
           title="Perfil"
@@ -82,7 +77,21 @@ export function MoreScreen({ navigation }: TabScreenProps<'More'>) {
         />
       </MenuGroup>
 
+      {/* Diagnóstico de anúncios: existe apenas em desenvolvimento. */}
+      {__DEV__ ? (
+        <MenuGroup style={styles.group2}>
+          <MenuItem
+            icon="megaphone"
+            title="Anúncios (debug)"
+            subtitle="Estado, frequência e consentimento"
+            onPress={() => setAdsDebugOpen(true)}
+            testID="more-ads-debug"
+          />
+        </MenuGroup>
+      ) : null}
+
       <DangerButton label="Sair da conta" onPress={logout} loading={leaving} testID="more-logout" />
+      <AdsDebugPanel visible={adsDebugOpen} onClose={() => setAdsDebugOpen(false)} />
     </Screen>
   );
 }

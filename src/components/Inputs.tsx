@@ -1,5 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  TextInputProps,
+  TextStyle,
+  View,
+  ViewStyle,
+} from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, fontFamily, radius, shadows } from '@/design-system';
 import { AppText } from './AppText';
@@ -7,7 +16,21 @@ import { CountryFlag } from './CountryFlag';
 import { PHONE_PLACEHOLDER, type Country } from '@/utils/phone';
 import { OTP_LENGTH, sanitizeOtp } from '@/utils/otp';
 
-const inputFont = { fontFamily: fontFamily.semibold, fontSize: 16, color: colors.text };
+/**
+ * O navegador desenha um contorno amarelo/azul de foco por cima do campo, brigando com a borda
+ * verde do próprio design. No app nativo isso não existe, então o reset é só para a build web.
+ * `outlineStyle` é uma propriedade do react-native-web e não está nos tipos do React Native.
+ */
+const noWebOutline = (
+  Platform.OS === 'web' ? { outlineStyle: 'none' } : null
+) as TextStyle | null;
+
+const inputFont = {
+  fontFamily: fontFamily.semibold,
+  fontSize: 16,
+  color: colors.text,
+  ...(noWebOutline ?? {}),
+};
 
 /** Dark rounded text field (nickname, room code). */
 export function TextField({
@@ -187,7 +210,7 @@ export function OtpInput({
         maxLength={length}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        style={styles.otpInput}
+        style={[styles.otpInput, noWebOutline]}
         caretHidden
         selectionColor="transparent"
       />

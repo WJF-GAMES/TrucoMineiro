@@ -3,6 +3,7 @@ import {
   onDisconnect,
   onValue,
   ref,
+  remove,
   serverTimestamp,
   set,
   update,
@@ -14,6 +15,7 @@ import type {
   PresenceState,
   ProgressionResult,
   Room,
+  RoomInvite,
   SessionMeta,
 } from '@/domain/model/types';
 import type { SeatView } from '@/domain/game';
@@ -97,6 +99,30 @@ export const subscribeMatchmaking = (
   cb: (m: MatchmakingEntry | null) => void,
   onError?: (e: Error) => void,
 ) => subscribe<MatchmakingEntry>(`matchmaking/queue/${uid}`, cb, onError);
+
+/**
+ * Convites de sala que chegaram para este usuário (`invites/{uid}`).
+ * As regras do RTDB deixam o dono ler os seus e só apagar — nunca criar um convite para si mesmo.
+ */
+export const subscribeRoomInvites = (
+  uid: string,
+  cb: (invites: RoomInvite[]) => void,
+  onError?: (e: Error) => void,
+): Unsub =>
+  subscribe<Record<string, RoomInvite>>(
+    `invites/${uid}`,
+    (map) =>
+      cb(
+        Object.entries(map ?? {})
+          .map(([code, invite]) => ({ ...invite, code }))
+          .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)),
+      ),
+    onError,
+  );
+
+/** Some com o convite: aceitar, recusar e ignorar um convite velho passam todos por aqui. */
+export const deleteRoomInvite = (uid: string, code: string) =>
+  remove(ref(rtdb, `invites/${uid}/${code}`));
 
 export const subscribeOnlineCount = (cb: (n: number) => void) =>
   subscribe<number>('stats/onlineCount', (v) => cb(v ?? 0));

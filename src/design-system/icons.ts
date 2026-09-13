@@ -76,4 +76,13 @@ export const icons = {
   medal: 'medal' as IoniconName,
   phone: 'call' as IoniconName,
   keypad: 'keypad' as IoniconName,
+
+  // Cerimônia de mesa (embaralhar / cortar / distribuir)
+  shuffle: 'shuffle' as IoniconName,
+  cut: 'cut' as IoniconName,
+  deal: 'albums-outline' as IoniconName,
+  hand: 'hand-left' as IoniconName,
+  stopwatch: 'stopwatch' as IoniconName,
+  checkCircle: 'checkmark-circle' as IoniconName,
+  sync: 'sync' as IoniconName,
 } as const;

@@ -127,6 +127,7 @@ export const ref = (_db, path) => ({ path });
 export const onValue = subscribeQuiet;
 export const set = asyncNoop;
 export const update = asyncNoop;
+export const remove = asyncNoop;
 export const serverTimestamp = () => Date.now();
 export const onDisconnect = () => ({ set: asyncNoop, update: asyncNoop, remove: asyncNoop, cancel: asyncNoop });
 

@@ -2,6 +2,8 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { authedCallable, HttpsError, obj, oneOf, str } from './lib/callable';
 import { auth, db, now, rtdb } from './lib/admin';
 import { AVATAR_IDS, AvatarId, PlayerStats, Profile, xpForLevel } from './domain/model/types';
+import { indexUserPhone, removePhoneIndex } from './contacts';
+import { ensureAssignment, leaveCurrentLeagueGroup } from './leagues';
 
 export const DEFAULT_COINS = 500;
 export const DEFAULT_GEMS = 20;
@@ -12,6 +14,7 @@ export function defaultProfile(uid: string): Profile {
     nickname: '',
     nicknameLower: '',
     avatarId: 'joao',
+    countryCode: 'BR',
     level: 1,
     xp: 0,
     xpToNext: xpForLevel(1),
@@ -19,7 +22,6 @@ export function defaultProfile(uid: string): Profile {
     leaguePoints: 0,
     coins: DEFAULT_COINS,
     gems: DEFAULT_GEMS,
-    ownedItems: ['avatar_joao', 'avatar_maria', 'deck_classico', 'theme_classico'],
     createdAt: now(),
     updatedAt: now(),
   };
@@ -43,13 +45,37 @@ export function defaultStats(uid: string): PlayerStats {
   };
 }
 
+/**
+ * País do jogador a partir do DDI do telefone verificado (o cliente nunca informa isso).
+ * Só decora o ranking; um número desconhecido cai em BR, que é o público do jogo.
+ */
+const DIAL_TO_COUNTRY: [string, string][] = [
+  ['+55', 'BR'],
+  ['+351', 'PT'],
+  ['+54', 'AR'],
+  ['+598', 'UY'],
+  ['+595', 'PY'],
+  ['+1', 'US'],
+];
+
+export async function countryFromPhone(uid: string): Promise<string> {
+  const user = await auth.getUser(uid).catch(() => null);
+  const phone = user?.phoneNumber ?? '';
+  // Mais específico primeiro: "+595" não pode ser confundido com "+5".
+  const match = [...DIAL_TO_COUNTRY]
+    .sort((a, b) => b[0].length - a[0].length)
+    .find(([dial]) => phone.startsWith(dial));
+  return match?.[1] ?? 'BR';
+}
+
 /** Creates the user's documents on first login. Idempotent. */
 export const bootstrapUser = authedCallable<Record<string, never>, { onboarded: boolean }>(
   async ({ uid }) => {
+    const countryCode = await countryFromPhone(uid);
     const userRef = db.doc(`users/${uid}`);
     const profileRef = db.doc(`profiles/${uid}`);
     const statsRef = db.doc(`playerStats/${uid}`);
-    return db.runTransaction(async (tx) => {
+    const result = await db.runTransaction(async (tx) => {
       const [user, profile, stats] = await Promise.all([
         tx.get(userRef),
         tx.get(profileRef),
@@ -59,11 +85,19 @@ export const bootstrapUser = authedCallable<Record<string, never>, { onboarded: 
       else tx.update(userRef, { lastSeenAt: now() });
       const { id: _pid, ...profileData } = defaultProfile(uid);
       const { id: _sid, ...statsData } = defaultStats(uid);
-      if (!profile.exists) tx.set(profileRef, profileData);
+      if (!profile.exists) tx.set(profileRef, { ...profileData, countryCode });
+      else tx.set(profileRef, { countryCode }, { merge: true });
       if (!stats.exists) tx.set(statsRef, statsData);
       const nickname = profile.exists ? (profile.data() as Profile).nickname : '';
       return { onboarded: Boolean(nickname) };
     });
+    // Diretório de telefones: o número vem do Firebase Auth, nunca do cliente.
+    // Uma falha aqui não pode impedir o login — o índice é refeito no próximo bootstrap.
+    await indexUserPhone(uid).catch(() => undefined);
+    // Liga inicial + grupo da semana. Nenhum usuário pode chegar à tela sem liga; se falhar aqui,
+    // `getLeagueScreenSnapshot` conserta na primeira abertura.
+    await ensureAssignment(uid).catch(() => undefined);
+    return result;
   },
 );
 
@@ -79,13 +113,6 @@ export const updateProfile = authedCallable<{ nickname: string; avatarId: Avatar
       const snap = await tx.get(ref);
       const { id: _id, ...base } = defaultProfile(uid);
       const current = (snap.exists ? snap.data() : base) as Profile;
-      const owned = current.ownedItems ?? [];
-      if (
-        !owned.includes(`avatar_${data.avatarId}`) &&
-        !['joao', 'maria'].includes(data.avatarId)
-      ) {
-        throw new HttpsError('failed-precondition', 'Você ainda não tem esse avatar.');
-      }
       tx.set(ref, {
         ...current,
         nickname,
@@ -130,8 +157,13 @@ export const deleteAccount = authedCallable<Record<string, never>, { ok: true }>
       `profiles/${uid}`,
       `playerStats/${uid}`,
       `userAchievements/${uid}`,
+      `playerProgress/${uid}`,
     ])
       batch.delete(db.doc(p));
+    // Sai do grupo da semana (senão o ranking continuaria mostrando um fantasma) e apaga o histórico.
+    await leaveCurrentLeagueGroup(uid);
+    const weeks = await db.collection(`leagueHistory/${uid}/weeks`).get();
+    weeks.forEach((w) => batch.delete(w.ref));
     const friends = await db.collection(`friendships/${uid}/friends`).get();
     friends.forEach((f) => {
       batch.delete(f.ref);
@@ -141,6 +173,21 @@ export const deleteAccount = authedCallable<Record<string, never>, { ok: true }>
     reqs.forEach((r) => batch.delete(r.ref));
     const reqs2 = await db.collection('friendRequests').where('to', '==', uid).get();
     reqs2.forEach((r) => batch.delete(r.ref));
+    const blocked = await db.collection(`blocks/${uid}/blocked`).get();
+    blocked.forEach((b) => {
+      batch.delete(b.ref);
+      batch.delete(db.doc(`blockedBy/${b.id}/users/${uid}`));
+    });
+    const blockedBy = await db.collection(`blockedBy/${uid}/users`).get();
+    blockedBy.forEach((b) => {
+      batch.delete(b.ref);
+      batch.delete(db.doc(`blocks/${b.id}/blocked/${uid}`));
+    });
+    const user = (await db.doc(`users/${uid}`).get()).data() as { inviteToken?: string } | undefined;
+    if (user?.inviteToken) batch.delete(db.doc(`friendInviteTokens/${user.inviteToken}`));
+    batch.delete(db.doc(`contactSync/${uid}`));
+    // Sai do diretório de telefones ANTES de apagar users/{uid}, que guarda o hash.
+    await removePhoneIndex(uid);
     await batch.commit();
     await rtdb.ref(`presence/${uid}`).remove();
     await rtdb.ref(`matchmaking/queue/${uid}`).remove();

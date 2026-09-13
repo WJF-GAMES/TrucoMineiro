@@ -35,6 +35,7 @@ export function useOnlineGame(sessionId: string): TableController {
   const [error, setError] = useState<string | null>(null);
   const [progression, setProgression] = useState<ProgressionResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [botsPaused, setBotsPaused] = useState(false);
   const seq = useRef(0);
 
   const mySeat = useMemo<Seat | null>(() => {
@@ -76,6 +77,7 @@ export function useOnlineGame(sessionId: string): TableController {
   // Bots are paced by the clients: when a bot must act, ask the server for one bot step.
   useEffect(() => {
     if (!meta || !view || view.status !== 'PLAYING' || meta.status !== 'playing') return;
+    if (botsPaused) return;
     const botSeats = new Set(
       Object.values(meta.players)
         .filter((p) => p.bot)
@@ -94,7 +96,7 @@ export function useOnlineGame(sessionId: string): TableController {
       lastEvent?.type === 'ROUND_ENDED' || lastEvent?.type === 'HAND_ENDED' ? 1500 : 900;
     const t = setTimeout(() => advanceBots(sessionId).catch(() => undefined), pause);
     return () => clearTimeout(t);
-  }, [meta, view, sessionId]);
+  }, [meta, view, sessionId, botsPaused]);
 
   // Re-announce ourselves whenever connectivity comes back.
   useEffect(() => {
@@ -171,6 +173,7 @@ export function useOnlineGame(sessionId: string): TableController {
     busy,
     act,
     leave,
+    setBotsPaused,
     progression,
   };
 }

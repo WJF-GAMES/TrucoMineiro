@@ -16,20 +16,16 @@ import {
 } from '@/components';
 import { Card, cardId, nextStake, Seat, stakeName, teamOf, GameEvent } from '@/domain/game';
 import type { TableController, TablePlayer } from '@/features/game/types';
+import { relativePosition, type TablePosition } from '@/features/game/seatLayout';
+import { useShuffleCeremony } from '@/features/game/useShuffleCeremony';
 import { PlayingCard } from './PlayingCard';
+import { DraggableCard } from './DraggableCard';
+import { CeremonyStagePill, TableCeremony } from './TableCeremony';
 import { haptic } from '@/utils/haptics';
 
 interface Props {
   controller: TableController;
   onExit: () => void;
-}
-
-type Position = 'bottom' | 'right' | 'top' | 'left';
-
-/** Maps absolute seats to positions relative to the local player. */
-function relativePosition(seat: Seat, mySeat: Seat): Position {
-  const rel = (seat - mySeat + 4) % 4;
-  return rel === 0 ? 'bottom' : rel === 1 ? 'right' : rel === 2 ? 'top' : 'left';
 }
 
 const CALL_LABELS: Record<string, string> = { 3: 'TRUCO!', 6: 'SEIS!', 9: 'NOVE!', 12: 'DOZE!' };
@@ -73,6 +69,34 @@ export function GameTable({ controller, onExit }: Props) {
     return () => clearTimeout(t);
   }, [banner]);
 
+  /**
+   * Cerimônia de início de mão: embaralhar → cortar → distribuir. Só entra numa mão que está
+   * realmente começando — quem reconecta no meio da mão cai direto na mesa, sem ritual.
+   * Precisa ficar antes dos `return` de loading/erro: é um hook.
+   */
+  const tableLive = status === 'playing' || status === 'reconnecting';
+  const freshHand =
+    tableLive &&
+    !!view &&
+    view.rounds.length === 0 &&
+    view.currentRound.length === 0 &&
+    view.myCards.length === 3;
+  const ceremony = useShuffleCeremony({
+    handNumber: view?.handNumber ?? 0,
+    dealerSeat: view?.dealerSeat ?? null,
+    mySeat,
+    eligible: freshHand,
+    paused: status === 'reconnecting',
+  });
+
+  // Enquanto o baralho está sendo embaralhado ninguém joga — nem os bots. Sem isto a mão já
+  // começaria andada por trás da cerimônia.
+  const { setBotsPaused } = controller;
+  useEffect(() => {
+    setBotsPaused(ceremony.active);
+    return () => setBotsPaused(false);
+  }, [ceremony.active, setBotsPaused]);
+
   if (status === 'loading' || !view)
     return (
       <StateView kind="loading" title="Preparando a mesa..." message="Embaralhando as cartas." />
@@ -99,7 +123,7 @@ export function GameTable({ controller, onExit }: Props) {
     view.phase === 'TRUCO_RESPONSE' ? (view.proposedValue ?? 3) : (nextStake(view.handValue) ?? 12);
   const turnPlayer = bySeat.get(view.turnSeat);
 
-  const seatAt = (pos: Position) => players.find((p) => relativePosition(p.seat, mySeat) === pos);
+  const seatAt = (pos: TablePosition) => players.find((p) => relativePosition(p.seat, mySeat) === pos);
   const playedBy = (seat?: Seat): Card | null =>
     seat === undefined ? null : (view.currentRound.find((p) => p.seat === seat)?.card ?? null);
 
@@ -137,27 +161,33 @@ export function GameTable({ controller, onExit }: Props) {
             </AppText>
           </View>
           <View style={styles.scoreMid}>
-            <AppText variant="caption" color={colors.textSecondary}>
-              MÃO {view.handNumber}
-            </AppText>
-            <View style={styles.valuePill}>
-              <AppText variant="smallBold" color={colors.textDark}>
-                VALE {view.handValue}
-              </AppText>
-            </View>
-            <View style={styles.rounds}>
-              {[0, 1, 2].map((i) => {
-                const r = view.rounds[i];
-                const c = !r
-                  ? 'rgba(255,255,255,0.2)'
-                  : r.winner === null
-                    ? colors.gold
-                    : r.winner === myTeam
-                      ? colors.primaryBright
-                      : colors.dangerSoft;
-                return <View key={i} style={[styles.roundDot, { backgroundColor: c }]} />;
-              })}
-            </View>
+            {ceremony.active ? (
+              <CeremonyStagePill stage={ceremony.stage} />
+            ) : (
+              <>
+                <AppText variant="caption" color={colors.textSecondary}>
+                  MÃO {view.handNumber}
+                </AppText>
+                <View style={styles.valuePill}>
+                  <AppText variant="smallBold" color={colors.textDark}>
+                    VALE {view.handValue}
+                  </AppText>
+                </View>
+                <View style={styles.rounds}>
+                  {[0, 1, 2].map((i) => {
+                    const r = view.rounds[i];
+                    const c = !r
+                      ? 'rgba(255,255,255,0.2)'
+                      : r.winner === null
+                        ? colors.gold
+                        : r.winner === myTeam
+                          ? colors.primaryBright
+                          : colors.dangerSoft;
+                    return <View key={i} style={[styles.roundDot, { backgroundColor: c }]} />;
+                  })}
+                </View>
+              </>
+            )}
           </View>
           <View style={styles.scoreSide}>
             <AppText variant="caption" color={colors.textSecondary}>
@@ -171,32 +201,173 @@ export function GameTable({ controller, onExit }: Props) {
         <View style={{ width: 44 }} />
       </View>
 
-      {/* Table: three opponents around the felt and the played cards in a cross */}
-      <View style={styles.table}>
-        <View style={styles.seatTop}>
-          <SeatInfo player={top} view={view} row />
-        </View>
-        <View style={styles.seatLeft}>
-          <SeatInfo player={left} view={view} />
-        </View>
-        <View style={styles.seatRight}>
-          <SeatInfo player={right} view={view} />
+      {ceremony.active ? (
+        <TableCeremony
+          ceremony={ceremony}
+          players={players}
+          mySeat={mySeat}
+          reconnecting={status === 'reconnecting'}
+        />
+      ) : (
+        <>
+        {/* Table: three opponents around the felt and the played cards in a cross */}
+        <View style={styles.table}>
+          <View style={styles.seatTop}>
+            <SeatInfo player={top} view={view} row />
+          </View>
+          <View style={styles.seatLeft}>
+            <SeatInfo player={left} view={view} />
+          </View>
+          <View style={styles.seatRight}>
+            <SeatInfo player={right} view={view} />
+          </View>
+
+          <View style={styles.cross} pointerEvents="none">
+            <PlayedSlot card={playedBy(top?.seat)} style={styles.crossTop} />
+            <PlayedSlot card={playedBy(left?.seat)} style={styles.crossLeft} />
+            <PlayedSlot card={playedBy(right?.seat)} style={styles.crossRight} />
+            <PlayedSlot card={playedBy(mySeat)} style={styles.crossBottom} mine />
+          </View>
         </View>
 
-        <View style={styles.cross} pointerEvents="none">
-          <PlayedSlot card={playedBy(top?.seat)} style={styles.crossTop} />
-          <PlayedSlot card={playedBy(left?.seat)} style={styles.crossLeft} />
-          <PlayedSlot card={playedBy(right?.seat)} style={styles.crossRight} />
-          <PlayedSlot card={playedBy(mySeat)} style={styles.crossBottom} mine />
+        {/* Status line */}
+        <View style={styles.statusLine}>
+          {status === 'reconnecting' ? (
+            <View style={styles.statusPill}>
+              <Ionicons name="cloud-offline" size={14} color={colors.gold} />
+              <AppText variant="smallBold" style={{ marginLeft: 6 }}>
+                Reconectando...
+              </AppText>
+            </View>
+          ) : view.phase === 'TRUCO_RESPONSE' ? (
+            <AppText variant="smallBold" color={colors.gold} center>
+              {view.trucoRequesterTeam === myTeam
+                ? `Aguardando resposta ao ${stakeName(view.proposedValue ?? 3)}...`
+                : `Pediram ${stakeName(view.proposedValue ?? 3)}! Aceitar, aumentar ou correr?`}
+            </AppText>
+          ) : view.phase === 'MAO_DE_ONZE' ? (
+            <AppText variant="smallBold" color={colors.gold} center>
+              {view.maoDeOnzeTeam === myTeam
+                ? 'Mão de onze! Jogar valendo 3 ou entregar 1?'
+                : 'Os adversários decidem a mão de onze...'}
+            </AppText>
+          ) : isMyTurn ? (
+            <AppText variant="smallBold" color={colors.primaryBright} center>
+              Sua vez! Escolha uma carta.
+            </AppText>
+          ) : (
+            <AppText variant="small" color={colors.textSecondary} center>
+              Vez de {turnPlayer?.nickname ?? '...'}
+            </AppText>
+          )}
         </View>
-      </View>
 
+        {/* My hand */}
+        <View style={[styles.handArea, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+          <View style={styles.meRow}>
+            <PlayerAvatar
+              avatarId={bySeat.get(mySeat)?.avatarId}
+              size={38}
+              ringColor={isMyTurn ? colors.primaryBright : colors.cardBorderStrong}
+            />
+            <AppText variant="smallBold" style={{ marginLeft: 8, flex: 1 }} numberOfLines={1}>
+              {bySeat.get(mySeat)?.nickname ?? 'Você'}
+            </AppText>
+            <AppText variant="caption" color={colors.textSecondary}>
+              {bySeat.get(seatAt('top')?.seat ?? mySeat) ? `parceiro: ${top?.nickname ?? '-'}` : ''}
+            </AppText>
+          </View>
+          <View style={styles.hand} testID="my-hand">
+            {view.myCards.map((c, i) => (
+              <Animated.View key={cardId(c)} entering={FadeInDown.delay(i * 80)}>
+                <DraggableCard
+                  card={c}
+                  width={82}
+                  onPlay={
+                    canPlay
+                      ? () => act({ type: 'PLAY_CARD', seat: mySeat, cardId: cardId(c) })
+                      : undefined
+                  }
+                  disabled={!canPlay}
+                  dimmed={!canPlay && view.phase === 'PLAY'}
+                  highlighted={canPlay}
+                />
+              </Animated.View>
+            ))}
+          </View>
+
+          {/* Actions come strictly from availableActions */}
+          <View style={styles.actions}>
+            {maoDeOnze ? (
+              <>
+                <PrimaryButton
+                  label="Jogar (vale 3)"
+                  size="md"
+                  style={styles.actionBtn}
+                  onPress={() => act({ type: 'ACCEPT_MAO_DE_ONZE', seat: mySeat })}
+                  disabled={busy}
+                />
+                <SecondaryButton
+                  label="Entregar 1"
+                  size="md"
+                  style={styles.actionBtn}
+                  onPress={() => act({ type: 'DECLINE_MAO_DE_ONZE', seat: mySeat })}
+                  disabled={busy}
+                />
+              </>
+            ) : responding ? (
+              <>
+                <PrimaryButton
+                  label="Aceitar"
+                  size="md"
+                  style={styles.actionBtn}
+                  onPress={() => act({ type: 'ACCEPT_TRUCO', seat: mySeat })}
+                  disabled={busy}
+                  testID="action-accept"
+                />
+                {availableActions.includes('RAISE') ? (
+                  <SecondaryButton
+                    label={stakeName(nextStake(view.proposedValue ?? 3) ?? 12)}
+                    size="md"
+                    style={styles.actionBtn}
+                    onPress={() => act({ type: 'RAISE', seat: mySeat })}
+                    disabled={busy}
+                    testID="action-raise"
+                  />
+                ) : null}
+                <SecondaryButton
+                  label="Correr"
+                  size="md"
+                  style={styles.actionBtn}
+                  onPress={() => act({ type: 'RUN', seat: mySeat })}
+                  disabled={busy}
+                  testID="action-run"
+                />
+              </>
+            ) : canTruco ? (
+              <SecondaryButton
+                label={CALL_LABELS[nextValue] ?? `Pedir ${nextValue}`}
+                size="md"
+                icon="flame"
+                style={styles.trucoBtn}
+                onPress={() => act({ type: 'REQUEST_TRUCO', seat: mySeat })}
+                disabled={busy}
+                testID="action-truco"
+              />
+            ) : null}
+          </View>
+        </View>
+        </>
+      )}
+
+      {/* Resultado da mão anterior. Fica fora do ramo acima porque a mão seguinte já começa com a
+          cerimônia: sem isto o "+2 pra nós!" nunca chegaria a aparecer. */}
       {banner ? (
         <Animated.View
           key={banner.key}
           entering={ZoomIn.duration(200)}
           exiting={FadeOut}
-          style={styles.banner}
+          style={[styles.banner, ceremony.active && styles.bannerCeremony]}
           pointerEvents="none"
         >
           <AppText variant="h1" center style={[styles.bannerText, { color: banner.color }]}>
@@ -204,134 +375,6 @@ export function GameTable({ controller, onExit }: Props) {
           </AppText>
         </Animated.View>
       ) : null}
-
-      {/* Status line */}
-      <View style={styles.statusLine}>
-        {status === 'reconnecting' ? (
-          <View style={styles.statusPill}>
-            <Ionicons name="cloud-offline" size={14} color={colors.gold} />
-            <AppText variant="smallBold" style={{ marginLeft: 6 }}>
-              Reconectando...
-            </AppText>
-          </View>
-        ) : view.phase === 'TRUCO_RESPONSE' ? (
-          <AppText variant="smallBold" color={colors.gold} center>
-            {view.trucoRequesterTeam === myTeam
-              ? `Aguardando resposta ao ${stakeName(view.proposedValue ?? 3)}...`
-              : `Pediram ${stakeName(view.proposedValue ?? 3)}! Aceitar, aumentar ou correr?`}
-          </AppText>
-        ) : view.phase === 'MAO_DE_ONZE' ? (
-          <AppText variant="smallBold" color={colors.gold} center>
-            {view.maoDeOnzeTeam === myTeam
-              ? 'Mão de onze! Jogar valendo 3 ou entregar 1?'
-              : 'Os adversários decidem a mão de onze...'}
-          </AppText>
-        ) : isMyTurn ? (
-          <AppText variant="smallBold" color={colors.primaryBright} center>
-            Sua vez! Escolha uma carta.
-          </AppText>
-        ) : (
-          <AppText variant="small" color={colors.textSecondary} center>
-            Vez de {turnPlayer?.nickname ?? '...'}
-          </AppText>
-        )}
-      </View>
-
-      {/* My hand */}
-      <View style={[styles.handArea, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-        <View style={styles.meRow}>
-          <PlayerAvatar
-            avatarId={bySeat.get(mySeat)?.avatarId}
-            size={38}
-            ringColor={isMyTurn ? colors.primaryBright : colors.cardBorderStrong}
-          />
-          <AppText variant="smallBold" style={{ marginLeft: 8, flex: 1 }} numberOfLines={1}>
-            {bySeat.get(mySeat)?.nickname ?? 'Você'}
-          </AppText>
-          <AppText variant="caption" color={colors.textSecondary}>
-            {bySeat.get(seatAt('top')?.seat ?? mySeat) ? `parceiro: ${top?.nickname ?? '-'}` : ''}
-          </AppText>
-        </View>
-        <View style={styles.hand} testID="my-hand">
-          {view.myCards.map((c, i) => (
-            <Animated.View key={cardId(c)} entering={FadeInDown.delay(i * 80)}>
-              <PlayingCard
-                card={c}
-                width={82}
-                onPress={
-                  canPlay
-                    ? () => act({ type: 'PLAY_CARD', seat: mySeat, cardId: cardId(c) })
-                    : undefined
-                }
-                disabled={!canPlay}
-                dimmed={!canPlay && view.phase === 'PLAY'}
-                highlighted={canPlay}
-              />
-            </Animated.View>
-          ))}
-        </View>
-
-        {/* Actions come strictly from availableActions */}
-        <View style={styles.actions}>
-          {maoDeOnze ? (
-            <>
-              <PrimaryButton
-                label="Jogar (vale 3)"
-                size="md"
-                style={styles.actionBtn}
-                onPress={() => act({ type: 'ACCEPT_MAO_DE_ONZE', seat: mySeat })}
-                disabled={busy}
-              />
-              <SecondaryButton
-                label="Entregar 1"
-                size="md"
-                style={styles.actionBtn}
-                onPress={() => act({ type: 'DECLINE_MAO_DE_ONZE', seat: mySeat })}
-                disabled={busy}
-              />
-            </>
-          ) : responding ? (
-            <>
-              <PrimaryButton
-                label="Aceitar"
-                size="md"
-                style={styles.actionBtn}
-                onPress={() => act({ type: 'ACCEPT_TRUCO', seat: mySeat })}
-                disabled={busy}
-                testID="action-accept"
-              />
-              {availableActions.includes('RAISE') ? (
-                <SecondaryButton
-                  label={stakeName(nextStake(view.proposedValue ?? 3) ?? 12)}
-                  size="md"
-                  style={styles.actionBtn}
-                  onPress={() => act({ type: 'RAISE', seat: mySeat })}
-                  disabled={busy}
-                  testID="action-raise"
-                />
-              ) : null}
-              <SecondaryButton
-                label="Correr"
-                size="md"
-                style={styles.actionBtn}
-                onPress={() => act({ type: 'RUN', seat: mySeat })}
-                disabled={busy}
-                testID="action-run"
-              />
-            </>
-          ) : canTruco ? (
-            <SecondaryButton
-              label={CALL_LABELS[nextValue] ?? `Pedir ${nextValue}`}
-              size="md"
-              icon="flame"
-              style={styles.trucoBtn}
-              onPress={() => act({ type: 'REQUEST_TRUCO', seat: mySeat })}
-              disabled={busy}
-              testID="action-truco"
-            />
-          ) : null}
-        </View>
-      </View>
     </View>
   );
 }
@@ -519,6 +562,8 @@ const styles = StyleSheet.create({
   },
 
   banner: { position: 'absolute', left: 0, right: 0, top: '40%', alignItems: 'center' },
+  // Durante a cerimônia o miolo da tela é do baralho: o aviso sobe para logo abaixo do placar.
+  bannerCeremony: { top: '15%' },
   bannerText: {
     fontSize: 30,
     textShadowColor: 'rgba(0,0,0,0.6)',

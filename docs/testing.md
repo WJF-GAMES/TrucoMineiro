@@ -35,7 +35,28 @@ Ciclo por feature: implementar → `npm run format` → `npm run lint` → `npm 
 
 Estado final no projeto real: 1 perfil, 5 partidas, 180 XP, 15 pontos de liga, 1 conquista desbloqueada.
 
+## Amigos e contatos
+
+| Suíte | Cobre |
+|---|---|
+| `src/features/friends/__tests__/contactsMatch.test.ts` | normalização E.164, dedupe dentro e entre contatos, agendas de 0/1/100/1.000/10.000, contato sem telefone, vários números por contato, ordenação por utilidade, fingerprint, e a garantia de que **nenhum telefone aparece no resultado** |
+| `src/features/friends/__tests__/useContactsSync.test.ts` | os cinco estados de permissão, um request por lote de 200 (nunca por contato), reposicionamento dos índices entre lotes, cache que evita rede quando a agenda não mudou, tradução dos erros do servidor, e que nem telemetria nem disco recebem telefone |
+| `src/services/__tests__/contacts.test.ts` | mapeamento dos estados nativos (incluindo `limited` do iOS 18), leitura paginada, só os campos nome+telefones, agenda vazia e falha nativa |
+| `functions/test/contacts.test.ts` | determinismo do HMAC, teto de 200 por lote, rejeição de tudo que não é E.164, id determinístico da solicitação |
+| `src/features/friends/__tests__/useRoomInvites.test.ts` | convite de sala: lista ao vivo, descarte do convite vencido, entrar (joinRoom + limpeza), sala cheia/partida começada (limpa) versus offline (mantém para nova tentativa), recusar |
+| `src/screens/friends/__tests__/FriendsScreen.test.tsx` | cada botão da tela chamando a Function certa: jogar/convidar (inclusive amigo em partida), ficha do amigo (liga, números, remover, bloquear com confirmação), aceitar/recusar/cancelar solicitação, estado de carregando das solicitações, busca escondendo bloqueados e oferecendo "Aceitar" para quem já me convidou, convite de sala recebido, desbloqueio, e a flag `friends_enabled` desligada |
+| `src/features/game/__tests__/shuffleCeremony.test.ts` | quem embaralha/corta (o cortador é sempre adversário do embaralhador), progresso do gesto, formato e limites do relógio |
+| `src/features/game/__tests__/useShuffleCeremony.test.ts` | a máquina embaralhar→cortar→distribuir→mesa: botão travado até o mínimo, conclusão automática ao completar, estouro de tempo sem travar a mão, assento remoto encenado, relógio congelado na reconexão, recomeço a cada mão e cancelamento se a mesa cai |
+| `src/screens/game/__tests__/TableCeremony.test.tsx` | a tela em cada estado: gesto pedido, botão liberado, vez de outro jogador (sem ação nem relógio), sucesso, tempo esgotado, corte, reconexão e distribuição |
+
+Pendente de teste manual em aparelho: o diálogo do sistema de contatos em Android e iOS
+(o Jest cobre o mapeamento, não o diálogo nativo), o QR lido por um segundo aparelho e o convite de
+sala entre duas contas reais (o caminho é coberto por teste, mas o push em si precisa de aparelho).
+
 ## Ainda não exercitado
+- Cerimônia de embaralhar num aparelho real: o gesto, o borrão das cartas e a fluidez das animações
+  do Reanimated não são observáveis sob Jest (o runtime de worklets é mockado) — os testes cobrem
+  estados, textos e transições, não o movimento.
 - Mesa com 2+ humanos reais (exige dois dispositivos/contas).
 - Matchmaking com 4 humanos na fila.
 - Reconexão real no meio de uma partida online (o caminho de código existe e o banner aparece quando

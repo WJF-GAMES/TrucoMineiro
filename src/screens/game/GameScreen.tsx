@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { BackHandler } from 'react-native';
-import type { MatchState } from '@/domain/game';
+import type { GameEvent, MatchState, Team } from '@/domain/game';
 import { teamOf } from '@/domain/game';
 import { useAiGame, AiMatchRecord } from '@/features/game/useAiGame';
 import { useOnlineGame } from '@/features/game/useOnlineGame';
@@ -12,6 +12,8 @@ import { toast } from '@/stores/toastStore';
 import { GameTable } from './GameTable';
 import { StateView } from '@/components';
 import { Screen } from '@/components/Screen';
+import { buildMatchAnalysis, type MatchAnalysis } from '@/features/game/matchAnalysis';
+import { AdService, useGameSessionGuard, usePreloadRewarded } from '@/ads';
 import type { RootScreenProps } from '@/navigation/types';
 
 /** How long the online result screen waits for the server-side rewards before showing without them. */
@@ -19,6 +21,13 @@ const REWARD_WAIT_MS = 4000;
 
 export function GameScreen(props: RootScreenProps<'Game'>) {
   const { params } = props.route;
+  // Enquanto esta tela existir, nenhum anúncio full-screen pode aparecer — nem ao voltar
+  // do background, nem por qualquer outro caminho.
+  useGameSessionGuard();
+  // O rewarded da análise é carregado agora, no começo da partida: quando o resultado aparecer,
+  // a oferta já está pronta e ninguém espera por anúncio.
+  usePreloadRewarded('match_analysis_rewarded');
+
   if (params.mode === 'ai')
     return <AiGame {...props} difficulty={params.difficulty} seed={params.seed ?? 1} />;
   return <OnlineGame {...props} sessionId={params.sessionId} />;
@@ -45,6 +54,9 @@ function AiGame({
       const won = state.winner === teamOf(0);
       logEvent('match_completed', { mode: 'ai', difficulty, won });
       logEvent(won ? 'match_won' : 'match_lost', { mode: 'ai', difficulty });
+      // Conta a partida para a cadência de anúncios (o anúncio em si só é decidido no resultado).
+      AdService.notifyMatchCompleted();
+      const analysis = buildMatchAnalysis(state.events, teamOf(0));
       let progression: {
         xpGained?: number;
         coinsGained?: number;
@@ -76,6 +88,7 @@ function AiGame({
           won,
           scores: state.scores,
           difficulty,
+          analysis,
           ...progression,
           rematch: { mode: 'ai', difficulty },
         });
@@ -102,6 +115,18 @@ function OnlineGame({ navigation, sessionId }: RootScreenProps<'Game'> & { sessi
 
   const myTeam = useMemo(() => teamOf(controller.mySeat), [controller.mySeat]);
 
+  /**
+   * A mesa online entrega eventos em lotes (só os novos de cada snapshot). Acumulá-los aqui é o
+   * que permite montar a mesma análise da partida que o modo IA tem — sem pedir nada ao servidor.
+   */
+  const events = useRef<GameEvent[]>([]);
+  const lastBatch = useRef<GameEvent[] | null>(null);
+  useEffect(() => {
+    if (controller.recentEvents === lastBatch.current) return;
+    lastBatch.current = controller.recentEvents;
+    if (controller.recentEvents.length) events.current.push(...controller.recentEvents);
+  }, [controller.recentEvents]);
+
   useEffect(() => {
     if (navigated.current) return;
     if (controller.status === 'finished' && controller.view) {
@@ -115,10 +140,12 @@ function OnlineGame({ navigation, sessionId }: RootScreenProps<'Game'> & { sessi
         navigated.current = true;
         logEvent('match_completed', { mode: 'online', won });
         logEvent(won ? 'match_won' : 'match_lost', { mode: 'online' });
+        AdService.notifyMatchCompleted();
         navigation.replace('MatchResult', {
           mode: 'online',
           won,
           scores,
+          analysis: analysisOf(events.current, myTeam),
           xpGained: earned?.xpGained,
           coinsGained: earned?.coinsGained,
           leaguePointsDelta: earned?.leaguePointsDelta,
@@ -158,4 +185,10 @@ function OnlineGame({ navigation, sessionId }: RootScreenProps<'Game'> & { sessi
       }}
     />
   );
+}
+
+/** Sem eventos acumulados (reconexão no meio da partida) não há análise para prometer. */
+function analysisOf(events: GameEvent[], myTeam: Team): MatchAnalysis | undefined {
+  if (events.length === 0) return undefined;
+  return buildMatchAnalysis(events, myTeam);
 }

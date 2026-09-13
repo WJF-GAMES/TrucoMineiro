@@ -25,6 +25,9 @@ export function normalizeSeatView(raw: unknown): RemoteSeatView | null {
     status: v.status ?? 'PLAYING',
     winner: v.winner ?? null,
     handNumber: v.handNumber ?? 1,
+    // Servidores antigos não enviavam `dealerSeat`. No início da mão — o único momento em que a
+    // cerimônia usa isso — o líder da rodada é o assento seguinte ao de quem dá as cartas.
+    dealerSeat: (v.dealerSeat ?? (((v.roundLeader ?? 0) + 3) % 4)) as SeatView['dealerSeat'],
     handValue: v.handValue ?? 1,
     proposedValue: v.proposedValue ?? null,
     phase: v.phase as SeatView['phase'],

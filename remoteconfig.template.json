@@ -9,11 +9,30 @@
     "matchmaking_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
     "friends_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
     "league_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
-    "store_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
-    "daily_reward_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
     "xp_multiplier": { "defaultValue": { "value": "1" }, "valueType": "NUMBER" },
     "matchmaking_bot_fill_seconds": { "defaultValue": { "value": "20" }, "valueType": "NUMBER" },
-    "matchmaking_timeout_seconds": { "defaultValue": { "value": "90" }, "valueType": "NUMBER" }
+    "matchmaking_timeout_seconds": { "defaultValue": { "value": "90" }, "valueType": "NUMBER" },
+
+    "ads_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+    "interstitial_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+    "rewarded_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+    "native_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+    "app_open_enabled": { "defaultValue": { "value": "false" }, "valueType": "BOOLEAN" },
+    "interstitial_min_matches_before_first": { "defaultValue": { "value": "2" }, "valueType": "NUMBER" },
+    "interstitial_every_n_matches": { "defaultValue": { "value": "3" }, "valueType": "NUMBER" },
+    "interstitial_cooldown_seconds": { "defaultValue": { "value": "180" }, "valueType": "NUMBER" },
+    "interstitial_max_per_session": { "defaultValue": { "value": "4" }, "valueType": "NUMBER" },
+    "interstitial_max_per_day": { "defaultValue": { "value": "8" }, "valueType": "NUMBER" },
+    "full_screen_global_cooldown_seconds": { "defaultValue": { "value": "180" }, "valueType": "NUMBER" },
+    "minimum_session_seconds_before_interstitial": { "defaultValue": { "value": "180" }, "valueType": "NUMBER" },
+    "native_home_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+    "native_league_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+    "native_friends_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+    "native_profile_enabled": { "defaultValue": { "value": "false" }, "valueType": "BOOLEAN" },
+    "rewarded_analysis_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+    "rewarded_tip_enabled": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+    "app_open_min_session_number": { "defaultValue": { "value": "4" }, "valueType": "NUMBER" },
+    "app_open_min_background_seconds": { "defaultValue": { "value": "21600" }, "valueType": "NUMBER" }
   },
   "version": { "description": "TrucoX initial template" }
 }

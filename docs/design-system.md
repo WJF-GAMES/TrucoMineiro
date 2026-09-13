@@ -36,7 +36,8 @@ Grid de 4pt. Padding horizontal de tela 14 (referência ≈ 14px em 300px de lar
 Screen (gradiente), Surface (card vidro), PrimaryButton (gradiente verde + brilho), SecondaryButton, DangerButton, PillButton, IconButton,
 GameHeader (variantes `logo` e `title`), BottomNavigation (custom tab bar com indicador superior), MenuItem/MenuGroup/MenuCard,
 StatsRow, ProgressBar, Chips (segmented pills), TextField/SearchField/PhoneInput/OtpInput, PlayerAvatar (anel verde + status/badge),
-CurrencyBadge, StateView (loading/empty/error/offline), SectionTitle, Toast (+ banner "Reconectando...").
+CurrencyBadge, StateView (loading/empty/error/offline), SectionTitle, Sheet (folha inferior com backdrop),
+Toast (+ banner "Reconectando...").
 Componentes de jogo: PlayingCard (frente nativa / verso vermelho), GameTable, GameModeCard e ActionRow (Jogar).
 
 ## Regras

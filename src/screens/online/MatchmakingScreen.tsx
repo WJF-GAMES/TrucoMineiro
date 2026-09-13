@@ -24,6 +24,7 @@ import { cancelMatchmaking, startMatchmaking, FunctionsError } from '@/services/
 import { subscribeMatchmaking } from '@/services/firebase/rtdb';
 import { flag } from '@/services/firebase/remoteConfig';
 import { logEvent } from '@/services/firebase/analytics';
+import { useMatchmakingGuard } from '@/ads';
 import { startTrace } from '@/services/firebase/perf';
 import type { MatchmakingStatus } from '@/domain/model/types';
 import type { RootScreenProps } from '@/navigation/types';
@@ -66,6 +67,8 @@ const STATUS_MAP: Partial<Record<MatchmakingStatus, UiState>> = {
 };
 
 export function MatchmakingScreen({ navigation }: RootScreenProps<'Matchmaking'>) {
+  // Fila de matchmaking também é gameplay: nenhum anúncio full-screen pode interromper.
+  useMatchmakingGuard();
   const uid = useAuthStore((s) => s.user?.uid);
   const profile = useProfileStore((s) => s.profile);
   const [ui, setUi] = useState<UiState>('searching');

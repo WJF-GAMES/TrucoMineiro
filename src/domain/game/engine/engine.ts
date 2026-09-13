@@ -346,6 +346,8 @@ export interface SeatView {
   status: MatchState['status'];
   winner: Team | null;
   handNumber: number;
+  /** Quem dá as cartas nesta mão — informação pública na mesa (dirige a cerimônia de início). */
+  dealerSeat: Seat;
   handValue: number;
   proposedValue: number | null;
   phase: HandState['phase'];
@@ -374,6 +376,7 @@ export function viewForSeat(state: MatchState, seat: Seat): SeatView {
     status: state.status,
     winner: state.winner,
     handNumber: h.number,
+    dealerSeat: h.dealerSeat,
     handValue: h.value,
     proposedValue: h.truco?.proposedValue ?? null,
     phase: h.phase,

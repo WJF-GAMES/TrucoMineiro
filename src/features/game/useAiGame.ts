@@ -59,6 +59,7 @@ export function useAiGame(
   const profile = useProfileStore((s) => s.profile);
   const [state, setState] = useState<MatchState>(() => createMatch(seed));
   const [busy, setBusy] = useState(false);
+  const [botsPaused, setBotsPaused] = useState(false);
   const [recentEvents, setRecentEvents] = useState<GameEvent[]>([]);
   const eventCursor = useRef(0);
   const aiSeed = useMemo(() => (seed * 31 + 7) >>> 0, [seed]);
@@ -95,7 +96,7 @@ export function useAiGame(
 
   // Drive AI turns with pacing.
   useEffect(() => {
-    if (state.status !== 'PLAYING') return;
+    if (state.status !== 'PLAYING' || botsPaused) return;
     const action = nextAIAction(state, aiSeats, rng.current);
     if (!action) {
       setBusy(false);
@@ -116,7 +117,7 @@ export function useAiGame(
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [state, aiSeats]);
+  }, [state, aiSeats, botsPaused]);
 
   const act = useCallback((action: GameAction) => {
     if (action.type === 'PLAY_CARD') logEvent('card_played', { mode: 'ai' });
@@ -155,5 +156,6 @@ export function useAiGame(
     busy,
     act,
     leave: () => undefined,
+    setBotsPaused,
   };
 }

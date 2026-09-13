@@ -267,6 +267,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.button,
     alignItems: 'center',
     justifyContent: 'center',
+    // Respiro igual ao do SecondaryButton: sem isso o texto encosta na borda sempre que o botão
+    // é dimensionado pelo conteúdo, em vez de ocupar a largura toda.
+    paddingHorizontal: 18,
     borderWidth: 1,
     borderColor: 'rgba(120,255,190,0.45)',
   },

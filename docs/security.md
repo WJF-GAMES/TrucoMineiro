@@ -21,6 +21,47 @@ idêntica à decisão determinística da IA — qualquer divergência ou ação 
 ## Dados sensíveis
 - Analytics e Crashlytics nunca recebem telefone, OTP, tokens ou credenciais.
 - Service Account não existe no app; `google-services.json` contém apenas chaves públicas do cliente.
+- A agenda do aparelho nunca sai dele: nome, e-mail e foto dos contatos ficam locais.
+
+## Busca de contatos — anti-enumeração
+
+`matchPhoneContacts` é o único caminho para descobrir se um telefone tem conta, e é desenhado para
+**não** virar um oráculo de "esse número usa o app?":
+
+| Camada | O quê |
+|---|---|
+| Autenticação | `authedCallable` — sem login não há chamada |
+| App Check | mesma flag `ENFORCE_APP_CHECK` das demais callables |
+| Formato | só E.164 (`/^\+[1-9]\d{6,14}$/`); qualquer outra coisa é rejeitada antes de tocar o banco |
+| Lote | máximo 200 números por chamada |
+| Cota diária | 40 chamadas **e** 3.000 números por usuário (`contactSync/{uid}`, transação) |
+| Resposta | devolve o *índice* do número na lista enviada, nunca o número; só apelido, avatar e nível |
+| Bloqueio | quem bloqueou e quem foi bloqueado somem do resultado, nos dois sentidos |
+| Perfil incompleto | quem não terminou o cadastro não aparece |
+
+O diretório (`phoneIndex/{hmac}`) guarda **apenas** `HMAC-SHA256(CONTACTS_PEPPER, e164)`. O pepper
+fica em `functions/.env` e nunca é enviado ao app — por isso o app manda o número em claro (sobre TLS)
+e o servidor hasheia. A alternativa "hashear no cliente" exigiria um salt dentro do APK, que qualquer
+um extrai para montar um dicionário offline de todos os telefones do Brasil; aqui, sem o pepper, o
+`phoneIndex` vazado não reverte para número nenhum. Trocar `CONTACTS_PEPPER` invalida o diretório
+inteiro — cada usuário volta a ser indexado no próximo `bootstrapUser`.
+
+O índice é gravado a partir de `auth.getUser(uid).phoneNumber` (registro do Firebase Auth), **nunca**
+de um payload do cliente: ninguém se cadastra no diretório com o telefone de outra pessoa.
+
+Não existe busca livre por telefone na UI (só por apelido): um campo de número seria exatamente
+o endpoint de enumeração que essas camadas evitam.
+
+### Bloqueio
+`blocks/{uid}/blocked/{alvo}` é legível pelo dono. O espelho `blockedBy/{alvo}/users/{uid}` é
+**ilegível por regra** para todos — saber que foi bloqueado é justamente o que o bloqueio evita —
+e existe para o match resolver "quem me bloqueou" com uma leitura, em vez de uma por contato.
+
+### Convite por QR
+`friendInviteTokens/{token}` guarda um token opaco de 22 caracteres com validade de 30 dias. O QR
+carrega `trucomineiro://add-friend?token=...` — sem telefone e sem o uid interno — e o link só vira
+solicitação depois de o usuário confirmar o diálogo no app (link é conteúdo externo, nunca ação
+automática).
 
 ## App Check — estado atual
 

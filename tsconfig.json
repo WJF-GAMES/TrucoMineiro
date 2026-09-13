@@ -19,6 +19,7 @@
     "index.ts",
     "scripts",
     "jest.setup.ts",
+    "__mocks__",
     "*.d.ts"
   ],
   "exclude": [

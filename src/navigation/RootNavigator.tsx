@@ -18,7 +18,6 @@ import { JoinRoomScreen } from '@/screens/online/JoinRoomScreen';
 import { LobbyScreen } from '@/screens/online/LobbyScreen';
 import { GameScreen } from '@/screens/game/GameScreen';
 import { MatchResultScreen } from '@/screens/game/MatchResultScreen';
-import { StoreScreen } from '@/screens/store/StoreScreen';
 import { ProfileScreen } from '@/screens/profile/ProfileScreen';
 import { EditProfileScreen } from '@/screens/profile/EditProfileScreen';
 import { SettingsScreen } from '@/screens/settings/SettingsScreen';
@@ -29,6 +28,9 @@ import { MatchHistoryScreen } from '@/screens/profile/MatchHistoryScreen';
 import { StaticPageScreen } from '@/screens/more/StaticPageScreen';
 import { logScreen } from '@/services/firebase/analytics';
 import { setCrashContext } from '@/services/firebase/crashlytics';
+import { useFriendInviteLink } from '@/features/friends/useFriendInviteLink';
+import { useRoomInvitePrompt } from '@/features/friends/useRoomInvitePrompt';
+import { navigationRef } from './navigationRef';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -46,15 +48,20 @@ const theme = {
 export function RootNavigator() {
   const status = useAuthStore((s) => s.status);
   const hasSeenIntro = useSettingsStore((s) => s.hasSeenIntro);
-  const routeNameRef = React.useRef<string | undefined>(undefined);
+  const [routeName, setRouteName] = React.useState<string | null>(null);
+  // Convite por QR Code / link: precisa valer em qualquer tela, não só em Amigos.
+  useFriendInviteLink();
+  // Convite de sala de um amigo: o mesmo vale aqui — chega pelo Realtime Database a qualquer hora.
+  useRoomInvitePrompt(routeName);
 
   return (
     <NavigationContainer
+      ref={navigationRef}
       theme={theme}
       onStateChange={(state) => {
         const name = state?.routes[state.index]?.name;
-        if (name && name !== routeNameRef.current) {
-          routeNameRef.current = name;
+        if (name && name !== routeName) {
+          setRouteName(name);
           logScreen(name);
           setCrashContext({ screen: name });
         }
@@ -104,7 +111,6 @@ export function RootNavigator() {
               component={MatchResultScreen}
               options={{ gestureEnabled: false, animation: 'fade' }}
             />
-            <Stack.Screen name="Store" component={StoreScreen} />
             <Stack.Screen name="Profile" component={ProfileScreen} />
             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />

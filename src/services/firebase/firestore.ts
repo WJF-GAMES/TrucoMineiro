@@ -16,7 +16,10 @@ import type {
   Achievement,
   FriendRequest,
   Friendship,
-  League,
+  LeagueDefinition,
+  LeagueHistoryEntry,
+  PlayerProgress,
+  WeeklyLeagueMember,
   MatchHistoryEntry,
   PlayerStats,
   Profile,
@@ -78,9 +81,9 @@ export async function searchProfiles(term: string): Promise<Profile[]> {
 
 // --- Leagues / seasons -------------------------------------------------------
 
-export async function getLeagues(): Promise<League[]> {
-  const snap = await getDocs(query(collection(db, 'leagues'), orderBy('order', 'asc')));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as League);
+export async function getLeagueDefinitions(): Promise<LeagueDefinition[]> {
+  const snap = await getDocs(query(collection(db, 'leagueDefinitions'), orderBy('order', 'asc')));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeagueDefinition);
 }
 
 export const subscribeCurrentSeason = (
@@ -126,6 +129,33 @@ export function subscribeIncomingRequests(
   );
 }
 
+/** Solicitações que o próprio usuário enviou e ainda estão pendentes. */
+export function subscribeOutgoingRequests(
+  uid: string,
+  cb: (r: FriendRequest[]) => void,
+  onError?: (e: Error) => void,
+): Unsub {
+  const q = query(
+    collection(db, 'friendRequests'),
+    where('from', '==', uid),
+    where('status', '==', 'pending'),
+  );
+  return onSnapshot(
+    q,
+    (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as FriendRequest)),
+    (e) => onError?.(e as Error),
+  );
+}
+
+/** Uids que o usuário bloqueou. O espelho "quem me bloqueou" é fechado por regra de segurança. */
+export function subscribeBlockedUsers(uid: string, cb: (ids: string[]) => void): Unsub {
+  return onSnapshot(
+    collection(db, 'blocks', uid, 'blocked'),
+    (snap) => cb(snap.docs.map((d) => d.id)),
+    () => cb([]),
+  );
+}
+
 // --- History / achievements --------------------------------------------------
 
 export async function getMatchHistory(uid: string, max = 30): Promise<MatchHistoryEntry[]> {
@@ -146,3 +176,39 @@ export async function getAchievements(): Promise<Achievement[]> {
 
 export const subscribeUserAchievements = (uid: string, cb: (a: UserAchievements | null) => void) =>
   subscribeDoc<UserAchievements>(`userAchievements/${uid}`, cb);
+
+// --- Ligas semanais ----------------------------------------------------------
+
+/** Progresso do jogador no sistema de ligas (liga, grupo e pontos da semana). */
+export const subscribePlayerProgress = (
+  uid: string,
+  cb: (p: PlayerProgress | null) => void,
+  onError?: (e: Error) => void,
+) => subscribeDoc<PlayerProgress>(`playerProgress/${uid}`, cb, onError);
+
+/**
+ * Ranking do grupo ao vivo. Os pontos vêm do servidor; a ordem é recalculada localmente com o
+ * mesmo comparador puro que o backend usa para gravar `currentRank`, então os dois nunca divergem.
+ */
+export function subscribeGroupMembers(
+  groupId: string,
+  cb: (members: WeeklyLeagueMember[]) => void,
+  onError?: (e: Error) => void,
+): Unsub {
+  return onSnapshot(
+    collection(db, 'weeklyLeagueGroups', groupId, 'members'),
+    (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as WeeklyLeagueMember)),
+    (e) => onError?.(e as Error),
+  );
+}
+
+/** Histórico de ligas do jogador, da semana mais recente para a mais antiga. */
+export async function getLeagueHistory(uid: string, max = 20): Promise<LeagueHistoryEntry[]> {
+  const q = query(
+    collection(db, 'leagueHistory', uid, 'weeks'),
+    orderBy('processedAt', 'desc'),
+    limit(max),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeagueHistoryEntry);
+}

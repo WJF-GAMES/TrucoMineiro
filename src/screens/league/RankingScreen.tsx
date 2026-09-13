@@ -4,7 +4,7 @@ import { colors, spacing } from '@/design-system';
 import { AppText, GameHeader, PlayerAvatar, Screen, StateView, Surface } from '@/components';
 import { getGlobalRanking } from '@/services/firebase/firestore';
 import type { Profile } from '@/domain/model/types';
-import { LEAGUE_NAMES } from '@/domain/model/leagues';
+import { leagueById } from '@/domain/model/leagues';
 import { useProfileStore } from '@/stores/profileStore';
 import { formatNumber } from '@/utils/format';
 
@@ -57,7 +57,7 @@ export function RankingScreen() {
                   {item.nickname}
                 </AppText>
                 <AppText variant="caption" color={colors.textSecondary}>
-                  Liga {LEAGUE_NAMES[item.leagueId]} • Nível {item.level}
+                  Liga {leagueById(item.leagueId).displayName} • Nível {item.level}
                 </AppText>
               </View>
               <AppText variant="bodyBold" color={colors.primaryBright}>

@@ -17,7 +17,7 @@ Pasta `src/domain/game/` — TypeScript puro, sem React/React Native/Firebase (r
 createMatch(seed, targetScore = 12): MatchState
 getAvailableActions(state, seat): ActionType[]      // a UI só renderiza o que vier daqui
 applyAction(state, action): MatchState              // lança InvalidActionError
-viewForSeat(state, seat): SeatView                  // esconde as mãos dos outros
+viewForSeat(state, seat): SeatView                  // esconde as mãos dos outros; expõe dealerSeat
 seatsToAct(state): Seat[]
 decideHand(results): Team | null | undefined
 ```
@@ -32,3 +32,24 @@ Eventos (`state.events`): HAND_STARTED, CARD_PLAYED, ROUND_ENDED, TRUCO_REQUESTE
 ## Testes
 `npm run test:engine` — 34 testes (baralho, força, empates, truco, mão de onze, views, IA válida em 900 partidas).
 `npm run test:sim -- 3000` — simulação em massa: 9.000 partidas (3 dificuldades) sem deadlock/loop/estado impossível; ~60–90 ações por partida; win rate ~50%.
+
+## Cerimônia de início de mão (UI)
+
+Entre o `HAND_STARTED` e a primeira carta a mesa roda um ritual de três etapas —
+**embaralhar → cortar → distribuir**. É **apresentação, não regra**: as cartas já vêm embaralhadas
+pelo motor (Fisher-Yates com PRNG semeado) ou pelo servidor, e nada do que o jogador faz aqui muda
+ordem, mão ou resultado. O cliente continua sem ser autoridade.
+
+- **Quem faz o quê** vem de `dealerSeat` (campo público do `SeatView`): quem dá as cartas embaralha,
+  e quem corta é `nextSeat(dealerSeat)` — sempre um adversário do embaralhador e o primeiro a jogar.
+- **Onde vive**: `src/features/game/shuffleCeremony.ts` (derivações puras e tempos),
+  `useShuffleCeremony.ts` (máquina de estados) e `src/screens/game/TableCeremony.tsx` + `ShuffleDeck`
+  / `CutDeck` / `DealingCards` (a tela e as animações). `src/domain/game` não sabe que ela existe.
+- **Quando roda**: só numa mão que está começando (`rounds` e `currentRound` vazios, três cartas na
+  mão). Quem reconecta no meio da mão cai direto na mesa.
+- **Como fecha**: o jogador conclui (gesto ou botão), o tempo acaba (conclusão automática, sem
+  punição) ou o assento é de outro jogador/bot e a conclusão é encenada. As jogadas automáticas
+  ficam suspensas durante a cerimônia (`TableController.setBotsPaused`), senão a mão começaria
+  andada por trás do baralho.
+- **Prazo**: local por padrão (`CEREMONY_TIMING`), porque nenhuma regra depende dele. Quando o
+  servidor passar a publicar um prazo por etapa, basta alimentar `serverDeadlineAt` no hook.

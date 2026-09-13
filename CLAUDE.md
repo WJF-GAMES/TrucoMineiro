@@ -33,4 +33,5 @@ npx expo start --port 8081               # http://localhost:8081 abre a build we
 
 ## Estrutura
 Ver `docs/architecture.md`. Documentação por tema em `docs/` (firebase, game-engine, multiplayer,
-authentication, data-model, security, analytics, testing, design-system, asset-manifest, visual-regression).
+authentication, data-model, security, analytics, testing, design-system, asset-manifest,
+visual-regression, leagues, ADMOB_MONETIZATION).

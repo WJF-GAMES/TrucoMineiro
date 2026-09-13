@@ -23,6 +23,7 @@ import { identifyUser, logEvent } from '@/services/firebase/analytics';
 import { reportError, setCrashUser } from '@/services/firebase/crashlytics';
 import { setupPushNotifications } from '@/services/firebase/messaging';
 import { startTrace } from '@/services/firebase/perf';
+import { AdService } from '@/ads';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
@@ -111,5 +112,16 @@ export function useAppBootstrap(): boolean {
   useEffect(() => {
     if (ready) SplashScreen.hideAsync().catch(() => undefined);
   }, [ready]);
+
+  /**
+   * Monetização entra **depois** dos serviços críticos e da primeira tela: autenticação e
+   * Principal têm prioridade, e nenhum anúncio pode atrasar o startup. Falhar aqui não afeta
+   * nada do jogo — o app só fica sem anúncios.
+   */
+  useEffect(() => {
+    if (!ready) return;
+    AdService.initialize().catch((e) => reportError(e, 'ads.initialize'));
+  }, [ready]);
+
   return ready;
 }

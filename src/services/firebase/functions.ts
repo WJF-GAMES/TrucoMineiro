@@ -4,7 +4,15 @@ import {
   httpsCallable,
 } from '@react-native-firebase/functions';
 import { EMULATOR_HOST, EMULATOR_PORTS, FUNCTIONS_REGION, USE_EMULATORS, firebaseApp } from './app';
-import type { AvatarId, ProgressionResult, AIDifficultyId } from '@/domain/model/types';
+import type {
+  AvatarId,
+  ProgressionResult,
+  AIDifficultyId,
+  FriendInviteToken,
+  MatchPhoneContactsResult,
+  LeagueScreenSnapshot,
+  GlobalRankingEntry,
+} from '@/domain/model/types';
 import type { GameAction } from '@/domain/game';
 
 const functions = getFunctions(firebaseApp, FUNCTIONS_REGION);
@@ -137,10 +145,6 @@ export interface FinalizeMatchResult {
 export const finalizeAiMatch = (req: FinalizeAiMatchRequest) =>
   call<FinalizeAiMatchRequest, FinalizeMatchResult>('finalizeMatch', { ...req, mode: 'ai' });
 
-export const claimReward = (rewardId: string) =>
-  call<{ rewardId: string }, { alreadyClaimed: boolean; coins: number }>('claimReward', {
-    rewardId,
-  });
 export const registerDevice = (token: string, platform: string) =>
   call<{ token: string; platform: string }, { ok: true }>('registerDevice', { token, platform });
 export const deleteAccount = () => call<Record<string, never>, { ok: true }>('deleteAccount', {});
@@ -152,12 +156,44 @@ export const respondFriendRequest = (requestId: string, accept: boolean) =>
     requestId,
     accept,
   });
+export const cancelFriendRequest = (toUid: string) =>
+  call<{ toUid: string }, { ok: true }>('cancelFriendRequest', { toUid });
 export const removeFriend = (friendUid: string) =>
   call<{ friendUid: string }, { ok: true }>('removeFriend', { friendUid });
+export const blockUser = (targetUid: string) =>
+  call<{ targetUid: string }, { ok: true }>('blockUser', { targetUid });
+export const unblockUser = (targetUid: string) =>
+  call<{ targetUid: string }, { ok: true }>('unblockUser', { targetUid });
+
+/**
+ * Envia UM lote de telefones já normalizados em E.164 e recebe quem tem conta.
+ * Nome, e-mail e qualquer outro dado da agenda ficam no aparelho; a resposta identifica
+ * cada acerto pelo índice na lista enviada, então o número nunca volta pela rede.
+ */
+export const matchPhoneContacts = (phones: string[]) =>
+  call<{ phones: string[] }, MatchPhoneContactsResult>('matchPhoneContacts', { phones });
+
+export const createFriendInviteToken = () =>
+  call<Record<string, never>, FriendInviteToken>('createFriendInviteToken', {});
+export const resolveFriendInviteToken = (token: string) =>
+  call<{ token: string }, { uid: string }>('resolveFriendInviteToken', { token });
 export const inviteFriendToRoom = (friendUid: string, code: string) =>
   call<{ friendUid: string; code: string }, { ok: true }>('inviteFriendToRoom', {
     friendUid,
     code,
   });
-export const purchaseItem = (itemId: string) =>
-  call<{ itemId: string }, { ok: true; coins: number; gems: number }>('purchaseItem', { itemId });
+
+// --- Ligas -------------------------------------------------------------------
+
+/**
+ * Garante que o usuário tem liga e grupo válidos na semana atual e devolve a tela pronta.
+ * É auto-corretivo: se faltar vínculo (conta nova, semana virada, grupo finalizado), o backend
+ * conserta antes de responder — a tela nunca precisa mostrar "você não está em uma liga".
+ */
+export const getLeagueScreenSnapshot = () =>
+  call<Record<string, never>, LeagueScreenSnapshot>('getLeagueScreenSnapshot', {});
+
+export const getGlobalLeagueRanking = (max = 50) =>
+  call<{ limit: number }, { entries: GlobalRankingEntry[] }>('getGlobalLeagueRanking', {
+    limit: max,
+  });

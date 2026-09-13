@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -8,7 +8,16 @@ import { images } from '@/assets';
 import { AppText, PrimaryButton, Screen, SecondaryButton, Surface } from '@/components';
 import { logEvent } from '@/services/firebase/analytics';
 import { haptic } from '@/utils/haptics';
+import { AdService, RewardedGate, SponsoredBadge, useRewardedAd } from '@/ads';
 import type { RootScreenProps } from '@/navigation/types';
+import { MatchAnalysisCard } from './MatchAnalysisCard';
+
+/**
+ * Pausa entre o resultado aparecer e o interstitial. O usuário precisa ver o placar e as
+ * recompensas antes de qualquer anúncio — e o anúncio tem de acontecer *antes* de ele iniciar
+ * uma ação, nunca depois de tocar em "Jogar novamente".
+ */
+const INTERSTITIAL_DELAY_MS = 2600;
 
 export function MatchResultScreen({ navigation, route }: RootScreenProps<'MatchResult'>) {
   const {
@@ -21,26 +30,63 @@ export function MatchResultScreen({ navigation, route }: RootScreenProps<'MatchR
     leveledUp,
     rematch,
     difficulty,
+    analysis,
   } = route.params;
+
+  const [analysisUnlocked, setAnalysisUnlocked] = useState(false);
+  const [gateOpen, setGateOpen] = useState(false);
+  const rewarded = useRewardedAd('match_analysis_rewarded', 'ver_analise');
+  /** Uma ação do usuário (rematch, voltar, rewarded) cancela o interstitial pendente. */
+  const userActed = useRef(false);
 
   useEffect(() => {
     if (won) haptic.success();
     else haptic.error();
   }, [won]);
 
-  const again = () => {
-    logEvent('rematch_clicked', { mode });
-    if (rematch?.mode === 'ai')
-      navigation.replace('Game', {
-        mode: 'ai',
-        difficulty: rematch.difficulty,
-        seed: Date.now() % 2147483647,
-      });
-    else navigation.replace('Matchmaking');
+  // Interstitial do fim de partida: momento natural, depois de o resultado ser lido.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (userActed.current) return;
+      void AdService.showInterstitial('match_result_interstitial');
+    }, INTERSTITIAL_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const leaveFor = useCallback((run: () => void) => {
+    userActed.current = true;
+    run();
+  }, []);
+
+  const again = () =>
+    leaveFor(() => {
+      logEvent('rematch_clicked', { mode });
+      if (rematch?.mode === 'ai')
+        navigation.replace('Game', {
+          mode: 'ai',
+          difficulty: rematch.difficulty,
+          seed: Date.now() % 2147483647,
+        });
+      else navigation.replace('Matchmaking');
+    });
+
+  const openGate = () => {
+    userActed.current = true;
+    rewarded.offerShown();
+    setGateOpen(true);
   };
 
+  const watchAnalysis = useCallback(async () => {
+    const earned = await rewarded.watch();
+    setGateOpen(false);
+    // A análise só é liberada quando o SDK confirma a recompensa; fechar antes mantém bloqueado.
+    if (earned) setAnalysisUnlocked(true);
+  }, [rewarded]);
+
+  const canOfferAnalysis = Boolean(analysis) && rewarded.ready && !analysisUnlocked;
+
   return (
-    <Screen testID="screen-result" contentStyle={{ justifyContent: 'center' }}>
+    <Screen scroll testID="screen-result" contentStyle={styles.content}>
       <Animated.View entering={ZoomIn.duration(400)} style={styles.hero}>
         <View
           style={[
@@ -118,6 +164,35 @@ export function MatchResultScreen({ navigation, route }: RootScreenProps<'MatchR
         </Surface>
       </Animated.View>
 
+      {analysisUnlocked && analysis ? <MatchAnalysisCard analysis={analysis} /> : null}
+
+      {canOfferAnalysis ? (
+        <Surface style={styles.analysisOffer} testID="result-analysis-offer">
+          <View style={styles.analysisHeader}>
+            <View style={styles.analysisTitle}>
+              <Ionicons name="stats-chart" size={18} color={colors.primaryBright} />
+              <AppText variant="h3" style={styles.analysisTitleText}>
+                Análise da partida
+              </AppText>
+            </View>
+            <SponsoredBadge label="Conteúdo patrocinado" />
+          </View>
+          <AppText variant="small" color={colors.textSecondary} style={styles.analysisBody}>
+            Veja rodada a rodada como a partida foi decidida: trucos, fugas e onde os pontos
+            escaparam.
+          </AppText>
+          <SecondaryButton
+            label="Ver análise completa"
+            size="sm"
+            icon="play"
+            onPress={openGate}
+            loading={rewarded.watching}
+            style={styles.analysisAction}
+            testID="result-analysis-watch"
+          />
+        </Surface>
+      ) : null}
+
       <PrimaryButton
         label="Jogar novamente"
         onPress={again}
@@ -126,9 +201,20 @@ export function MatchResultScreen({ navigation, route }: RootScreenProps<'MatchR
       />
       <SecondaryButton
         label="Voltar ao início"
-        onPress={() => navigation.replace('Main', { screen: 'Home' })}
+        onPress={() => leaveFor(() => navigation.replace('Main', { screen: 'Home' }))}
         style={{ marginTop: spacing.sm }}
         testID="result-home"
+      />
+
+      <RewardedGate
+        visible={gateOpen}
+        title="Análise completa"
+        description="Assista a um anúncio para liberar a análise completa desta partida. É só conteúdo: nada de XP, pontos de liga ou vantagem no jogo."
+        confirmLabel="Assistir"
+        loading={rewarded.watching}
+        onCancel={() => setGateOpen(false)}
+        onConfirm={watchAnalysis}
+        testID="result-analysis-gate"
       />
     </Screen>
   );
@@ -155,6 +241,7 @@ function RewardItem({ label, value, image }: { label: string; value: string; ima
 }
 
 const styles = StyleSheet.create({
+  content: { justifyContent: 'center', flexGrow: 1 },
   hero: { alignItems: 'center', marginBottom: spacing.xl },
   iconCircle: {
     width: 110,
@@ -170,4 +257,10 @@ const styles = StyleSheet.create({
   rewards: { marginTop: spacing.md },
   rewardRow: { flexDirection: 'row', justifyContent: 'space-around' },
   reward: { alignItems: 'center' },
+  analysisOffer: { marginTop: spacing.md },
+  analysisHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  analysisTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  analysisTitleText: { marginLeft: 2 },
+  analysisBody: { marginTop: spacing.sm },
+  analysisAction: { alignSelf: 'flex-start', marginTop: spacing.md },
 });

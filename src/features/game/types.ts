@@ -28,6 +28,11 @@ export interface TableController {
   busy: boolean;
   act: (action: GameAction) => Promise<void> | void;
   leave: () => Promise<void> | void;
+  /**
+   * Segura as jogadas automáticas (IA local / bots do servidor) enquanto a mesa roda a cerimônia
+   * de início de mão. Sem isso os bots jogariam por trás do baralho e a mão já começaria andada.
+   */
+  setBotsPaused: (paused: boolean) => void;
   /** Rewards computed by the server (online only; the AI mode gets them from finalizeMatch). */
   progression?: ProgressionResult | null;
 }

@@ -90,3 +90,43 @@ export function maskPhone(e164: string): string {
   }
   return parsed.formatNational().replace(/\d(?=\d{4})/g, (_m, i: number) => (i > 4 ? '*' : _m));
 }
+
+/**
+ * Normaliza qualquer número (agenda, colado, digitado) para E.164 ou `null`.
+ *
+ * Regra única de normalização do app: comparar strings formatadas nunca funciona, porque
+ * "(61) 9.9628-9726", "61996289726" e "+55 61 99628-9726" são o mesmo telefone.
+ * `defaultCountry` só é usado quando o número não vem com DDI — um contato salvo como
+ * "+351 912 345 678" continua português mesmo com a conta no Brasil.
+ */
+export function normalizePhoneNumber(
+  raw: string,
+  defaultCountry: CountryCode = 'BR',
+): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  // Só dígitos e um "+" opcional no começo: a agenda traz parênteses, traços, pontos e espaços.
+  const cleaned = trimmed.replace(/[^\d+]/g, '').replace(/(?!^)\+/g, '');
+  if (cleaned.replace(/\D/g, '').length < 6) return null;
+  const parsed = parsePhoneNumberFromString(cleaned, defaultCountry);
+  if (!parsed || !parsed.isValid()) return null;
+  return parsed.number;
+}
+
+/** País do usuário a partir do próprio telefone, para normalizar a agenda no mesmo padrão. */
+export function countryOf(e164: string | null | undefined): CountryCode {
+  if (!e164) return 'BR';
+  return parsePhoneNumberFromString(e164)?.country ?? 'BR';
+}
+
+/** Iniciais para o avatar de quem ainda não joga ("João Faculdade" -> "JF"). */
+export function initialsOf(name: string): string {
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter((p) => /\p{L}/u.test(p));
+  if (parts.length === 0) return '?';
+  const first = [...parts[0]!][0] ?? '';
+  const last = parts.length > 1 ? ([...parts[parts.length - 1]!][0] ?? '') : '';
+  return (first + last).toUpperCase();
+}

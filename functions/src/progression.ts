@@ -1,15 +1,16 @@
+import { logger } from 'firebase-functions/v2';
 import { db, now } from './lib/admin';
 import {
   Achievement,
   AIDifficultyId,
-  LeagueId,
   MatchHistoryEntry,
   PlayerStats,
   Profile,
   ProgressionResult,
   xpForLevel,
 } from './domain/model/types';
-import { leagueForPoints } from './domain/model/leagues';
+import { normalizeLeagueId } from './domain/model/leagues';
+import { addWeeklyLeaguePoints } from './leagues';
 import { defaultProfile, defaultStats } from './users';
 
 export const ACHIEVEMENTS: Achievement[] = [
@@ -83,15 +84,16 @@ interface RewardTable {
   xpLoss: number;
   coinsWin: number;
   coinsLoss: number;
+  /** Pontos da liga na semana. Nunca negativos: o ranking semanal só acumula. */
   lpWin: number;
   lpLoss: number;
 }
 
 const REWARDS: Record<'online' | AIDifficultyId, RewardTable> = {
-  online: { xpWin: 80, xpLoss: 30, coinsWin: 50, coinsLoss: 10, lpWin: 25, lpLoss: -10 },
-  easy: { xpWin: 30, xpLoss: 10, coinsWin: 15, coinsLoss: 5, lpWin: 5, lpLoss: 0 },
-  normal: { xpWin: 60, xpLoss: 20, coinsWin: 30, coinsLoss: 8, lpWin: 10, lpLoss: 0 },
-  hard: { xpWin: 90, xpLoss: 30, coinsWin: 45, coinsLoss: 10, lpWin: 15, lpLoss: -5 },
+  online: { xpWin: 80, xpLoss: 30, coinsWin: 50, coinsLoss: 10, lpWin: 25, lpLoss: 8 },
+  easy: { xpWin: 30, xpLoss: 10, coinsWin: 15, coinsLoss: 5, lpWin: 5, lpLoss: 1 },
+  normal: { xpWin: 60, xpLoss: 20, coinsWin: 30, coinsLoss: 8, lpWin: 10, lpLoss: 3 },
+  hard: { xpWin: 90, xpLoss: 30, coinsWin: 45, coinsLoss: 10, lpWin: 15, lpLoss: 5 },
 };
 
 export interface MatchOutcomeInput {
@@ -119,9 +121,9 @@ export async function processProgression(
   const table = REWARDS[input.mode === 'online' ? 'online' : (input.difficulty ?? 'normal')];
   const mult = input.xpMultiplier ?? 1;
 
-  return db.runTransaction(async (tx) => {
+  const result = await db.runTransaction(async (tx) => {
     const history = await tx.get(historyRef);
-    if (history.exists) return { alreadyProcessed: true, byUid: {} };
+    if (history.exists) return { alreadyProcessed: true, byUid: {} as Record<string, ProgressionResult> };
 
     const profileRefs = humans.map((h) => db.doc(`profiles/${h.uid}`));
     const statsRefs = humans.map((h) => db.doc(`playerStats/${h.uid}`));
@@ -162,18 +164,18 @@ export async function processProgression(
         xpToNext = xpForLevel(level);
         leveledUp = true;
       }
-      // League
-      const leaguePoints = Math.max(0, profile.leaguePoints + lpDelta);
-      const newLeague = leagueForPoints(leaguePoints);
-      const promoted = newLeague.order > (leagueForPoints(profile.leaguePoints).order ?? 0);
+      // Liga: a partida só soma pontos da SEMANA (feito fora da transação, por
+      // `addWeeklyLeaguePoints`). Subir ou descer de liga acontece apenas na virada semanal,
+      // então aqui a liga do perfil não muda — ela espelha `playerProgress.currentLeagueId`.
+      const leagueId = normalizeLeagueId(profile.leagueId);
 
       tx.set(profileRefs[i]!, {
         ...profile,
         xp,
         level,
         xpToNext,
-        leaguePoints,
-        leagueId: newLeague.id as LeagueId,
+        leaguePoints: Math.max(0, profile.leaguePoints + lpDelta),
+        leagueId,
         coins: profile.coins + coinsGained,
         updatedAt: now(),
       });
@@ -214,8 +216,7 @@ export async function processProgression(
         leaguePointsDelta: lpDelta,
         leveledUp,
         newLevel: level,
-        newLeagueId: newLeague.id as LeagueId,
-        promoted,
+        newLeagueId: leagueId,
       };
     });
 
@@ -232,4 +233,27 @@ export async function processProgression(
     tx.set(historyRef, entry);
     return { alreadyProcessed: false, byUid };
   });
+
+  // Pontos da semana ficam FORA da transação acima: `addWeeklyLeaguePoints` precisa garantir o
+  // vínculo com o grupo antes (leitura de outra coleção) e tem idempotência própria por
+  // matchId + uid + eventType, então uma falha aqui não pontua duas vezes na retentativa.
+  if (!result.alreadyProcessed) {
+    await Promise.all(
+      humans.map((h) => {
+        const won = h.seat % 2 === input.winnerTeam;
+        return addWeeklyLeaguePoints({
+          uid: h.uid,
+          matchId: input.matchId,
+          eventType: won ? 'match_win' : 'match_loss',
+          points: won ? table.lpWin : table.lpLoss,
+          won,
+        }).catch((e: Error) => {
+          // A partida já foi contabilizada; perder o ponto da liga não pode derrubar o resultado.
+          logger.warn('falha ao somar pontos da liga', { uid: h.uid, error: e.message });
+        });
+      }),
+    );
+  }
+
+  return result;
 }
