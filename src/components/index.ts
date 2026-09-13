@@ -5,6 +5,7 @@ export * from './Buttons';
 export * from './PlayerAvatar';
 export * from './CurrencyBadge';
 export * from './GameHeader';
+export * from './GameModeCard';
 export * from './MenuItem';
 export * from './StatsRow';
 export * from './ProgressBar';

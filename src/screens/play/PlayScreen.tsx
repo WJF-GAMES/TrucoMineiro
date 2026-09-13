@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, gradients, IoniconName, radius, spacing } from '@/design-system';
 import { images } from '@/assets';
-import { AppText, GameHeader, Screen, Surface } from '@/components';
+import { AppText, GameHeader, GameModeCard, Screen, Surface } from '@/components';
 import { logEvent } from '@/services/firebase/analytics';
 import { flag } from '@/services/firebase/remoteConfig';
 import { subscribeOnlineCount } from '@/services/firebase/rtdb';
@@ -13,61 +12,6 @@ import { formatNumber } from '@/utils/format';
 import { haptic } from '@/utils/haptics';
 import { toast } from '@/stores/toastStore';
 import type { TabScreenProps } from '@/navigation/types';
-
-/** Big illustrated mode card ("JOGAR CONTRA A IA" / "JOGAR ONLINE"). */
-function GameModeCard({
-  title,
-  subtitle,
-  image,
-  gradient,
-  fadeColor,
-  footerIcon,
-  footer,
-  onPress,
-  testID,
-}: {
-  title: string;
-  subtitle: string;
-  image: number;
-  gradient: readonly [string, string];
-  fadeColor: string;
-  footerIcon: IoniconName;
-  footer: string;
-  onPress: () => void;
-  testID: string;
-}) {
-  return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityLabel={title}
-      onPress={onPress}
-      style={({ pressed }) => [styles.mode, pressed && styles.pressed]}
-    >
-      <LinearGradient colors={gradient} style={StyleSheet.absoluteFill} />
-      <Image source={image} style={styles.modeImage} contentFit="cover" contentPosition="top" />
-      <LinearGradient
-        colors={['rgba(0,0,0,0)', fadeColor]}
-        locations={[0.1, 1]}
-        style={styles.modeFade}
-      />
-      <View style={styles.modeBody}>
-        <AppText variant="h2" center style={styles.modeTitle}>
-          {title}
-        </AppText>
-        <AppText variant="small" center color="rgba(255,255,255,0.9)" style={styles.modeSubtitle}>
-          {subtitle}
-        </AppText>
-        <View style={styles.modeFooter}>
-          <Ionicons name={footerIcon} size={14} color={colors.gold} />
-          <AppText variant="caption" style={{ marginLeft: 5 }}>
-            {footer}
-          </AppText>
-        </View>
-      </View>
-    </Pressable>
-  );
-}
 
 /** Wide action row ("JOGO RÁPIDO", "CRIAR SALA", "Dicas de Truco"). */
 export function ActionRow({
@@ -108,7 +52,7 @@ export function ActionRow({
           <AppText variant="h3" style={highlight ? styles.actionTitleUpper : undefined}>
             {title}
           </AppText>
-          <AppText variant="small" color={colors.textSecondary}>
+          <AppText variant="small" color={colors.textSecondary} style={styles.actionSubtitle}>
             {subtitle}
           </AppText>
         </View>
@@ -222,55 +166,28 @@ export function PlayScreen({ navigation }: TabScreenProps<'Play'>) {
 const styles = StyleSheet.create({
   title: { marginBottom: spacing.md },
   modes: { flexDirection: 'row', gap: 10, marginBottom: spacing.md },
-  mode: {
-    flex: 1,
-    height: 334,
-    borderRadius: radius.card,
-    overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.22)',
-  },
-  modeImage: { width: '100%', height: '62%' },
-  modeFade: { position: 'absolute', left: 0, right: 0, top: '30%', bottom: 0 },
-  modeBody: { position: 'absolute', left: 8, right: 8, bottom: 10 },
-  modeTitle: {
-    fontSize: 21,
-    lineHeight: 25,
-    textShadowColor: 'rgba(0,0,0,0.55)',
-    textShadowRadius: 5,
-    textShadowOffset: { width: 0, height: 1 },
-  },
-  modeSubtitle: { marginTop: 7, fontSize: 13, lineHeight: 17 },
-  modeFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 10,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: radius.pill,
-  },
   pressed: { opacity: 0.85 },
   action: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 15,
-    paddingHorizontal: 12,
-    marginBottom: spacing.sm,
+    // 72dp de alvo: confortável para o polegar e deixa título e descrição respirarem.
+    minHeight: 72,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.md,
     overflow: 'hidden',
   },
   actionHighlight: { borderColor: 'rgba(60, 220, 140, 0.55)' },
   actionIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
     backgroundColor: 'rgba(0,0,0,0.25)',
   },
   actionIconHighlight: { backgroundColor: 'rgba(0,0,0,0.3)' },
+  actionSubtitle: { marginTop: 3 },
   actionTitleUpper: { letterSpacing: 0.5 },
 });

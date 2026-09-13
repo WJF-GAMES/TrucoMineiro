@@ -65,31 +65,48 @@ export class ReactNativeFirebaseAppCheckProvider {
 export const initializeAppCheck = async () => ({});
 
 // --- auth --------------------------------------------------------------------
-export const getAuth = () => ({ currentUser: null });
-export const connectAuthEmulator = noop;
-/** Sem sessão no browser: avisa "deslogado" para o app sair do splash e cair na Introdução. */
-export const onAuthStateChanged = (_auth, cb) => {
-  if (typeof cb === 'function') setTimeout(() => cb(null), 0);
-  return noop;
-};
 /**
- * Não existe verificação por SMS no browser. Em vez de estourar um erro (que apareceria
- * como falha de login numa tela válida), devolvemos uma confirmação de mentira: o fluxo
- * Login -> OTP continua navegável para inspeção visual, e confirmar o código avisa que
- * a etapa real só roda no app.
+ * Sessão de mentira só para a build web: o SDK nativo não existe no browser.
+ * Serve para navegar pelas telas (Login -> OTP -> Cadastro -> app) e ajustar layout;
+ * nada disso fala com o Firebase nem vale como autenticação.
  */
-export const signInWithPhoneNumber = async () => {
-  console.warn('[web] envio de SMS simulado: teste o login de verdade no Android/iOS.');
+const authState = { currentUser: null };
+const authListeners = new Set();
+const notifyAuth = () => authListeners.forEach((cb) => cb(authState.currentUser));
+
+export const getAuth = () => authState;
+export const connectAuthEmulator = noop;
+export const onAuthStateChanged = (_auth, cb) => {
+  if (typeof cb !== 'function') return noop;
+  authListeners.add(cb);
+  setTimeout(() => cb(authState.currentUser), 0);
+  return () => authListeners.delete(cb);
+};
+export const signInWithPhoneNumber = async (_auth, phone) => {
+  console.warn('[web] envio de SMS simulado: o login de verdade só roda no Android/iOS.');
   return {
     verificationId: 'web-preview',
-    confirm: async () => {
-      const err = new Error('Confirmação de SMS indisponível na build web.');
-      err.code = 'auth/invalid-verification-code';
-      throw err;
+    confirm: async (code) => {
+      if (!/^\d{6}$/.test(String(code ?? ''))) {
+        const err = new Error('Código inválido.');
+        err.code = 'auth/invalid-verification-code';
+        throw err;
+      }
+      console.warn('[web] código aceito sem verificação (build de inspeção).');
+      authState.currentUser = {
+        uid: 'web-preview-user',
+        phoneNumber: phone ?? null,
+        getIdToken: async () => 'web-preview-token',
+      };
+      notifyAuth();
+      return { user: authState.currentUser };
     },
   };
 };
-export const signOut = asyncNoop;
+export const signOut = async () => {
+  authState.currentUser = null;
+  notifyAuth();
+};
 
 // --- firestore ---------------------------------------------------------------
 export const getFirestore = () => ({});

@@ -112,7 +112,7 @@ export function LoginScreen({ navigation }: RootScreenProps<'Login'>) {
             <Ionicons name="shield-checkmark" size={22} color={colors.cream} />
             <View style={styles.secureDivider} />
             <AppText variant="small" color={colors.textSecondary} style={styles.secureText}>
-              Seus dados estão protegidos{'\n'}com a tecnologia do Firebase.
+              Seus dados estão protegidos
             </AppText>
           </View>
 

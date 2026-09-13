@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, gradients, radius, spacing } from '@/design-system';
 import { images, leagueShield } from '@/assets';
 import {
   AppText,
   GameHeader,
+  GameModeCard,
   PillButton,
   PlayerAvatar,
   ProgressBar,
@@ -34,6 +34,9 @@ function todayId() {
  * Principal (Home). No reference exists for this screen in referencia.png, so it is composed
  * exclusively from patterns of the other screens: logo header, glass cards, green CTA, season banner.
  */
+/** Altura dos cards de modo na Principal (a tela Jogar usa o padrão, maior). */
+const MODE_CARD_HEIGHT = 250;
+
 export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
   const profile = useProfileStore((s) => s.profile);
   const stats = useProfileStore((s) => s.stats);
@@ -107,60 +110,36 @@ export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
         Bora jogar?
       </AppText>
       <View style={styles.modes}>
-        <Pressable
+        <GameModeCard
           testID="home-play-ai"
-          accessibilityRole="button"
-          accessibilityLabel="Jogar contra a IA"
+          title={'JOGAR\nCONTRA A IA'}
+          subtitle="Treine, evolua e melhore suas habilidades."
+          image={images.modeIa}
+          gradient={gradients.modeIa}
+          fadeColor="#023f80"
+          footerIcon="bar-chart"
+          footer="3 níveis de dificuldade"
+          height={MODE_CARD_HEIGHT}
           onPress={() => {
             logEvent('play_clicked', { source: 'home', mode: 'ai' });
             navigation.navigate('AiSetup');
           }}
-          style={({ pressed }) => [styles.mode, pressed && styles.pressed]}
-        >
-          <LinearGradient colors={gradients.modeIa} style={StyleSheet.absoluteFill} />
-          <Image
-            source={images.modeIa}
-            style={styles.modeImage}
-            contentFit="cover"
-            contentPosition="top"
-          />
-          <LinearGradient colors={['rgba(2,63,128,0)', '#023f80']} style={styles.modeFade} />
-          <View style={styles.modeText}>
-            <AppText variant="h3" style={styles.modeTitle}>
-              CONTRA A IA
-            </AppText>
-            <AppText variant="caption" color={colors.textSecondary}>
-              3 níveis de dificuldade
-            </AppText>
-          </View>
-        </Pressable>
-        <Pressable
+        />
+        <GameModeCard
           testID="home-play-online"
-          accessibilityRole="button"
-          accessibilityLabel="Jogar online"
+          title={'JOGAR\nONLINE'}
+          subtitle="Enfrente jogadores reais de todo o Brasil."
+          image={images.modeOnline}
+          gradient={gradients.modeOnline}
+          fadeColor="#6b2f0f"
+          footerIcon="people"
+          footer={online > 0 ? `${formatNumber(online)} online` : 'Jogadores reais'}
+          height={MODE_CARD_HEIGHT}
           onPress={() => {
             logEvent('play_clicked', { source: 'home', mode: 'online' });
             navigation.navigate('OnlineHub');
           }}
-          style={({ pressed }) => [styles.mode, pressed && styles.pressed]}
-        >
-          <LinearGradient colors={gradients.modeOnline} style={StyleSheet.absoluteFill} />
-          <Image
-            source={images.modeOnline}
-            style={styles.modeImage}
-            contentFit="cover"
-            contentPosition="top"
-          />
-          <LinearGradient colors={['rgba(107,47,15,0)', '#6b2f0f']} style={styles.modeFade} />
-          <View style={styles.modeText}>
-            <AppText variant="h3" style={styles.modeTitle}>
-              ONLINE
-            </AppText>
-            <AppText variant="caption" color={colors.textSecondary}>
-              {online > 0 ? `${formatNumber(online)} online` : 'Jogadores reais'}
-            </AppText>
-          </View>
-        </Pressable>
+        />
       </View>
 
       {flag('daily_reward_enabled') ? (
@@ -221,9 +200,9 @@ export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
       />
       <Surface style={styles.friends}>
         <Image source={images.bannerAmigos} style={styles.friendsImage} contentFit="cover" />
-        <View style={{ flex: 1, marginLeft: 12 }}>
+        <View style={styles.friendsText}>
           <AppText variant="bodyBold">Jogue com seus amigos</AppText>
-          <AppText variant="small" color={colors.textSecondary}>
+          <AppText variant="small" color={colors.textSecondary} style={styles.friendsSubtitle}>
             Crie uma sala e compartilhe o código.
           </AppText>
         </View>
@@ -244,22 +223,6 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { marginTop: spacing.md, marginBottom: spacing.md },
   modes: { flexDirection: 'row', gap: 10 },
-  mode: {
-    flex: 1,
-    height: 172,
-    borderRadius: radius.card,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-  },
-  modeImage: { width: '100%', height: '75%' },
-  modeFade: { position: 'absolute', left: 0, right: 0, top: '40%', bottom: 0 },
-  modeText: { position: 'absolute', left: 10, right: 10, bottom: 10 },
-  modeTitle: {
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowRadius: 4,
-    textShadowOffset: { width: 0, height: 1 },
-  },
   pressed: { opacity: 0.85 },
   reward: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.md },
   rewardImage: { width: 56, height: 40, marginRight: 10 },
@@ -273,6 +236,13 @@ const styles = StyleSheet.create({
     borderColor: colors.cardBorderStrong,
   },
   banner: { width: '100%', aspectRatio: 2172 / 724 },
-  friends: { flexDirection: 'row', alignItems: 'center', padding: 10 },
-  friendsImage: { width: 64, height: 48, borderRadius: radius.sm },
+  friends: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    gap: spacing.sm + 2,
+  },
+  friendsImage: { width: 52, height: 52, borderRadius: radius.sm },
+  friendsText: { flex: 1 },
+  friendsSubtitle: { marginTop: 2 },
 });
