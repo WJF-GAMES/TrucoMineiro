@@ -181,7 +181,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
   };
 
   return (
-    <Screen scroll testID="screen-friends">
+    <Screen scroll withTabBar testID="screen-friends">
       <GameHeader variant="title" title="Amigos" />
       <View style={styles.chips}>
         <Chips<Tab>

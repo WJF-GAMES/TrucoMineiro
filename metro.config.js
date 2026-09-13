@@ -17,4 +17,18 @@ config.resolver.blockList = [
   new RegExp(`^${escape('.firebase')}\\\\.*`),
 ];
 
+/**
+ * Web: o React Native Firebase é um wrapper dos SDKs nativos e não existe no browser.
+ * Todo import `@react-native-firebase/*` cai num stub neutro para a UI poder ser
+ * inspecionada no navegador (Android/iOS continuam usando o SDK real).
+ */
+const RNFIREBASE_WEB_STUB = path.resolve(__dirname, 'src/services/firebase/web/rnfirebase-stub.js');
+const defaultResolveRequest = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (platform === 'web' && moduleName.startsWith('@react-native-firebase/')) {
+    return { type: 'sourceFile', filePath: RNFIREBASE_WEB_STUB };
+  }
+  return (defaultResolveRequest ?? context.resolveRequest)(context, moduleName, platform);
+};
+
 module.exports = config;

@@ -1,12 +1,14 @@
 import React, { PropsWithChildren } from 'react';
 import { ScrollView, StyleSheet, View, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView, Edge } from 'react-native-safe-area-context';
+import { SafeAreaView, Edge, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { colors, gradients, spacing } from '@/design-system';
 
 interface Props {
   scroll?: boolean;
+  /** Reserves room for the Bottom Navigation so the last card is never covered by it. */
+  withTabBar?: boolean;
   padded?: boolean;
   edges?: Edge[];
   contentStyle?: ViewStyle;
@@ -18,6 +20,7 @@ interface Props {
 /** Full-screen emerald gradient background used by every screen in the reference. */
 export function Screen({
   scroll = false,
+  withTabBar = false,
   padded = true,
   edges = ['top'],
   contentStyle,
@@ -25,9 +28,11 @@ export function Screen({
   children,
   testID,
 }: PropsWithChildren<Props>) {
+  const insets = useSafeAreaInsets();
+  const tabBarSpace = withTabBar ? spacing.tabBarHeight + insets.bottom : 0;
   const inner = [
     padded && styles.padded,
-    { paddingBottom: bottomInset + spacing.xl },
+    { paddingBottom: bottomInset + tabBarSpace + spacing.xl },
     contentStyle,
   ];
   return (

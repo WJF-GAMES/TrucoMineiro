@@ -139,7 +139,7 @@ export function PlayScreen({ navigation }: TabScreenProps<'Play'>) {
   };
 
   return (
-    <Screen scroll testID="screen-play">
+    <Screen scroll withTabBar testID="screen-play">
       <GameHeader variant="logo" />
       <AppText variant="h2" center style={styles.title}>
         Escolha como jogar

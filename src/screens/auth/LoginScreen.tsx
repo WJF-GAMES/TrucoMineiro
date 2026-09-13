@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
   orRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: spacing.lg },
   line: { flex: 1, height: 1, backgroundColor: colors.divider },
   secure: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14 },
-  cards: { width: '78%', aspectRatio: 654 / 261, alignSelf: 'center', marginTop: spacing.xl },
+  cards: { width: '78%', aspectRatio: 1967 / 800, alignSelf: 'center', marginTop: spacing.xl },
   values: { marginTop: spacing.md, fontSize: 15 },
   modalBackdrop: {
     flex: 1,

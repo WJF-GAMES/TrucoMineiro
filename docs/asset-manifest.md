@@ -30,7 +30,12 @@ Nenhum foi gerado pelo ChatGPT nesta rodada (acesso à conversa exige login huma
 | avatar seu_ze | assets/images/avatars/seu_ze.png | PNG (circular) | Cadastro, Mesa | Seu Zé | recorte referência (Cadastro) | não | sim | não | 162×162 |
 | avatar seu_antonio | assets/images/avatars/seu_antonio.png | PNG (circular) | Cadastro, Mesa | Seu Antônio | recorte referência (Cadastro) | não | sim | não | 162×162 |
 | avatar tiao | assets/images/avatars/tiao.png | PNG (circular) | Loja, Mesa | Tião (óculos escuros) | recorte referência (Loja) | não | sim | não | 156×156 |
-| icon / splash / adaptive icon | assets/icon.png, assets/splash-icon.png, assets/android-icon-*.png | PNG | Launcher / Splash | Ícone do app | template Expo (**placeholder — pendente**) | sim (template) | não | não | 1024×1024 |
+| app icon (iOS) | assets/icon.png | PNG (opaco, sem alpha) | Launcher iOS / App Store | Ícone do app sangrando até a borda (o iOS aplica o squircle) | `references/app-icon.png` via `scripts/generate-app-icons.py` | não | sim | não | 1024×1024 |
+| adaptive foreground | assets/android-icon-foreground.png | PNG (alpha) | Launcher Android | Badge reduzido a 52,7% do canvas para caber inteiro até na máscara circular | idem | não | sim | não | 1024×1024 |
+| adaptive background | assets/android-icon-background.png | PNG | Launcher Android | Campo verde full-bleed (degradê radial do tabuleiro) | idem | não | sim | não | 1024×1024 |
+| adaptive monochrome | assets/android-icon-monochrome.png | PNG (alpha) | Themed icon (Android 13+) | Silhueta chapéu + cartas + espada | idem | não | sim | não | 1024×1024 |
+| favicon | assets/favicon.png | PNG | Web | Favicon derivado do ícone iOS | idem | sim | sim | não | 48×48 |
+| splash | assets/splash-icon.png | PNG (alpha) | Splash | Arte do ícone sobre `#00221a` | arte anterior (não regenerada) | sim | não | não | 1024×1024 |
 
 ## Ícones de interface
 Família única: **Ionicons** (via `@expo/vector-icons`), mapeada em `src/design-system/icons.ts`.
@@ -38,7 +43,8 @@ Exceção: glifo de cartas da tab "Jogar" usa `MaterialCommunityIcons` (`cards`)
 Naipes das cartas na mesa são caracteres tipográficos (♠ ♥ ♦ ♣), não emojis.
 
 ## Pendências de asset (requerem ChatGPT/login humano ou arte original)
-1. **Ícone do app e splash** — ainda são os do template Expo. Gerar ícone com o logo "TRUCO MINEIRO" (1024×1024, fundo `#00221a`).
+1. **Splash** — `assets/splash-icon.png` ainda é a arte antiga do ícone. O ícone do app já vem de
+   `references/app-icon.png` (rodar `python scripts/generate-app-icons.py` após trocar a arte-mestra).
 2. **Versões em alta resolução** de todos os recortes acima (a referência tem ~300 px por tela; os recortes foram ampliados 3×). Pedir ao ChatGPT "mesmo personagem/paleta, 3× maior".
 3. **Tela Principal** — não existe na referência; a implementação (`references/principal.png`, screenshot da tela construída) segue o Design System das demais telas.
 4. **Tela OTP** — idem; construída com os mesmos componentes do Login/Cadastro.

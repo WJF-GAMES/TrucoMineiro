@@ -36,7 +36,7 @@ export function LeagueScreen({ navigation }: TabScreenProps<'League'>) {
   const max = league.maxPoints ?? points;
 
   return (
-    <Screen scroll testID="screen-league">
+    <Screen scroll withTabBar testID="screen-league">
       <GameHeader variant="logo" />
       <AppText variant="h1" center style={styles.title}>
         Sua Liga
@@ -177,5 +177,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorderStrong,
   },
-  banner: { width: '100%', aspectRatio: 831 / 273 },
+  banner: { width: '100%', aspectRatio: 2172 / 724 },
 });

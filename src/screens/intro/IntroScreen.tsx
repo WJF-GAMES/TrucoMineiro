@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import React, { useEffect } from 'react';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -19,15 +19,19 @@ const FEATURES: { icon: IoniconName; color: string; label: string }[] = [
   { icon: 'star', color: colors.gold, label: 'Conquiste\nrecompensas' },
 ];
 
-/** Natural aspect ratio of the extracted artwork (assets/images/hero/intro_hero.png). */
-const HERO_RATIO = 900 / 1056;
+/** Natural aspect ratio of the artwork (assets/images/hero/intro_hero.png). */
+const HERO_RATIO = 1419 / 1683;
 
+/** Tela única de abertura: arte + benefícios + CTA. Sem etapas, paginação ou swipe. */
 export function IntroScreen({ navigation }: RootScreenProps<'Intro'>) {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  const pageWidth = width - spacing.screen * 2;
-  const [page, setPage] = useState(0);
+  const { width, height } = useWindowDimensions();
   const setSettings = useSettingsStore((s) => s.set);
+
+  // A arte ocupa a largura inteira; em telas altas ela cresce até 62% da altura
+  // (o `cover` corta um pouco das laterais) para não sobrar vão morto sob a mesa.
+  const naturalHero = width / HERO_RATIO;
+  const heroHeight = Math.min(naturalHero * 1.28, Math.max(naturalHero, height * 0.62));
 
   useEffect(() => {
     logEvent('intro_viewed');
@@ -41,74 +45,42 @@ export function IntroScreen({ navigation }: RootScreenProps<'Intro'>) {
   return (
     <View style={styles.root} testID="screen-intro">
       <StatusBar style="light" />
-      {/* Wood-table tones sampled from the reference continue below the artwork on tall screens. */}
+      {/* A mesa da referência continua abaixo da arte e escurece até o mato do rodapé. */}
       <LinearGradient
-        colors={['#582f18', '#3a2110', '#1b1a0f', colors.bgTop]}
-        locations={[0, 0.35, 0.7, 1]}
-        style={StyleSheet.absoluteFill}
+        colors={['#8f4b20', '#5a3316', '#2c2211', '#16280d', colors.bgTop]}
+        locations={[0, 0.18, 0.42, 0.72, 1]}
+        style={[styles.wood, { top: heroHeight - 1 }]}
       />
 
-      <View style={styles.heroWrap} pointerEvents="none">
+      <View style={[styles.heroWrap, { height: heroHeight }]}>
         <Image
           source={images.introHero}
-          style={styles.hero}
+          style={StyleSheet.absoluteFill}
           contentFit="cover"
           contentPosition="top center"
-          accessibilityLabel="Truco Mineiro: tradição em cada jogada"
+          accessibilityLabel="Truco Mineiro: tradição em cada jogada. Mais que um jogo, uma resenha!"
         />
         <LinearGradient
-          colors={['rgba(0,26,20,0)', 'rgba(0,26,20,0.55)']}
-          style={styles.heroFade}
-          pointerEvents="none"
+          colors={['rgba(0,0,0,0.28)', 'rgba(0,0,0,0)']}
+          style={[styles.statusScrim, { height: insets.top + 12 }]}
         />
       </View>
 
       <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 10) + 6 }]}>
-        <ScrollView
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={(e) =>
-            setPage(Math.round(e.nativeEvent.contentOffset.x / pageWidth))
-          }
-          style={styles.pager}
-        >
-          <View style={[styles.featuresRow, { width: pageWidth }]}>
-            {FEATURES.map((f) => (
-              <View key={f.label} style={styles.feature}>
-                <Ionicons name={f.icon} size={28} color={f.color} />
-                <AppText variant="smallBold" center style={styles.featureLabel} numberOfLines={3}>
-                  {f.label}
-                </AppText>
-              </View>
-            ))}
-          </View>
-          <View style={[styles.page, { width: pageWidth }]}>
-            <AppText variant="h2" center>
-              Truco de raiz, do jeito mineiro
-            </AppText>
-            <AppText variant="small" center color={colors.textSecondary} style={styles.pageText}>
-              Manilhas fixas, Truco, Seis, Nove e Doze. Partidas de 4 jogadores em dupla, como na
-              venda da esquina.
-            </AppText>
-          </View>
-          <View style={[styles.page, { width: pageWidth }]}>
-            <AppText variant="h2" center>
-              Suba de liga e conquiste prêmios
-            </AppText>
-            <AppText variant="small" center color={colors.textSecondary} style={styles.pageText}>
-              Ganhe pontos, evolua de nível, chame a turma e mostre que o Truco Mineiro é forte.
-            </AppText>
-          </View>
-        </ScrollView>
-        <View style={styles.spacer} />
-        <View style={styles.dots}>
-          {[0, 1, 2].map((i) => (
-            <View key={i} style={[styles.dot, i === page && styles.dotActive]} />
+        <View style={styles.features}>
+          {FEATURES.map((f) => (
+            <View key={f.label} style={styles.feature}>
+              <Ionicons name={f.icon} size={30} color={f.color} />
+              <AppText variant="smallBold" center style={styles.featureLabel} numberOfLines={2}>
+                {f.label}
+              </AppText>
+            </View>
           ))}
         </View>
-        <PrimaryButton label="Começar" onPress={start} testID="intro-start" style={styles.cta} />
-        <AppText variant="smallBold" center style={styles.footer}>
+
+        <PrimaryButton label="Começar" size="md" onPress={start} testID="intro-start" />
+
+        <AppText variant="small" center style={styles.footer}>
           Truco é gente de verdade.
         </AppText>
       </View>
@@ -118,36 +90,28 @@ export function IntroScreen({ navigation }: RootScreenProps<'Intro'>) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bgTop },
-  heroWrap: { width: '100%', aspectRatio: HERO_RATIO },
-  hero: { width: '100%', height: '100%' },
-  heroFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '22%' },
+  wood: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  heroWrap: { width: '100%', pointerEvents: 'none' },
+  statusScrim: { position: 'absolute', left: 0, right: 0, top: 0 },
   bottom: {
     flex: 1,
-    justifyContent: 'space-between',
+    justifyContent: 'space-evenly',
     paddingTop: spacing.md,
     paddingHorizontal: spacing.screen,
   },
-  pager: { flexGrow: 0 },
-  featuresRow: { flexDirection: 'row', gap: 7 },
+  features: { flexDirection: 'row', gap: 7 },
   feature: {
     flex: 1,
-    backgroundColor: 'rgba(10, 42, 38, 0.78)',
+    backgroundColor: colors.overlay,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.cardBorder,
     paddingVertical: 12,
-    paddingHorizontal: 3,
+    paddingHorizontal: 2,
     alignItems: 'center',
-    minHeight: 94,
     justifyContent: 'center',
+    minHeight: 80,
   },
-  featureLabel: { marginTop: 8, fontSize: 11, lineHeight: 14.5 },
-  page: { paddingHorizontal: spacing.md, justifyContent: 'center', minHeight: 94 },
-  pageText: { marginTop: 6 },
-  spacer: { flex: 1 },
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 12 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.35)' },
-  dotActive: { backgroundColor: colors.text, width: 8, height: 8, borderRadius: 4, marginTop: -1 },
-  cta: { marginBottom: 10 },
-  footer: { marginBottom: 2 },
+  featureLabel: { marginTop: 8, fontSize: 12, lineHeight: 15 },
+  footer: { color: colors.text },
 });

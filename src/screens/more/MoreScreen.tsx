@@ -31,7 +31,7 @@ export function MoreScreen({ navigation }: TabScreenProps<'More'>) {
   };
 
   return (
-    <Screen scroll testID="screen-more">
+    <Screen scroll withTabBar testID="screen-more">
       <GameHeader variant="title" title="Mais" />
       <View style={styles.group}>
         <MenuCard

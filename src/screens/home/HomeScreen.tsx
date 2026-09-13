@@ -66,7 +66,7 @@ export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
   };
 
   return (
-    <Screen scroll testID="screen-home">
+    <Screen scroll withTabBar testID="screen-home">
       <GameHeader variant="logo" />
 
       {loading && !profile ? (
@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorderStrong,
   },
-  banner: { width: '100%', aspectRatio: 831 / 273 },
+  banner: { width: '100%', aspectRatio: 2172 / 724 },
   friends: { flexDirection: 'row', alignItems: 'center', padding: 10 },
   friendsImage: { width: 64, height: 48, borderRadius: radius.sm },
 });

@@ -19,10 +19,16 @@
     "android": {
       "package": "com.mooby.trucomineiro",
       "googleServicesFile": "./google-services.json",
-      "adaptiveIcon": { "backgroundColor": "#00221a", "foregroundImage": "./assets/android-icon-foreground.png" },
+      "adaptiveIcon": {
+        "backgroundColor": "#04351e",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
       "predictiveBackGestureEnabled": false,
       "softwareKeyboardLayoutMode": "pan"
     },
+    "web": { "bundler": "metro", "output": "single", "favicon": "./assets/favicon.png" },
     "plugins": [
       "expo-font",
       "expo-dev-client",

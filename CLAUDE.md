@@ -14,6 +14,7 @@ npm run emulators         # auth 9099, functions 5001, firestore 8080, database 
 ./scripts/deploy.sh       # deploy de rules, indexes, functions, remote config + seed
 ./scripts/qa.sh <cmd>     # QA no emulador Android (launch, shot, tap, errors, otp_code)
 python scripts/visual-diff.py   # comparações com references/
+python scripts/generate-app-icons.py  # ícones iOS/Android a partir de references/app-icon.png
 ```
 
 ## Regras do projeto
