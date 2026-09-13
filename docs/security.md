@@ -51,6 +51,28 @@ Functions realmente escreveram:
 curl -H "x-seed-secret: <segredo>" https://southamerica-east1-truco-mineiro-wjf.cloudfunctions.net/diagnostics
 ```
 
+## Assinatura do APK
+
+`android/app/build.gradle` usa `signingConfig signingConfigs.debug` também na variante `release`, e esse
+config aponta para **`android/app/debug.keystore`** (o keystore genérico do template Expo, o mesmo em
+qualquer projeto criado por ele). Impressões atuais:
+
+| | |
+|---|---|
+| SHA-1 | `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25` |
+| SHA-256 | `FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C` |
+
+**Isso não pode ir para a loja**: como o keystore é público, qualquer um consegue assinar um APK com a
+mesma identidade e passar pela verificação de impressão digital do Firebase (Phone Auth, App Check).
+Antes de publicar, gerar um keystore próprio, guardá-lo fora do Git, apontar `signingConfigs.release`
+para ele e registrar o novo SHA-1/SHA-256 no Console.
+
+Para conferir a assinatura real de um APK (fonte de verdade — não presuma o keystore):
+```
+"$ANDROID_HOME/build-tools/36.1.0/apksigner.bat" verify --print-certs dist/truco-mineiro-1.0.0.apk
+```
+
 ## Pendências
-- Registrar SHA-1/SHA-256 do app no Console para Play Integrity (já necessário para Phone Auth em release).
+- Registrar no Console o SHA-1/SHA-256 acima (necessário para Phone Auth fora do emulador).
+- Criar o keystore de release próprio e registrar o SHA dele antes da publicação.
 - Ligar o App Check (passos acima) antes da publicação.

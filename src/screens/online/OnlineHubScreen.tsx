@@ -45,7 +45,7 @@ export function OnlineHubScreen({ navigation }: RootScreenProps<'OnlineHub'>) {
           source={images.modeOnline}
           style={styles.heroImage}
           contentFit="cover"
-          contentPosition="top"
+          contentPosition="center"
         />
         <LinearGradient colors={['rgba(107,47,15,0)', '#6b2f0f']} style={styles.heroFade} />
         <View style={styles.heroText}>
@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.2)',
   },
-  heroImage: { width: '100%', height: '72%', opacity: 0.95 },
+  heroImage: { width: '100%', height: '80%', opacity: 0.95 },
   heroFade: { position: 'absolute', left: 0, right: 0, top: '25%', bottom: 0 },
   heroText: { position: 'absolute', left: 14, right: 14, bottom: 12 },
 });

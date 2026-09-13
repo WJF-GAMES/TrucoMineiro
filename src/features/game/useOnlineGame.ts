@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { GameAction, GameEvent, Seat, SeatView } from '@/domain/game';
-import type { SessionMeta } from '@/domain/model/types';
+import type { GameAction, Seat } from '@/domain/game';
+import type { ProgressionResult, SessionMeta } from '@/domain/model/types';
 import { useAuthStore } from '@/stores/authStore';
 import { useNetworkStore } from '@/stores/networkStore';
 import {
@@ -8,6 +8,7 @@ import {
   setPresenceState,
   subscribeSeatView,
   subscribeSessionMeta,
+  subscribeSessionResult,
 } from '@/services/firebase/rtdb';
 import {
   abandonMatch,
@@ -20,10 +21,7 @@ import { logEvent } from '@/services/firebase/analytics';
 import { reportError, setCrashContext } from '@/services/firebase/crashlytics';
 import { toast } from '@/stores/toastStore';
 import type { TableController, TablePlayer } from './types';
-
-interface ViewWithEvents extends SeatView {
-  recentEvents?: GameEvent[];
-}
+import { normalizeSeatView, normalizeSessionMeta, RemoteSeatView } from './normalizeSeatView';
 
 /**
  * Online match. The server (Cloud Functions) is the only authority: this hook subscribes to the
@@ -33,8 +31,9 @@ export function useOnlineGame(sessionId: string): TableController {
   const uid = useAuthStore((s) => s.user?.uid);
   const connected = useNetworkStore((s) => s.connected);
   const [meta, setMeta] = useState<SessionMeta | null>(null);
-  const [view, setView] = useState<ViewWithEvents | null>(null);
+  const [view, setView] = useState<RemoteSeatView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progression, setProgression] = useState<ProgressionResult | null>(null);
   const [busy, setBusy] = useState(false);
   const seq = useRef(0);
 
@@ -48,7 +47,7 @@ export function useOnlineGame(sessionId: string): TableController {
     setCrashContext({ matchId: sessionId, gameMode: 'online' });
     const unsub = subscribeSessionMeta(
       sessionId,
-      (m) => setMeta(m),
+      (m) => setMeta(normalizeSessionMeta(m)),
       (e) => setError(e.message),
     );
     return unsub;
@@ -59,14 +58,16 @@ export function useOnlineGame(sessionId: string): TableController {
     const unsubView = subscribeSeatView(
       sessionId,
       mySeat,
-      (v) => setView(v as ViewWithEvents),
+      (v) => setView(normalizeSeatView(v)),
       (e) => setError(e.message),
     );
+    const unsubResult = subscribeSessionResult(sessionId, mySeat, setProgression);
     const unsubPresence = connectSessionPresence(sessionId, mySeat);
     setPresenceState(uid, 'in_match', sessionId).catch(() => undefined);
     rejoinMatch(sessionId).catch(() => undefined);
     return () => {
       unsubView();
+      unsubResult();
       unsubPresence();
       setPresenceState(uid, 'online', null).catch(() => undefined);
     };
@@ -170,5 +171,6 @@ export function useOnlineGame(sessionId: string): TableController {
     busy,
     act,
     leave,
+    progression,
   };
 }

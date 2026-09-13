@@ -77,9 +77,14 @@ Para o login por telefone funcionar em produção (inclusive com o número de te
    região é avaliada **antes** da lista de números de teste, então nem o `+55 61 99628-9726 / 123456` passa.
 2. **Project settings → Your apps → Android (`com.mooby.trucomineiro`) → adicionar impressões digitais SHA**
    (sem elas o Play Integrity/reCAPTCHA não valida o app; o `google-services.json` atual está com `oauth_client: []`):
-   - debug keystore (`~/.android/debug.keystore`, alias `androiddebugkey`):
-     - SHA-1: `77:07:57:B3:46:17:22:31:CF:25:79:55:56:C9:09:81:85:B4:F2:EF`
-     - SHA-256: `CE:91:24:63:BB:BD:B4:BD:B6:A0:15:2B:A0:3D:CE:8A:D1:DB:C6:F3:D1:9F:F4:64:C5:EA:EE:52:57:EE:44:3A`
+   - **O keystore que assina os builds é `android/app/debug.keystore`** (o do template Expo), e **não**
+     `~/.android/debug.keystore` — `android/app/build.gradle` usa `file('debug.keystore')`, caminho
+     relativo ao módulo `app`. Conferir sempre pelo APK, nunca pelo keystore presumido:
+     ```
+     "$ANDROID_HOME/build-tools/36.1.0/apksigner.bat" verify --print-certs dist/truco-mineiro-1.0.0.apk
+     ```
+     - SHA-1: `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`
+     - SHA-256: `FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C`
    - o SHA-1/256 do keystore de release, quando existir.
 3. Baixar de novo o `google-services.json` depois de adicionar os SHA e substituir o da raiz.
 4. **Authentication → Sign-in method → Phone numbers for testing**: confirmar `+55 61 99628-9726 → 123456`.

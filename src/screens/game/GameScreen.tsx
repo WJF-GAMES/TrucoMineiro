@@ -14,6 +14,9 @@ import { StateView } from '@/components';
 import { Screen } from '@/components/Screen';
 import type { RootScreenProps } from '@/navigation/types';
 
+/** How long the online result screen waits for the server-side rewards before showing without them. */
+const REWARD_WAIT_MS = 4000;
+
 export function GameScreen(props: RootScreenProps<'Game'>) {
   const { params } = props.route;
   if (params.mode === 'ai')
@@ -102,27 +105,35 @@ function OnlineGame({ navigation, sessionId }: RootScreenProps<'Game'> & { sessi
   useEffect(() => {
     if (navigated.current) return;
     if (controller.status === 'finished' && controller.view) {
-      navigated.current = true;
       const won = controller.view.winner === myTeam;
-      logEvent('match_completed', { mode: 'online', won });
-      logEvent(won ? 'match_won' : 'match_lost', { mode: 'online' });
-      setTimeout(
-        () =>
-          navigation.replace('MatchResult', {
-            mode: 'online',
-            won,
-            scores: controller.view!.scores,
-            rematch: { mode: 'online', roomCode: null },
-          }),
-        900,
-      );
+      const scores = controller.view.scores;
+      const earned = controller.progression;
+      // The server writes the rewards right after finishing the match; wait for them, but never
+      // hold the player on a finished table — after REWARD_WAIT_MS we move on without the numbers.
+      const delay = earned ? 900 : REWARD_WAIT_MS;
+      const t = setTimeout(() => {
+        navigated.current = true;
+        logEvent('match_completed', { mode: 'online', won });
+        logEvent(won ? 'match_won' : 'match_lost', { mode: 'online' });
+        navigation.replace('MatchResult', {
+          mode: 'online',
+          won,
+          scores,
+          xpGained: earned?.xpGained,
+          coinsGained: earned?.coinsGained,
+          leaguePointsDelta: earned?.leaguePointsDelta,
+          leveledUp: earned?.leveledUp,
+          rematch: { mode: 'online', roomCode: null },
+        });
+      }, delay);
+      return () => clearTimeout(t);
     }
     if (controller.status === 'abandoned') {
       navigated.current = true;
       toast.info('Partida encerrada', 'Um jogador abandonou a mesa.');
       setTimeout(() => navigation.replace('Main', { screen: 'Play' }), 600);
     }
-  }, [controller.status, controller.view, myTeam, navigation]);
+  }, [controller.status, controller.view, controller.progression, myTeam, navigation]);
 
   if (controller.status === 'error') {
     return (

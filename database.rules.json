@@ -32,6 +32,9 @@
         "views": {
           "$seat": { ".read": "auth != null && root.child('gameSessions/' + $sessionId + '/meta/players/' + $seat + '/uid').val() == auth.uid" }
         },
+        "results": {
+          "$seat": { ".read": "auth != null && root.child('gameSessions/' + $sessionId + '/meta/players/' + $seat + '/uid').val() == auth.uid" }
+        },
         "state": { ".read": false, ".write": false }
       }
     }

@@ -10,6 +10,7 @@ npm run check             # lint + typecheck + testes
 npm test                  # jest (engine, IA, utils)
 npm run test:sim -- 3000  # 9.000 partidas IA x IA (deadlock/loop/estado impossível)
 npm run emulators         # auth 9099, functions 5001, firestore 8080, database 9000
+./scripts/build-apk.sh    # APK release em dist/ (sem argumento = todas as ABIs; "x86_64" = só emulador)
 ./scripts/deploy.sh       # deploy de rules, indexes, functions, remote config + seed
 ./scripts/qa.sh <cmd>     # QA no emulador Android (launch, shot, tap, errors, otp_code)
 python scripts/visual-diff.py   # comparações com references/

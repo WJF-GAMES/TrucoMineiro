@@ -27,6 +27,30 @@ já iniciada (`failed-precondition`), encerrada (`status closed`), erro de rede 
 - `userSessions/{uid}/active` permite restaurar a partida após reinício do app.
 - `abandonMatch`: quem sai perde (adversários recebem 12); sessão marcada `abandoned`, demais jogadores são avisados.
 
+## Armadilha do Realtime Database (corrigida)
+
+O RTDB **não guarda array vazio, objeto vazio nem null** — ele remove a chave. Um estado gravado como
+`{ currentRound: [], rounds: [], truco: null, appliedActionIds: {} }` volta sem essas chaves, e o engine
+quebrava com "spread of undefined" dentro da transação: toda jogada online era recusada e a mesa
+travava com `TypeError: Cannot convert undefined value to object`.
+
+Por isso tudo que vem do RTDB passa por um normalizador antes de ser usado:
+- servidor: `functions/src/lib/rtdbState.ts` (`normalizeStoredState`), aplicado em `submitGameAction`,
+  `advanceBots` e `abandonMatch`;
+- cliente: `src/features/game/normalizeSeatView.ts` (`normalizeSeatView`, `normalizeSessionMeta`).
+
+Ambos têm testes que reproduzem o round-trip removendo as chaves vazias
+(`functions/test/rtdbState.test.ts`, `src/features/game/__tests__/normalizeSeatView.test.ts`).
+
+## Recompensas no fim da partida online
+
+`finishIfNeeded` grava a progressão de cada humano em `gameSessions/{id}/results/{seat}` (regra do RTDB
+limita a leitura ao dono do assento). O app assina esse nó e leva XP / moedas / pontos de liga para a
+tela de resultado — no modo IA os mesmos números vêm da resposta de `finalizeMatch`.
+
 ## Limitações conhecidas
 - Não há timeout automático de turno para humanos ausentes (somente abandono explícito ou desconexão visível).
 - Assistir partidas de amigos ("Assistir") ainda não implementado (exibe aviso).
+- **Testado com 1 humano + 3 bots** (criar sala → completar com IA → iniciar → partida até 12 pontos,
+  com o servidor aplicando cada ação). Uma mesa com 2+ humanos reais exige dois dispositivos e ainda
+  não foi exercitada; o matchmaking de 4 humanos também não (a fila precisa de 4 contas simultâneas).

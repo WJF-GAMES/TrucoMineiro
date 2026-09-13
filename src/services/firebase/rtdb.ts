@@ -12,6 +12,7 @@ import type {
   MatchmakingEntry,
   Presence,
   PresenceState,
+  ProgressionResult,
   Room,
   SessionMeta,
 } from '@/domain/model/types';
@@ -124,6 +125,12 @@ export function connectSessionPresence(sessionId: string, seat: number): Unsub {
     set(r, false).catch(() => undefined);
   };
 }
+
+export const subscribeSessionResult = (
+  sessionId: string,
+  seat: number,
+  cb: (r: ProgressionResult | null) => void,
+) => subscribe<ProgressionResult>(`gameSessions/${sessionId}/results/${seat}`, cb);
 
 /** Index of the session a user is currently in (written by Functions), used to restore after a restart. */
 export const subscribeActiveSession = (uid: string, cb: (sessionId: string | null) => void) =>

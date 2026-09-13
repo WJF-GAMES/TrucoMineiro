@@ -1,5 +1,5 @@
 import { onRequest } from 'firebase-functions/v2/https';
-import { db, IS_EMULATOR, now, REGION } from './lib/admin';
+import { db, IS_EMULATOR, now, REGION, rtdb } from './lib/admin';
 import { LEAGUES } from './domain/model/leagues';
 import { ACHIEVEMENTS } from './progression';
 
@@ -50,7 +50,27 @@ export const diagnostics = onRequest({ region: REGION }, async (req, res) => {
     db.collection('leagues').get(),
     db.collection('seasons').get(),
   ]);
+  const sessionsSnap = await rtdb.ref('gameSessions').limitToLast(1).get();
+  const sessions = (sessionsSnap.val() ?? {}) as Record<string, { meta?: unknown; state?: Record<string, unknown>; views?: Record<string, Record<string, unknown>> }>;
+  const [sessionId, session] = Object.entries(sessions)[0] ?? [null, undefined];
+
   res.json({
+    session: session
+      ? {
+          id: sessionId,
+          meta: session.meta,
+          state: {
+            version: session.state?.version,
+            status: session.state?.status,
+            turnSeat: (session.state?.hand as Record<string, unknown> | undefined)?.turnSeat,
+            phase: (session.state?.hand as Record<string, unknown> | undefined)?.phase,
+            appliedActionIds: Object.keys(
+              (session.state?.appliedActionIds as Record<string, unknown>) ?? {},
+            ),
+          },
+          view0: session.views?.['0'],
+        }
+      : null,
     counts: {
       profiles: profiles.size,
       users: users.size,

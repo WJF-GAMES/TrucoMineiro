@@ -16,17 +16,11 @@ import {
   viewForSeat,
 } from './domain/game';
 import { Room, SessionMeta, SessionPlayer } from './domain/model/types';
+import { normalizeStoredState, StoredState } from './lib/rtdbState';
 import { parseAction } from './matches';
 import { processProgression } from './progression';
 
 const MAX_STORED_EVENTS = 30;
-
-interface StoredState extends MatchState {
-  /** Client action ids already applied (idempotency). */
-  appliedActionIds: Record<string, number>;
-  aiRngState: number;
-  trucos: Record<string, { called: number; accepted: number }>;
-}
 
 interface SeatViewPayload extends ReturnType<typeof viewForSeat> {
   recentEvents: GameEvent[];
@@ -112,9 +106,11 @@ async function applyToSession(
   let error: HttpsError | null = null;
   let produced: StoredState | null = null;
   let recent: GameEvent[] = [];
-  const res = await stateRef.transaction((current: StoredState | null) => {
-    if (!current) return current;
-    if (current.appliedActionIds?.[clientActionId]) {
+  const res = await stateRef.transaction((raw: StoredState | null) => {
+    if (!raw) return raw;
+    const current = normalizeStoredState(raw);
+    if (!current) return raw;
+    if (current.appliedActionIds[clientActionId]) {
       produced = current;
       return current;
     }
@@ -133,9 +129,9 @@ async function applyToSession(
       recent = applied.events.slice(before);
       next = {
         ...(applied as StoredState),
-        appliedActionIds: { ...(current.appliedActionIds ?? {}), [clientActionId]: now() },
+        appliedActionIds: { ...current.appliedActionIds, [clientActionId]: now() },
         aiRngState: current.aiRngState,
-        trucos: { ...(current.trucos ?? {}) },
+        trucos: { ...current.trucos },
       };
     } catch (e) {
       error = new HttpsError('failed-precondition', (e as Error).message);
@@ -168,7 +164,7 @@ async function finishIfNeeded(id: string, meta: SessionMeta, state: StoredState)
     avatarId: p.avatarId,
     bot: p.bot,
   }));
-  await processProgression({
+  const progression = await processProgression({
     matchId: id,
     mode: 'online',
     players,
@@ -182,7 +178,13 @@ async function finishIfNeeded(id: string, meta: SessionMeta, state: StoredState)
     [`gameSessions/${id}/meta/winnerTeam`]: state.winner,
     [`gameSessions/${id}/meta/updatedAt`]: now(),
   };
-  for (const p of players) if (!p.bot) updates[`userSessions/${p.uid}/active`] = null;
+  for (const p of players) {
+    if (p.bot) continue;
+    updates[`userSessions/${p.uid}/active`] = null;
+    // Each player reads their own rewards on the result screen (rules restrict it to the seat owner).
+    const earned = progression.byUid[p.uid];
+    if (earned) updates[`gameSessions/${id}/results/${p.seat}`] = earned;
+  }
   if (meta.roomCode) updates[`rooms/${meta.roomCode}/status`] = 'closed';
   await rtdb.ref().update(updates);
 }
@@ -296,7 +298,8 @@ export const advanceBots = authedCallable<
     seatOf(meta, uid);
     if (meta.status !== 'playing') return { version: 0, status: 'FINISHED' };
     const snap = await rtdb.ref(`gameSessions/${data.sessionId}/state`).get();
-    const state = snap.val() as StoredState;
+    const state = normalizeStoredState(snap.val());
+    if (!state) throw new HttpsError('not-found', 'Partida não encontrada.');
     const actors = seatsToAct(state);
     const botActs = actors.some((s) => meta.players[String(s)]?.bot);
     if (!botActs) return { version: state.version, status: state.status };
@@ -313,7 +316,8 @@ export const abandonMatch = authedCallable<{ sessionId: string }, { ok: true }>(
     const seat = seatOf(meta, uid);
     if (meta.status !== 'playing') return { ok: true };
     const stateSnap = await rtdb.ref(`gameSessions/${data.sessionId}/state`).get();
-    const state = stateSnap.val() as StoredState;
+    const state = normalizeStoredState(stateSnap.val());
+    if (!state) throw new HttpsError('not-found', 'Partida não encontrada.');
     // The abandoning team forfeits: the opponents win with the target score.
     const winner = (seat % 2 === 0 ? 1 : 0) as 0 | 1;
     const scores: [number, number] = [state.scores[0], state.scores[1]];

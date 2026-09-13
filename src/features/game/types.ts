@@ -1,5 +1,5 @@
 import type { ActionType, GameAction, GameEvent, Seat, SeatView } from '@/domain/game';
-import type { AvatarId } from '@/domain/model/types';
+import type { AvatarId, ProgressionResult } from '@/domain/model/types';
 
 export interface TablePlayer {
   seat: Seat;
@@ -28,4 +28,6 @@ export interface TableController {
   busy: boolean;
   act: (action: GameAction) => Promise<void> | void;
   leave: () => Promise<void> | void;
+  /** Rewards computed by the server (online only; the AI mode gets them from finalizeMatch). */
+  progression?: ProgressionResult | null;
 }

@@ -50,3 +50,4 @@ artifacts/screenshots/*.png
 functions/lib/
 functions/node_modules/
 functions/.env
+dist

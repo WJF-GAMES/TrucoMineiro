@@ -46,6 +46,13 @@ device 1080×2424), então o overlay serve para conferir **ordem, proporção e 
 font weight · line height · altura de botão · border radius · spacing · imagem · avatar ·
 tamanho dos cards · posição do header · Bottom Navigation · sombras · opacidade · gradientes.
 
+## Segunda rodada visual — o que mudou (12/09)
+
+A referência tem proporção ~0.58 (300×514) e o device 0.45 (1080×2424): mantendo as alturas fixas, os
+elementos ficavam **achatados** em relação ao mockup. Ajustes aplicados depois da primeira comparação:
+cards de modo 292→334, arte do card 60%→62%, título 20→21, linhas de ação +3pt de padding,
+escudo da liga 86×100→98×114, "Liga Bronze" 22→24, cards de estatística +5pt, linhas de menu 58→64.
+
 ## Resultado da auditoria (12/09)
 Aprovadas: Introdução, Login, Cadastro, Jogar, Liga, Amigos, Mais, Loja, Perfil, Configurações.
 Diferenças conhecidas e aceitas:
