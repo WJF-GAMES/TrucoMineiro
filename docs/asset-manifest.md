@@ -30,6 +30,9 @@ Nenhum foi gerado pelo ChatGPT nesta rodada (acesso à conversa exige login huma
 | avatar seu_ze | assets/images/avatars/seu_ze.png | PNG (circular) | Cadastro, Mesa | Seu Zé | recorte referência (Cadastro) | não | sim | não | 162×162 |
 | avatar seu_antonio | assets/images/avatars/seu_antonio.png | PNG (circular) | Cadastro, Mesa | Seu Antônio | recorte referência (Cadastro) | não | sim | não | 162×162 |
 | avatar tiao | assets/images/avatars/tiao.png | PNG (circular) | Loja, Mesa | Tião (óculos escuros) | recorte referência (Loja) | não | sim | não | 156×156 |
+| intro hero | assets/images/hero/intro_hero.png | PNG | Introdução | Logo + personagem + mesa (a faixa de benefícios é UI) | recorte de `references/introducao.png` via `scripts/extract-screen-assets.py` | sim | sim | não | 1419×1683 |
+| login header | assets/images/hero/login_header.png | PNG | Login | Paisagem mineira + logo + slogan | recorte de `references/login.png` (idem) | sim | sim | não | 1396×948 |
+| login footer | assets/images/hero/login_footer.png | PNG | Login | Vegetação do rodapé (a frase é UI, apagada do recorte) | recorte de `references/login.png` (idem) | não | sim | não | 1396×464 |
 | app icon (iOS) | assets/icon.png | PNG (opaco, sem alpha) | Launcher iOS / App Store | Ícone do app sangrando até a borda (o iOS aplica o squircle) | `references/app-icon.png` via `scripts/generate-app-icons.py` | não | sim | não | 1024×1024 |
 | adaptive foreground | assets/android-icon-foreground.png | PNG (alpha) | Launcher Android | Badge reduzido a 52,7% do canvas para caber inteiro até na máscara circular | idem | não | sim | não | 1024×1024 |
 | adaptive background | assets/android-icon-background.png | PNG | Launcher Android | Campo verde full-bleed (degradê radial do tabuleiro) | idem | não | sim | não | 1024×1024 |

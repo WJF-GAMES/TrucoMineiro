@@ -28,11 +28,18 @@ const emptySnapshot = {
   forEach: noop,
 };
 
-/** Assina algo que nunca muda: entrega um snapshot vazio e devolve o unsubscribe. */
+/** Firestore: entrega um snapshot vazio (as telas mostram estado vazio em vez de skeleton). */
 const subscribe = (_target, next) => {
   if (typeof next === 'function') setTimeout(() => next(emptySnapshot), 0);
   return noop;
 };
+
+/**
+ * Realtime Database: não chama de volta.
+ * `subscribeConnection` interpretaria um snapshot vazio como "offline" e a UI mostraria
+ * "sem conexão" no browser; sem callback, os stores mantêm os defaults.
+ */
+const subscribeQuiet = () => noop;
 
 // --- app ---------------------------------------------------------------------
 const app = { name: '[DEFAULT]', options: {} };
@@ -86,7 +93,7 @@ export const getDocs = async () => emptySnapshot;
 // --- realtime database -------------------------------------------------------
 export const getDatabase = () => ({});
 export const ref = (_db, path) => ({ path });
-export const onValue = subscribe;
+export const onValue = subscribeQuiet;
 export const set = asyncNoop;
 export const update = asyncNoop;
 export const serverTimestamp = () => Date.now();

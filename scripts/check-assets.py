@@ -15,7 +15,8 @@ ROOT = Path(__file__).resolve().parent.parent
 # source file -> (regex capturing "W / H", asset path)
 CHECKS = [
     ('src/screens/intro/IntroScreen.tsx', r'HERO_RATIO = (\d+) / (\d+)', 'assets/images/hero/intro_hero.png'),
-    ('src/screens/auth/LoginScreen.tsx', r'cards: \{[^}]*aspectRatio: (\d+) / (\d+)', 'assets/images/hero/login_cards.png'),
+    ('src/screens/auth/LoginScreen.tsx', r'HERO_RATIO = (\d+) / (\d+)', 'assets/images/hero/login_header.png'),
+    ('src/screens/auth/LoginScreen.tsx', r'FOOTER_RATIO = (\d+) / (\d+)', 'assets/images/hero/login_footer.png'),
     ('src/screens/home/HomeScreen.tsx', r'banner: \{[^}]*aspectRatio: (\d+) / (\d+)', 'assets/images/banners/temporada_minas.png'),
     ('src/screens/league/LeagueScreen.tsx', r'banner: \{[^}]*aspectRatio: (\d+) / (\d+)', 'assets/images/banners/temporada_minas.png'),
 ]

@@ -30,9 +30,7 @@ export function maxNationalDigits(country: CountryCode): number {
   return MAX_NATIONAL_DIGITS[country] ?? 15;
 }
 
-export const PHONE_PLACEHOLDER: Partial<Record<CountryCode, string>> = {
-  BR: '(61) 9.9628-9726',
-};
+
 
 /**
  * Brazilian display mask: "(61) 9.9628-9726" for mobile (11 digits) and
@@ -60,6 +58,14 @@ export function formatAsYouType(national: string, country: CountryCode): string 
   if (country === 'BR') return formatBrazilian(digits);
   return new AsYouType(country).input(digits);
 }
+
+/**
+ * Exemplo mostrado no campo vazio: só dígitos 9, já na máscara de cada país,
+ * para o usuário ver o formato sem achar que é um número real.
+ */
+export const PHONE_PLACEHOLDER: Partial<Record<CountryCode, string>> = Object.fromEntries(
+  COUNTRIES.map((c) => [c.code, formatAsYouType('9'.repeat(maxNationalDigits(c.code)), c.code)]),
+);
 
 /**
  * Returns the number in E.164 ("+5561996289726") or null when invalid.

@@ -22,6 +22,8 @@ const FEATURES: { icon: IoniconName; color: string; label: string }[] = [
 /** Natural aspect ratio of the artwork (assets/images/hero/intro_hero.png). */
 const HERO_RATIO = 1419 / 1683;
 
+const CARD_GAP = 7;
+
 /** Tela única de abertura: arte + benefícios + CTA. Sem etapas, paginação ou swipe. */
 export function IntroScreen({ navigation }: RootScreenProps<'Intro'>) {
   const insets = useSafeAreaInsets();
@@ -32,6 +34,11 @@ export function IntroScreen({ navigation }: RootScreenProps<'Intro'>) {
   // (o `cover` corta um pouco das laterais) para não sobrar vão morto sob a mesa.
   const naturalHero = width / HERO_RATIO;
   const heroHeight = Math.min(naturalHero * 1.28, Math.max(naturalHero, height * 0.62));
+
+  // "recompensas" é a palavra mais larga dos cards: em Nunito Bold ela ocupa ~6,35x o
+  // tamanho da fonte. Sem esse ajuste ela corta com reticências em telas de 320dp.
+  const cardWidth = (width - spacing.screen * 2 - CARD_GAP * 3) / 4;
+  const labelSize = Math.max(9, Math.min(12, (cardWidth - 2) / 6.35));
 
   useEffect(() => {
     logEvent('intro_viewed');
@@ -71,7 +78,12 @@ export function IntroScreen({ navigation }: RootScreenProps<'Intro'>) {
           {FEATURES.map((f) => (
             <View key={f.label} style={styles.feature}>
               <Ionicons name={f.icon} size={30} color={f.color} />
-              <AppText variant="smallBold" center style={styles.featureLabel} numberOfLines={2}>
+              <AppText
+                variant="smallBold"
+                center
+                numberOfLines={2}
+                style={[styles.featureLabel, { fontSize: labelSize, lineHeight: labelSize * 1.28 }]}
+              >
                 {f.label}
               </AppText>
             </View>
@@ -99,7 +111,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingHorizontal: spacing.screen,
   },
-  features: { flexDirection: 'row', gap: 7 },
+  features: { flexDirection: 'row', gap: CARD_GAP },
   feature: {
     flex: 1,
     backgroundColor: colors.overlay,
@@ -107,11 +119,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
     paddingVertical: 12,
-    paddingHorizontal: 2,
+    paddingHorizontal: 1,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 80,
   },
-  featureLabel: { marginTop: 8, fontSize: 12, lineHeight: 15 },
+  featureLabel: { marginTop: 8 },
   footer: { color: colors.text },
 });

@@ -14,7 +14,9 @@ npm run emulators         # auth 9099, functions 5001, firestore 8080, database 
 ./scripts/deploy.sh       # deploy de rules, indexes, functions, remote config + seed
 ./scripts/qa.sh <cmd>     # QA no emulador Android (launch, shot, tap, errors, otp_code)
 python scripts/visual-diff.py   # comparações com references/
-python scripts/generate-app-icons.py  # ícones iOS/Android a partir de references/app-icon.png
+python scripts/generate-app-icons.py     # ícones iOS/Android a partir de references/app-icon.png
+python scripts/extract-screen-assets.py  # artes das telas a partir dos prints em references/
+npx expo start --port 8081               # http://localhost:8081 abre a build web (inspeção rápida de tela)
 ```
 
 ## Regras do projeto

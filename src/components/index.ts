@@ -9,6 +9,7 @@ export * from './MenuItem';
 export * from './StatsRow';
 export * from './ProgressBar';
 export * from './Chips';
+export * from './CountryFlag';
 export * from './Inputs';
 export * from './StateView';
 export * from './SectionTitle';

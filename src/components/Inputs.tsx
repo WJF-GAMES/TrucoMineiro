@@ -3,7 +3,8 @@ import { Pressable, StyleSheet, TextInput, TextInputProps, View, ViewStyle } fro
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, fontFamily, radius } from '@/design-system';
 import { AppText } from './AppText';
-import type { Country } from '@/utils/phone';
+import { CountryFlag } from './CountryFlag';
+import { PHONE_PLACEHOLDER, type Country } from '@/utils/phone';
 
 const inputFont = { fontFamily: fontFamily.semibold, fontSize: 16, color: colors.text };
 
@@ -75,6 +76,7 @@ export function PhoneInput({
   onChangeText,
   autoFocus,
   placeholder,
+  error,
 }: {
   country: Country;
   onPressCountry: () => void;
@@ -82,7 +84,10 @@ export function PhoneInput({
   onChangeText: (v: string) => void;
   autoFocus?: boolean;
   placeholder?: string;
+  /** Pinta a borda de vermelho quando a tela reporta um erro do número. */
+  error?: boolean;
 }) {
+  const [focused, setFocused] = useState(false);
   return (
     <View style={styles.phoneRow}>
       <Pressable
@@ -91,8 +96,8 @@ export function PhoneInput({
         onPress={onPressCountry}
         style={[styles.field, styles.country]}
       >
-        <AppText style={{ fontSize: 22, marginRight: 6 }}>{country.flag}</AppText>
-        <AppText variant="bodyBold" style={{ fontSize: 16 }}>
+        <CountryFlag country={country} width={26} />
+        <AppText variant="bodyBold" style={styles.dial}>
           {country.dial}
         </AppText>
         <Ionicons
@@ -102,20 +107,30 @@ export function PhoneInput({
           style={{ marginLeft: 4 }}
         />
       </Pressable>
-      <View style={[styles.field, { flex: 1 }]}>
+      <View
+        style={[
+          styles.field,
+          styles.phoneField,
+          focused ? styles.fieldFocused : null,
+          error ? styles.fieldError : null,
+        ]}
+      >
         <TextInput
           testID="phone-input"
           accessibilityLabel="Número de telefone"
-          placeholder={placeholder ?? '(61) 9.9628-9726'}
+          placeholder={placeholder ?? PHONE_PLACEHOLDER[country.code]}
           placeholderTextColor={colors.textMuted}
           keyboardType="phone-pad"
+          inputMode="tel"
           textContentType="telephoneNumber"
           autoComplete="tel"
           autoFocus={autoFocus}
           maxLength={20}
           value={value}
           onChangeText={onChangeText}
-          style={[styles.input, inputFont, { fontSize: 17 }]}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          style={[styles.input, inputFont, styles.phoneText]}
         />
       </View>
     </View>
@@ -208,11 +223,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   fieldError: { borderColor: colors.dangerSoft },
+  fieldFocused: { borderColor: colors.primary },
+  phoneField: { flex: 1 },
+  phoneText: { fontSize: 17 },
   input: { flex: 1, paddingVertical: 12 },
   hint: { marginTop: 6, marginLeft: 4 },
   search: { minHeight: 48 },
   phoneRow: { flexDirection: 'row', gap: 10 },
   country: { paddingHorizontal: 12, minHeight: 56 },
+  dial: { fontSize: 16, marginLeft: 8 },
   otpRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   otpBox: {
     flex: 1,
