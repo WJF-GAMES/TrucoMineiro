@@ -18,8 +18,6 @@ Nenhum foi gerado pelo ChatGPT nesta rodada (acesso à conversa exige login huma
 | amigos_turma | assets/images/banners/amigos_turma.png | PNG | Amigos, Principal | Banner "Jogue com seus amigos" | recorte referência (Amigos) | não | sim | não | 393×228 |
 | loja_personalize | assets/images/banners/loja_personalize.png | PNG | Loja | Lado direito do banner "Personalize seu jogo!" (texto e botão são RN) | recorte referência (Loja) | não | sim | não | 432×369 |
 | temporada_minas | assets/images/banners/temporada_minas.png | PNG | Liga, Principal | Banner promocional "Temporada Minas Gerais" (arte com texto embutido, sem áreas clicáveis internas) | recorte referência (Liga) | não | sim | não | 831×273 (~3:1) |
-| coins_small/medium/large | assets/images/icons/coins_*.png | PNG (alpha) | Loja, Principal | Pilhas de moedas dos pacotes | recorte referência (Loja) + chroma-key | não | sim | não | 144×102 |
-| coin | assets/images/icons/coin.png | PNG (alpha circular) | Header (Jogar/Liga/Principal), Resultado | Ícone de moeda | recorte referência (Jogar) | não | sim | não | 60×60 |
 | gem | assets/images/icons/gem.png | PNG (alpha circular) | Header | Ícone de gema | recorte referência (Jogar) | não | sim | não | 60×60 |
 | shield_bronze | assets/images/icons/shield_bronze.png | PNG (alpha) | Liga, Perfil, Principal | Escudo Liga Bronze | recorte referência (Liga) | não | sim | não | 183×216 |
 | shield_silver | assets/images/icons/shield_silver.png | PNG (alpha) | Liga (próxima liga) | Escudo Liga Prata | recorte referência (Liga) | não | sim | não | 150×138 |

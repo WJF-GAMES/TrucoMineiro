@@ -30,7 +30,9 @@ jest.mock('@/services/firebase/functions', () => {
   }
   return { FunctionsError, joinRoom: (...args: unknown[]) => mockJoinRoom(...args) };
 });
-jest.mock('@/services/firebase/analytics', () => ({ logEvent: (...a: unknown[]) => mockLogEvent(...a) }));
+jest.mock('@/services/firebase/analytics', () => ({
+  logEvent: (...a: unknown[]) => mockLogEvent(...a),
+}));
 jest.mock('@/stores/toastStore', () => ({
   toast: { error: (...a: unknown[]) => mockToastError(...a), success: jest.fn(), info: jest.fn() },
 }));
@@ -63,7 +65,9 @@ describe('useRoomInvites', () => {
 
   it('descarta e apaga convite vencido em vez de mostrar sala morta', async () => {
     const { result } = await renderHook(() => useRoomInvites('me'));
-    await act(async () => emit?.([invite({ code: 'OLD123', createdAt: Date.now() - INVITE_TTL_MS - 1000 })]));
+    await act(async () =>
+      emit?.([invite({ code: 'OLD123', createdAt: Date.now() - INVITE_TTL_MS - 1000 })]),
+    );
     await waitFor(() => expect(mockDelete).toHaveBeenCalledWith('me', 'OLD123'));
     expect(result.current.invites).toHaveLength(0);
   });

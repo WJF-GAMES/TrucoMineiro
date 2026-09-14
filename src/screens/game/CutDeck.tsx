@@ -14,17 +14,22 @@ import Animated, {
 } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, icons } from '@/design-system';
+import { cutSplit, type CutDepth } from '@/features/game/shuffleCeremony';
 import { haptic } from '@/utils/haptics';
 import { PlayingCard } from './PlayingCard';
 
 const BOARD_W = 250;
-const BOARD_H = 158;
-const CARD_W = 84;
-const CARD_H = Math.round(CARD_W * 1.45);
+const BOARD_H = 196;
+const CARD_W = 92;
+const CARD_H = Math.round(CARD_W * 1.45 * 0.62); // metades "deitadas" como na referência
+/** Espaço entre as duas metades quando o baralho está partido. */
+const GAP = 14;
 /** Quanto o monte de cima precisa andar para o corte valer. */
 const CUT_DISTANCE = 74;
 /** Fração do ciclo em que o monte de cima está afastado; o resto é ele descendo por baixo. */
 const LIFT_PHASE = 0.45;
+/** Deslocamento por carta na pilha (efeito de espessura). */
+const STACK_STEP = 4;
 
 interface Props {
   /** Só quem corta arrasta; para os demais o corte acontece sozinho. */
@@ -33,19 +38,22 @@ interface Props {
   onCut: () => void;
   /** Corte concluído — por gesto, por tempo ou por outro jogador. */
   done: boolean;
+  /** Onde o baralho está partido (alto / meio / baixo) — muda a espessura das metades. */
+  depth: CutDepth;
 }
 
 /**
- * Etapa do corte: um monte só, partido ao meio.
- *
- * O arrasto **escova** a primeira metade da animação — o monte de cima acompanha o dedo até a
- * lateral — e soltar depois do limiar completa o corte, com a metade de baixo indo para o topo.
- * Um toque simples corta direto. Nada disso muda as cartas: a ordem já veio do motor/servidor.
+ * Etapa do corte, como na referência: o baralho já partido em duas metades, uma sobre a outra,
+ * com a linha tracejada entre elas. O jogador **arrasta a metade de cima** para o lado (as setas
+ * mostram o gesto); soltar depois do limiar completa o corte — a metade de cima desce e a de
+ * baixo sobe. Um toque simples também corta. Nada disso muda as cartas: a ordem já veio do
+ * motor/servidor; a profundidade só muda quantas cartas cada metade mostra.
  */
-export function CutDeck({ interactive, onCut, done }: Props) {
+export function CutDeck({ interactive, onCut, done, depth }: Props) {
   /** 0 = intacto, LIFT_PHASE = metade afastada, 1 = corte concluído. */
   const cut = useSharedValue(0);
   const idle = useSharedValue(0);
+  const split = cutSplit(depth);
 
   const commit = useCallback(() => {
     haptic.medium();
@@ -111,34 +119,44 @@ export function CutDeck({ interactive, onCut, done }: Props) {
 
   const gesture = Gesture.Exclusive(pan, tap);
 
+  const topY = -(CARD_H / 2 + GAP / 2) - split.top * STACK_STEP;
+  const bottomY = CARD_H / 2 + GAP / 2;
+
   const boardStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(idle.value, [0, 1], [2, -3]) }],
+    transform: [{ translateY: interpolate(idle.value, [0, 1], [1, -3]) }],
   }));
 
-  // Metade de cima: sai para a lateral, sobe e desce por baixo da outra.
+  // Metade de cima: sai para a lateral, depois desce para o lugar da metade de baixo.
   const topHalf = useAnimatedStyle(() => ({
     transform: [
       { translateX: interpolate(cut.value, [0, LIFT_PHASE, 1], [0, CUT_DISTANCE, 0]) },
-      { translateY: interpolate(cut.value, [0, LIFT_PHASE, 1], [-9, -24, 5]) },
-      { rotate: `${interpolate(cut.value, [0, LIFT_PHASE, 1], [-2, 7, 0])}deg` },
+      { translateY: interpolate(cut.value, [0, LIFT_PHASE, 1], [topY, topY - 8, bottomY + 6]) },
+      { rotate: `${interpolate(cut.value, [0, LIFT_PHASE, 1], [0, 6, 0])}deg` },
     ],
+    zIndex: cut.value > LIFT_PHASE ? 0 : 2,
   }));
 
-  // Metade de baixo: é pintada por cima (ordem no JSX), então subir já a coloca no topo do monte.
+  // Metade de baixo: sobe para o topo do monte quando a de cima sai do caminho.
   const bottomHalf = useAnimatedStyle(() => ({
     transform: [
-      { translateY: interpolate(cut.value, [0, LIFT_PHASE, 1], [9, 5, -5]) },
-      { rotate: `${interpolate(cut.value, [0, LIFT_PHASE, 1], [2, 1, 0])}deg` },
+      { translateY: interpolate(cut.value, [0, LIFT_PHASE, 1], [bottomY, bottomY, topY + 4]) },
     ],
+    zIndex: cut.value > LIFT_PHASE ? 2 : 0,
   }));
 
   const lineStyle = useAnimatedStyle(() => ({
-    opacity: (0.25 + idle.value * 0.35) * (1 - Math.min(1, cut.value / LIFT_PHASE)),
+    opacity: (0.35 + idle.value * 0.35) * (1 - Math.min(1, cut.value / LIFT_PHASE)),
   }));
 
-  const scissorsStyle = useAnimatedStyle(() => ({
-    opacity: interactive && !done ? (0.5 + idle.value * 0.4) * (1 - cut.value) : 0,
-    transform: [{ translateX: interpolate(idle.value, [0, 1], [-4, 4]) }],
+  const arrowsStyle = useAnimatedStyle(() => ({
+    opacity: interactive && !done ? (0.45 + idle.value * 0.45) * (1 - cut.value) : 0,
+    transform: [{ translateY: topY }],
+  }));
+  const arrowLeft = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(idle.value, [0, 1], [3, -3]) }],
+  }));
+  const arrowRight = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(idle.value, [0, 1], [-3, 3]) }],
   }));
 
   const checkStyle = useAnimatedStyle(() => ({
@@ -154,22 +172,29 @@ export function CutDeck({ interactive, onCut, done }: Props) {
         accessibilityRole="button"
         accessibilityLabel="Cortar o baralho"
         accessibilityHint={
-          interactive ? 'Toque ou arraste para o lado para cortar.' : 'Outro jogador está cortando.'
+          interactive
+            ? 'Arraste a parte de cima para o lado, ou toque, para cortar.'
+            : 'Outro jogador está cortando.'
         }
         accessibilityState={{ disabled: !interactive }}
         onAccessibilityTap={interactive ? commit : undefined}
       >
         <Animated.View style={[styles.line, lineStyle]} pointerEvents="none" />
 
-        <Animated.View style={[styles.half, topHalf]} pointerEvents="none">
-          <HalfStack />
-        </Animated.View>
-        <Animated.View style={[styles.half, bottomHalf]} pointerEvents="none">
-          <HalfStack />
+        <Animated.View style={[styles.arrows, arrowsStyle]} pointerEvents="none">
+          <Animated.View style={arrowLeft}>
+            <Ionicons name={icons.arrowLeft} size={26} color={colors.text} />
+          </Animated.View>
+          <Animated.View style={arrowRight}>
+            <Ionicons name={icons.arrowRight} size={26} color={colors.text} />
+          </Animated.View>
         </Animated.View>
 
-        <Animated.View style={[styles.scissors, scissorsStyle]} pointerEvents="none">
-          <Ionicons name={icons.cut} size={24} color={colors.gold} />
+        <Animated.View style={[styles.half, bottomHalf]} pointerEvents="none">
+          <HalfStack cards={split.bottom} />
+        </Animated.View>
+        <Animated.View style={[styles.half, topHalf]} pointerEvents="none">
+          <HalfStack cards={split.top} glow={interactive && !done} />
         </Animated.View>
 
         <Animated.View style={[styles.check, checkStyle]} pointerEvents="none">
@@ -180,18 +205,23 @@ export function CutDeck({ interactive, onCut, done }: Props) {
   );
 }
 
-const HalfStack = React.memo(function HalfStack() {
+/** Pilha "deitada": cada carta a mais empurra a de cima para dar espessura. */
+const HalfStack = React.memo(function HalfStack({
+  cards,
+  glow,
+}: {
+  cards: number;
+  glow?: boolean;
+}) {
+  const depths = Array.from({ length: Math.max(1, cards) }, (_, i) => cards - 1 - i);
   return (
-    <View style={{ width: CARD_W, height: CARD_H }}>
-      {[1, 0].map((depth) => (
+    <View style={[{ width: CARD_W, height: CARD_H + cards * STACK_STEP }, glow && styles.glow]}>
+      {depths.map((depth) => (
         <View
           key={depth}
-          style={[
-            StyleSheet.absoluteFill,
-            { transform: [{ translateX: -depth * 2 }, { translateY: -depth * 2 }] },
-          ]}
+          style={[styles.card, { transform: [{ translateY: depth * STACK_STEP }] }]}
         >
-          <PlayingCard faceDown width={CARD_W} />
+          <PlayingCard faceDown width={CARD_W} style={styles.flat} />
         </View>
       ))}
     </View>
@@ -206,16 +236,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'center',
   },
-  half: { position: 'absolute', width: CARD_W, height: CARD_H },
+  half: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+  card: { position: 'absolute', top: 0, left: 0 },
+  flat: { height: CARD_H },
+  glow: {
+    shadowColor: colors.primaryBright,
+    shadowOpacity: 0.7,
+    shadowRadius: 14,
+    elevation: 8,
+  },
   line: {
     position: 'absolute',
     height: 2,
-    width: CARD_W + 34,
+    width: CARD_W + 40,
     borderRadius: 1,
     borderTopWidth: 2,
     borderStyle: 'dashed',
-    borderColor: colors.gold,
+    borderColor: 'rgba(255,255,255,0.75)',
   },
-  scissors: { position: 'absolute', right: 26 },
+  arrows: {
+    position: 'absolute',
+    width: CARD_W + 120,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
   check: { position: 'absolute' },
 });

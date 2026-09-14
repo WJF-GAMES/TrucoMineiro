@@ -63,7 +63,7 @@ export function GameHeader({ variant, title, showBack, onBack, rightSlot }: Prop
               color={colors.text}
             />
           ) : (
-            <PlayerAvatar avatarId={avatarId} size={44} badge="coin" />
+            <PlayerAvatar avatarId={avatarId} size={44} />
           )}
         </View>
         <AppText variant="h1" center style={styles.title} numberOfLines={1}>

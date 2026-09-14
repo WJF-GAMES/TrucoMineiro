@@ -1,5 +1,11 @@
 import { normalizeStoredState } from '../src/lib/rtdbState';
-import { applyAction, cardId, createMatch, getAvailableActions } from '../src/domain/game';
+import {
+  applyAction,
+  cardId,
+  createMatch,
+  getAvailableActions,
+  skipCeremony,
+} from '../src/domain/game';
 
 jest.mock('../src/lib/admin', () => ({
   db: {},
@@ -36,7 +42,13 @@ function stripEmpties<T>(value: T): T | undefined {
 }
 
 describe('normalizeStoredState (Realtime Database round-trip)', () => {
-  const fresh = { ...createMatch(1234), appliedActionIds: {}, aiRngState: 7, trucos: {} };
+  // Mão já embaralhada e cortada: o round-trip que importa aqui é o da mesa jogando.
+  const fresh = {
+    ...skipCeremony(createMatch(1234)),
+    appliedActionIds: {},
+    aiRngState: 7,
+    trucos: {},
+  };
 
   it('restores the containers RTDB removed', () => {
     const asStored = stripEmpties(fresh) as Record<string, unknown>;
@@ -55,7 +67,24 @@ describe('normalizeStoredState (Realtime Database round-trip)', () => {
     expect(state.appliedActionIds).toEqual({});
     expect(state.trucos).toEqual({});
     expect(state.hand.hands.map((h) => h.length)).toEqual([3, 3, 3, 3]);
+    expect(state.hand.deck).toHaveLength(40);
+    expect(state.hand.deckVersion).toBe(1);
     expect(state.scores).toEqual([0, 0]);
+  });
+
+  it('keeps the shuffled deck across the round-trip during the ceremony', () => {
+    const shuffling = {
+      ...applyAction(createMatch(99), { type: 'SHUFFLE', seat: 3 }),
+      appliedActionIds: {},
+      aiRngState: 7,
+      trucos: {},
+    };
+    const state = normalizeStoredState(stripEmpties(shuffling))!;
+    expect(state.hand.phase).toBe('SHUFFLING');
+    expect(state.hand.shuffleCount).toBe(1);
+    expect(state.hand.deck.map(cardId)).toEqual(shuffling.hand.deck.map(cardId));
+    expect(state.hand.hands.map((h) => h.length)).toEqual([0, 0, 0, 0]);
+    expect(getAvailableActions(state, 3)).toEqual(['SHUFFLE', 'FINISH_SHUFFLE']);
   });
 
   it('lets the engine play from a normalized state', () => {

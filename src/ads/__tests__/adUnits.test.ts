@@ -103,7 +103,9 @@ describe('production', () => {
 describe('mapa de placements', () => {
   it('todo placement tem formato e tela declarados', () => {
     const { units } = loadWith({ EXPO_PUBLIC_APP_ENV: 'staging' }, true);
-    for (const placement of Object.keys(units.PLACEMENT_FORMAT) as (keyof typeof units.PLACEMENT_FORMAT)[]) {
+    for (const placement of Object.keys(
+      units.PLACEMENT_FORMAT,
+    ) as (keyof typeof units.PLACEMENT_FORMAT)[]) {
       expect(units.PLACEMENT_FORMAT[placement]).toBeTruthy();
       expect(units.PLACEMENT_SCREEN[placement]).toBeTruthy();
     }

@@ -40,7 +40,12 @@ export function NativeAdCard({ placement, style }: Props) {
         <View style={styles.header}>
           <SponsoredBadge />
           {ad.advertiser ? (
-            <AppText variant="caption" color={colors.textMuted} numberOfLines={1} style={styles.advertiser}>
+            <AppText
+              variant="caption"
+              color={colors.textMuted}
+              numberOfLines={1}
+              style={styles.advertiser}
+            >
               {ad.advertiser}
             </AppText>
           ) : null}

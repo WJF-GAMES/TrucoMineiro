@@ -18,6 +18,8 @@ export interface AIObservation {
   handValue: number;
   proposedValue: number | null;
   phase: SeatView['phase'];
+  /** Quantas vezes o baralho já foi misturado nesta mão (a IA decide quando "está bom"). */
+  shuffleCount: number;
   availableActions: ActionType[];
   roundLeader: Seat;
   trucoRequesterTeam: Team | null;
@@ -37,6 +39,7 @@ export function observe(view: SeatView): AIObservation {
     handValue: view.handValue,
     proposedValue: view.proposedValue,
     phase: view.phase,
+    shuffleCount: view.shuffleCount,
     availableActions: view.availableActions,
     roundLeader: view.roundLeader,
     trucoRequesterTeam: view.trucoRequesterTeam,

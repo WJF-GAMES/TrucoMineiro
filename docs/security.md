@@ -1,7 +1,7 @@
 # Segurança
 
 ## Princípios
-- Cliente **nunca** altera XP, vitórias, derrotas, liga, ranking, recompensas, moedas ou resultado. Somente Functions (Admin SDK).
+- Cliente **nunca** altera XP, vitórias, derrotas, liga, ranking, recompensas ou resultado. Somente Functions (Admin SDK).
 - Regras **deny by default** em Firestore (`firestore.rules`), RTDB (`database.rules.json`) e Storage (`storage.rules`).
 - Functions críticas (`authedCallable`) validam: Authentication, App Check (fora do emulador), payload (validadores explícitos), ownership (uid vs. assento/sala/solicitação), estado (`status`, `phase`, `availableActions`) e concorrência (transações Firestore/RTDB).
 

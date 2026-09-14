@@ -8,9 +8,13 @@ import {
   getAvailableActions,
   seatsToAct,
   viewForSeat,
+  skipCeremony,
 } from '../engine/engine';
 import { createRng } from '../engine/rng';
 import { MatchState, Seat } from '../state/types';
+
+/** Mão já embaralhada e cortada: os testes de jogo começam com as cartas na mão. */
+const dealt = (seed: number, targetScore?: number) => skipCeremony(createMatch(seed, targetScore));
 
 const ALL: AIDifficulty[] = ['easy', 'normal', 'hard'];
 
@@ -28,7 +32,7 @@ describe.each(ALL)('AI %s', (difficulty) => {
   it('only produces actions that the engine allows and finishes 300 matches', () => {
     const rng = createRng(1234);
     for (let g = 0; g < 300; g++) {
-      let state: MatchState = createMatch(g);
+      let state: MatchState = dealt(g);
       let steps = 0;
       while (state.status === 'PLAYING') {
         const actors = seatsToAct(state);
@@ -51,7 +55,7 @@ describe.each(ALL)('AI %s', (difficulty) => {
   });
 
   it('never sees hidden cards: the observation contains only its own hand', () => {
-    const state = createMatch(77);
+    const state = dealt(77);
     const obs = observe(viewForSeat(state, 1));
     const json = JSON.stringify(obs);
     for (const seat of [0, 2, 3] as Seat[]) {
@@ -69,7 +73,7 @@ describe('runAITurns', () => {
       [2, ai],
       [3, ai],
     ]);
-    const s = runAITurns(createMatch(5), aiSeats, createRng(5));
+    const s = runAITurns(dealt(5), aiSeats, createRng(5));
     // Seat 0 leads hand 1, so nothing happens until the human plays.
     expect(seatsToAct(s)).toEqual([0]);
     const played = applyAction(s, {
@@ -82,7 +86,7 @@ describe('runAITurns', () => {
   });
 
   it('completes a full AI vs AI match', () => {
-    const s = runAITurns(createMatch(8), fullAITable('hard'), createRng(8), 5000);
+    const s = runAITurns(dealt(8), fullAITable('hard'), createRng(8), 5000);
     expect(s.status).toBe('FINISHED');
   });
 });

@@ -375,7 +375,8 @@ async function joinGroup(
       currentWeekKey: groupData.weekKey,
       currentLeagueGroupId: groupData.groupId,
       // Semana nova zera a pontuação semanal (a antiga já virou histórico na finalização).
-      weeklyPoints: previous?.currentWeekKey === groupData.weekKey ? (previous.weeklyPoints ?? 0) : 0,
+      weeklyPoints:
+        previous?.currentWeekKey === groupData.weekKey ? (previous.weeklyPoints ?? 0) : 0,
       updatedAt: now(),
     };
     const { id: _id, ...data } = progress;
@@ -458,13 +459,7 @@ export async function rebalanceLeague(
     const writer = new BatchWriter();
     plan.groups.forEach((target, index) => {
       const division = divisionOf.get(target.groupId) ?? divisionFromId(target.groupId, index + 1);
-      const payload = groupPayload(
-        leagueId,
-        weekKey,
-        division,
-        target.memberIds.length,
-        'active',
-      );
+      const payload = groupPayload(leagueId, weekKey, division, target.memberIds.length, 'active');
       writer.set(groupRef(target.groupId), { ...payload, groupId: target.groupId }, true);
       for (const uid of target.memberIds) {
         if (plan.moves[uid] !== target.groupId) continue;
@@ -480,10 +475,9 @@ export async function rebalanceLeague(
 
     // Remove os membros dos grupos de origem só depois de gravá-los no destino.
     for (const g of loaded) {
-      const keep = new Set(
-        plan.groups.find((t) => t.groupId === g.group.groupId)?.memberIds ?? [],
-      );
-      for (const m of g.members) if (!keep.has(m.uid)) writer.delete(memberRef(g.group.groupId, m.uid));
+      const keep = new Set(plan.groups.find((t) => t.groupId === g.group.groupId)?.memberIds ?? []);
+      for (const m of g.members)
+        if (!keep.has(m.uid)) writer.delete(memberRef(g.group.groupId, m.uid));
     }
     for (const id of plan.removedGroupIds) writer.delete(groupRef(id));
 
@@ -518,7 +512,11 @@ class BatchWriter {
     this.count = 0;
   }
 
-  set(ref: FirebaseFirestore.DocumentReference, data: FirebaseFirestore.DocumentData, merge = false) {
+  set(
+    ref: FirebaseFirestore.DocumentReference,
+    data: FirebaseFirestore.DocumentData,
+    merge = false,
+  ) {
     this.batch.set(ref, data, { merge });
     this.bump();
   }
@@ -824,7 +822,10 @@ async function finalizeGroup(group: GroupDoc, report: FinalizeReport): Promise<b
     else report.stayed++;
   }
 
-  await gRef.set({ status: 'finalized', finalizedAt: processedAt, updatedAt: processedAt }, { merge: true });
+  await gRef.set(
+    { status: 'finalized', finalizedAt: processedAt, updatedAt: processedAt },
+    { merge: true },
+  );
   return true;
 }
 
@@ -1068,14 +1069,13 @@ export const bootstrapLeagueSystemForUser = authedCallable<
 
 export const ensureUserLeagueAssignment = bootstrapLeagueSystemForUser;
 
-export const getLeagueScreenSnapshot = authedCallable<
-  Record<string, never>,
-  LeagueScreenSnapshot
->(async ({ uid }) => {
-  const { group } = await ensureAssignment(uid);
-  await refreshIdentity(uid, group.groupId).catch(() => undefined);
-  return buildSnapshot(uid);
-});
+export const getLeagueScreenSnapshot = authedCallable<Record<string, never>, LeagueScreenSnapshot>(
+  async ({ uid }) => {
+    const { group } = await ensureAssignment(uid);
+    await refreshIdentity(uid, group.groupId).catch(() => undefined);
+    return buildSnapshot(uid);
+  },
+);
 
 export const getGlobalLeagueRanking = authedCallable<
   { limit?: number },
@@ -1137,8 +1137,7 @@ export const leagueAdmin = onRequest({ region: REGION, timeoutSeconds: 540 }, as
   }
   const op = String(req.query.op ?? 'seed');
   const weekKeyParam = typeof req.query.weekKey === 'string' ? req.query.weekKey : undefined;
-  const weekKey =
-    weekKeyParam && isValidWeekKey(weekKeyParam) ? weekKeyParam : weekKeyFor(now());
+  const weekKey = weekKeyParam && isValidWeekKey(weekKeyParam) ? weekKeyParam : weekKeyFor(now());
 
   try {
     switch (op) {
@@ -1215,4 +1214,3 @@ export const refreshLeagueRankings = onSchedule(
     }
   },
 );
-

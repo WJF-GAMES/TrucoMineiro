@@ -39,7 +39,7 @@ UI (screens) → stores (Zustand) → services/firebase → Firebase
 ```
 - **Contra a IA**: partida roda localmente com o engine; cada decisão de IA vê apenas `AIObservation`
   (projeção do `SeatView`). Ao final o cliente envia `{seed, aiSeed, difficulty, actions}` para `finalizeMatch`;
-  o servidor **re-executa** a partida (engine determinístico) e só então concede XP/moedas/liga.
+  o servidor **re-executa** a partida (engine determinístico) e só então concede XP/liga.
 - **Online**: o cliente nunca é autoridade. Ações vão por `submitGameAction` (callable, idempotente por `clientActionId`);
   o estado privado fica em `gameSessions/{id}/state` (sem leitura por clientes) e cada assento recebe sua
   projeção em `gameSessions/{id}/views/{seat}` (regra RTDB garante que só o dono do assento lê).

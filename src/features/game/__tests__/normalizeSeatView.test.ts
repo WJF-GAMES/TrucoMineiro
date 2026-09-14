@@ -62,7 +62,14 @@ describe('normalizeSessionMeta', () => {
       status: 'playing',
       players: {
         '0': { uid: 'u1', seat: 0, nickname: 'Joao', avatarId: 'joao' },
-        '1': { uid: 'bot1', seat: 1, nickname: 'IA', avatarId: 'seu_ze', bot: true, connected: false },
+        '1': {
+          uid: 'bot1',
+          seat: 1,
+          nickname: 'IA',
+          avatarId: 'seu_ze',
+          bot: true,
+          connected: false,
+        },
         '2': null,
       },
     })!;

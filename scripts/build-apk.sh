@@ -22,7 +22,8 @@ echo "==> Gradle: ${GRADLE_ARGS[*]}"
 ./gradlew "${GRADLE_ARGS[@]}"
 
 APK="$ROOT/android/app/build/outputs/apk/release/app-release.apk"
-VERSION="$(grep -oP 'versionName\s+"\K[^"]+' app/build.gradle | head -1)"
+# sed em vez de grep -P: o Git Bash do Windows roda com locale que não suporta -P.
+VERSION="$(sed -n 's/.*versionName *"\([^"]*\)".*/\1/p' app/build.gradle | head -1)"
 OUT_DIR="$ROOT/dist"
 OUT="$OUT_DIR/truco-mineiro-$VERSION.apk"
 

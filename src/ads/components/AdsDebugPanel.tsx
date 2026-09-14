@@ -35,12 +35,18 @@ export function AdsDebugPanel({ visible, onClose }: { visible: boolean; onClose:
       <Row label="Environment" value={state.environment} />
       <Row label="Mode" value={state.mode} />
       <Row label="Initialized" value={state.initialized ? 'sim' : 'não'} />
-      <Row label="Consent" value={`${state.consentStatus} (canRequestAds=${state.canRequestAds})`} />
+      <Row
+        label="Consent"
+        value={`${state.consentStatus} (canRequestAds=${state.canRequestAds})`}
+      />
       <Row label="Ads enabled" value={state.adsEnabled ? 'sim' : 'não (kill switch)'} />
 
       <Section title="Carregamento" />
       <Row label="Interstitial" value={state.interstitialLoaded ? 'Loaded' : 'Not loaded'} />
-      <Row label="Rewarded análise" value={state.rewardedAnalysisLoaded ? 'Loaded' : 'Not loaded'} />
+      <Row
+        label="Rewarded análise"
+        value={state.rewardedAnalysisLoaded ? 'Loaded' : 'Not loaded'}
+      />
       <Row label="Rewarded dica" value={state.rewardedTipLoaded ? 'Loaded' : 'Not loaded'} />
       <Row
         label="App Open"
@@ -101,7 +107,12 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3, gap: spacing.md },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 3,
+    gap: spacing.md,
+  },
   value: { flexShrink: 1, textAlign: 'right' },
   section: { marginTop: spacing.lg, marginBottom: spacing.xs },
   action: { marginTop: spacing.md },

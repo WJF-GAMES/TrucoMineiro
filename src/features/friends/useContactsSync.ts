@@ -40,12 +40,7 @@ export interface SyncProgress {
 }
 
 export type SyncErrorKind =
-  | 'permission'
-  | 'read'
-  | 'offline'
-  | 'rate_limit'
-  | 'app_check'
-  | 'unknown';
+  'permission' | 'read' | 'offline' | 'rate_limit' | 'app_check' | 'unknown';
 
 const EMPTY: AgendaMatchResult = { matched: [], unmatched: [] };
 
@@ -202,8 +197,7 @@ export function useContactsSync(
           // O servidor indexa dentro do lote; o app reposiciona no índice global da agenda.
           const offset = i * BATCH_SIZE;
           for (const m of res.matches) matches.push({ ...m, index: m.index + offset });
-          if (mounted.current)
-            setProgress({ phase: 'matching', ratio: (i + 1) / batches.length });
+          if (mounted.current) setProgress({ phase: 'matching', ratio: (i + 1) / batches.length });
         }
 
         const merged = mergeMatches(agenda, matches);

@@ -29,7 +29,10 @@ export const AdAnalytics = {
     logEvent('ad_request', baseParams(placement));
   },
   loaded(placement: AdPlacement, loadMs?: number) {
-    logEvent('ad_loaded', baseParams(placement, loadMs === undefined ? undefined : { load_ms: loadMs }));
+    logEvent(
+      'ad_loaded',
+      baseParams(placement, loadMs === undefined ? undefined : { load_ms: loadMs }),
+    );
   },
   failed(placement: AdPlacement, code: string) {
     logEvent('ad_failed', baseParams(placement, { error_code: code }));
@@ -48,7 +51,10 @@ export const AdAnalytics = {
     logEvent('ad_closed', baseParams(placement));
   },
   rewardEarned(placement: AdPlacement, rewardType: string, amount: number) {
-    logEvent('ad_reward_earned', baseParams(placement, { reward_type: rewardType, reward_amount: amount }));
+    logEvent(
+      'ad_reward_earned',
+      baseParams(placement, { reward_type: rewardType, reward_amount: amount }),
+    );
   },
   rewardDeclined(placement: AdPlacement, reason: string) {
     logEvent('ad_reward_declined', baseParams(placement, { reason }));

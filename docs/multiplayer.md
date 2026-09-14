@@ -45,7 +45,7 @@ Ambos têm testes que reproduzem o round-trip removendo as chaves vazias
 ## Recompensas no fim da partida online
 
 `finishIfNeeded` grava a progressão de cada humano em `gameSessions/{id}/results/{seat}` (regra do RTDB
-limita a leitura ao dono do assento). O app assina esse nó e leva XP / moedas / pontos de liga para a
+limita a leitura ao dono do assento). O app assina esse nó e leva XP / pontos de liga para a
 tela de resultado — no modo IA os mesmos números vêm da resposta de `finalizeMatch`.
 
 ## Convite de sala para um amigo

@@ -14,7 +14,8 @@ import { adLog } from '../log';
  * primeiro frame — quem chama decide o momento, depois de um contexto explicativo.
  */
 
-export type TrackingStatus = 'unavailable' | 'not_determined' | 'denied' | 'authorized' | 'restricted';
+export type TrackingStatus =
+  'unavailable' | 'not_determined' | 'denied' | 'authorized' | 'restricted';
 
 export interface TrackingProvider {
   getStatus: () => Promise<TrackingStatus>;

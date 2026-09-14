@@ -1,8 +1,4 @@
-import {
-  AdEventType,
-  InterstitialAd,
-  type PaidEvent,
-} from 'react-native-google-mobile-ads';
+import { AdEventType, InterstitialAd, type PaidEvent } from 'react-native-google-mobile-ads';
 import { AdAnalytics } from '../analytics/AdAnalytics';
 import { adUnitFor } from '../config/adUnits';
 import { AdAudioBridge } from '../core/AdAudioBridge';
@@ -140,7 +136,8 @@ class InterstitialManagerImpl {
 }
 
 export function errorCode(error: unknown): string {
-  if (error && typeof error === 'object' && 'code' in error) return String((error as { code: unknown }).code);
+  if (error && typeof error === 'object' && 'code' in error)
+    return String((error as { code: unknown }).code);
   if (error instanceof Error) return error.message.slice(0, 80);
   return 'unknown';
 }

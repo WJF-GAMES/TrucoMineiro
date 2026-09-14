@@ -35,7 +35,7 @@ português. Bronze é piso e Lenda de Minas é teto — nunca se pula liga.
 
 **Brasões:** `assetKey` é sempre `shield_<id>` e resolve para `assets/images/icons/<assetKey>.png`
 via `LEAGUE_SHIELDS` em `src/assets/index.ts`. O Firestore guarda só a chave, **nunca** um caminho
-local. Os arquivos já existem — não gerar arte nova. `coin`, `coins_*` e `gem` não são ligas.
+local. Os arquivos já existem — não gerar arte nova.
 
 ## Semana
 

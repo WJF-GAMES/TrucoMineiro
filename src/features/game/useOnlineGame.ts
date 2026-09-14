@@ -104,7 +104,8 @@ export function useOnlineGame(sessionId: string): TableController {
     // Resposta ao truco / mão de onze: se este cliente pode responder, o humano decide — o bot
     // parceiro só entra se ninguém humano da dupla estiver na mesa para isso.
     const iCanAnswer = view.availableActions.length > 0;
-    if (view.phase === 'PLAY') botMustAct = botSeats.has(view.turnSeat);
+    if (view.phase === 'PLAY' || view.phase === 'SHUFFLING' || view.phase === 'CUTTING')
+      botMustAct = botSeats.has(view.turnSeat);
     else if (iCanAnswer) botMustAct = false;
     else if (view.phase === 'TRUCO_RESPONSE' && view.trucoRequesterTeam !== null)
       botMustAct = [...botSeats].some((s) => team(s) !== view.trucoRequesterTeam);

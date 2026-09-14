@@ -170,7 +170,11 @@ describe('planRebalance', () => {
 
   it('quebra um grupo de 30 em dois de 15 mexendo o mínimo', () => {
     const members = ids('u', 30);
-    const plan = planRebalance([{ groupId: 'g1', memberIds: members }], members, (i) => `g${i + 1}`);
+    const plan = planRebalance(
+      [{ groupId: 'g1', memberIds: members }],
+      members,
+      (i) => `g${i + 1}`,
+    );
     expect(plan.groups.map((g) => g.memberIds.length)).toEqual([15, 15]);
     expect(plan.groups[0]!.groupId).toBe('g1');
     // Só os 15 que saíram do grupo original se movem.

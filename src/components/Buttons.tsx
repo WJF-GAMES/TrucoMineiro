@@ -25,6 +25,8 @@ interface BaseProps {
   size?: 'lg' | 'md' | 'sm';
   testID?: string;
   accessibilityLabel?: string;
+  /** `gold` para a ação de destaque da mesa ("CONFIRMAR CORTE"), como na referência. */
+  tone?: 'primary' | 'gold';
 }
 
 const HEIGHTS = { lg: 56, md: 48, sm: 40 } as const;
@@ -41,8 +43,11 @@ export function PrimaryButton({
   size = 'lg',
   testID,
   accessibilityLabel,
+  tone = 'primary',
 }: BaseProps) {
   const inactive = disabled || loading;
+  const gold = tone === 'gold';
+  const textColor = gold ? colors.textDark : colors.text;
   return (
     <Pressable
       testID={testID}
@@ -64,7 +69,7 @@ export function PrimaryButton({
       ]}
     >
       <LinearGradient
-        colors={gradients.primaryButton}
+        colors={gold ? gradients.goldButton : gradients.primaryButton}
         locations={[0, 0.55, 1]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -72,18 +77,22 @@ export function PrimaryButton({
       >
         <View style={styles.shine} />
         {loading ? (
-          <ActivityIndicator color={colors.text} />
+          <ActivityIndicator color={textColor} />
         ) : (
           <View style={styles.row}>
             {icon ? (
               <Ionicons
                 name={icon}
                 size={size === 'sm' ? 16 : 20}
-                color={iconColor ?? colors.text}
+                color={iconColor ?? textColor}
                 style={styles.icon}
               />
             ) : null}
-            <AppText variant={size === 'sm' ? 'buttonSmall' : 'button'} style={styles.label}>
+            <AppText
+              variant={size === 'sm' ? 'buttonSmall' : 'button'}
+              color={textColor}
+              style={styles.label}
+            >
               {label}
             </AppText>
           </View>

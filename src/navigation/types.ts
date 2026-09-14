@@ -38,7 +38,6 @@ export type RootStackParamList = {
     scores: [number, number];
     difficulty?: AIDifficultyId;
     xpGained?: number;
-    coinsGained?: number;
     leaguePointsDelta?: number;
     leveledUp?: boolean;
     /** Resumo da partida calculado a partir dos eventos do motor (conteúdo do Rewarded). */

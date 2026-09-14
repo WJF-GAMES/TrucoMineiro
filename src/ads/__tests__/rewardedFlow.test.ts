@@ -5,7 +5,10 @@ import { useAdStore } from '../core/AdState';
 import { RewardedManager } from '../managers/RewardedManager';
 
 jest.mock('@/services/firebase/analytics', () => ({ logEvent: jest.fn(), logScreen: jest.fn() }));
-jest.mock('@/services/firebase/remoteConfig', () => ({ flag: jest.fn(), initRemoteConfig: jest.fn() }));
+jest.mock('@/services/firebase/remoteConfig', () => ({
+  flag: jest.fn(),
+  initRemoteConfig: jest.fn(),
+}));
 
 type Listener = (payload?: unknown) => void;
 

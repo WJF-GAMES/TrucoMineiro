@@ -6,7 +6,10 @@ import { setAdConfigSource } from '../config/adConfig';
 import { useAdStore } from '../core/AdState';
 
 jest.mock('@/services/firebase/analytics', () => ({ logEvent: jest.fn(), logScreen: jest.fn() }));
-jest.mock('@/services/firebase/remoteConfig', () => ({ flag: jest.fn(), initRemoteConfig: jest.fn() }));
+jest.mock('@/services/firebase/remoteConfig', () => ({
+  flag: jest.fn(),
+  initRemoteConfig: jest.fn(),
+}));
 
 const createForAdRequest = NativeAd.createForAdRequest as jest.Mock;
 

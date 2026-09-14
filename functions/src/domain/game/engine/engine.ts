@@ -4,6 +4,7 @@ import { compareCards } from '../rules/strength';
 import { MAO_DE_ONZE_SCORE, STAKE_LADDER, TARGET_SCORE, nextStake } from '../rules/stakes';
 import {
   ActionType,
+  CutDepth,
   GameAction,
   GameEvent,
   HandResult,
@@ -27,6 +28,8 @@ export class InvalidActionError extends Error {
 
 const CARDS_PER_PLAYER = 3;
 const PLAYERS = 4;
+/** Cards moved from the top to the bottom by each kind of cut (40-card deck). */
+const CUT_SIZE: Record<CutDepth, number> = { high: 10, middle: 20, low: 30 };
 
 // ---------------------------------------------------------------------------
 // Match creation & dealing
@@ -48,36 +51,34 @@ export function createMatch(seed: number, targetScore = TARGET_SCORE): MatchStat
   return startHand(base, 3);
 }
 
+/**
+ * A hand starts with the dealer shuffling. The engine already shuffles the deck once (so a hand
+ * that is finished by timeout without any shuffle is still random); every `SHUFFLE` reshuffles
+ * the current deck, `FINISH_SHUFFLE` hands it to the cutter, and `CUT` rotates it and deals.
+ */
 function startHand(state: MatchState, dealerSeat: Seat): MatchState {
   const rng = createRng(state.rngState);
   const deck = shuffle(createDeck(), rng);
-  const hands = deal(deck, PLAYERS, CARDS_PER_PLAYER);
   const firstSeat = nextSeat(dealerSeat);
   const number = state.handsPlayed + 1;
-
-  const bothAtEleven = state.scores[0] >= MAO_DE_ONZE_SCORE && state.scores[1] >= MAO_DE_ONZE_SCORE;
-  // "Mão de ferro": both at 11 is played normally with no truco allowed.
-  const teamAtEleven: Team | null = bothAtEleven
-    ? null
-    : state.scores[0] >= MAO_DE_ONZE_SCORE
-      ? 0
-      : state.scores[1] >= MAO_DE_ONZE_SCORE
-        ? 1
-        : null;
 
   const hand: HandState = {
     number,
     dealerSeat,
     value: STAKE_LADDER[0]!,
     lastRaiserTeam: null,
-    phase: teamAtEleven === null ? 'PLAY' : 'MAO_DE_ONZE',
-    hands,
+    phase: 'SHUFFLING',
+    deck,
+    deckVersion: 0,
+    shuffleCount: 0,
+    hands: Array.from({ length: PLAYERS }, () => []),
     currentRound: [],
     roundLeader: firstSeat,
     rounds: [],
-    turnSeat: firstSeat,
+    // Who must act now: the dealer shuffles, then the next seat cuts, then `firstSeat` leads.
+    turnSeat: dealerSeat,
     truco: null,
-    maoDeOnzeTeam: teamAtEleven,
+    maoDeOnzeTeam: teamAtEleven(state),
     result: null,
   };
 
@@ -87,6 +88,87 @@ function startHand(state: MatchState, dealerSeat: Seat): MatchState {
     rngState: rng.state(),
     events: [...state.events, { type: 'HAND_STARTED', number, dealerSeat, firstSeat }],
   };
+}
+
+function teamAtEleven(state: MatchState): Team | null {
+  const bothAtEleven = state.scores[0] >= MAO_DE_ONZE_SCORE && state.scores[1] >= MAO_DE_ONZE_SCORE;
+  // "Mão de ferro": both at 11 is played normally with no truco allowed.
+  if (bothAtEleven) return null;
+  if (state.scores[0] >= MAO_DE_ONZE_SCORE) return 0;
+  if (state.scores[1] >= MAO_DE_ONZE_SCORE) return 1;
+  return null;
+}
+
+/** Seat that cuts: always the one after the dealer (an opponent, and the first to play). */
+export function cutterSeatOf(dealerSeat: Seat): Seat {
+  return nextSeat(dealerSeat);
+}
+
+// --- Ceremony: shuffle / cut / deal --------------------------------------
+
+function performShuffle(state: MatchState, seat: Seat): MatchState {
+  const rng = createRng(state.rngState);
+  const hand = state.hand;
+  const deck = shuffle(hand.deck, rng);
+  const deckVersion = hand.deckVersion + 1;
+  const shuffleCount = hand.shuffleCount + 1;
+  const next: MatchState = {
+    ...withHand(state, { deck, deckVersion, shuffleCount }),
+    rngState: rng.state(),
+  };
+  return emit(next, { type: 'SHUFFLE_PERFORMED', seat, deckVersion, shuffleCount });
+}
+
+function finishShuffle(state: MatchState, seat: Seat): MatchState {
+  const hand = state.hand;
+  const next = withHand(state, { phase: 'CUTTING', turnSeat: cutterSeatOf(hand.dealerSeat) });
+  return emit(next, {
+    type: 'SHUFFLE_FINALIZED',
+    seat,
+    deckVersion: hand.deckVersion,
+    shuffleCount: hand.shuffleCount,
+  });
+}
+
+function cutDeck(state: MatchState, seat: Seat, depth: CutDepth): MatchState {
+  const hand = state.hand;
+  const n = CUT_SIZE[depth];
+  // The top `n` cards go under the rest: a real cut, on the exact deck the dealer left.
+  const deck = [...hand.deck.slice(n), ...hand.deck.slice(0, n)];
+  const deckVersion = hand.deckVersion + 1;
+  const cut = emit(withHand(state, { deck, deckVersion }), {
+    type: 'CUT_DONE',
+    seat,
+    depth,
+    deckVersion,
+  });
+  return dealHand(cut);
+}
+
+function dealHand(state: MatchState): MatchState {
+  const hand = state.hand;
+  const hands = deal(hand.deck, PLAYERS, CARDS_PER_PLAYER);
+  const firstSeat = nextSeat(hand.dealerSeat);
+  const next = withHand(state, {
+    hands,
+    phase: hand.maoDeOnzeTeam === null ? 'PLAY' : 'MAO_DE_ONZE',
+    turnSeat: firstSeat,
+    roundLeader: firstSeat,
+  });
+  return emit(next, { type: 'HAND_DEALT', number: hand.number, firstSeat });
+}
+
+/**
+ * Test/tooling helper: runs the ceremony with no extra shuffle and a middle cut, leaving the hand
+ * dealt and ready to play. Production code never calls this — the players do it action by action.
+ */
+export function skipCeremony(state: MatchState): MatchState {
+  let s = state;
+  if (s.hand.phase === 'SHUFFLING')
+    s = applyAction(s, { type: 'FINISH_SHUFFLE', seat: s.hand.dealerSeat });
+  if (s.hand.phase === 'CUTTING')
+    s = applyAction(s, { type: 'CUT', seat: cutterSeatOf(s.hand.dealerSeat), depth: 'middle' });
+  return s;
 }
 
 // ---------------------------------------------------------------------------
@@ -100,6 +182,10 @@ export function getAvailableActions(state: MatchState, seat: Seat): ActionType[]
   const bothAtEleven = state.scores[0] >= MAO_DE_ONZE_SCORE && state.scores[1] >= MAO_DE_ONZE_SCORE;
 
   switch (hand.phase) {
+    case 'SHUFFLING':
+      return hand.dealerSeat === seat ? ['SHUFFLE', 'FINISH_SHUFFLE'] : [];
+    case 'CUTTING':
+      return cutterSeatOf(hand.dealerSeat) === seat ? ['CUT'] : [];
     case 'MAO_DE_ONZE':
       return hand.maoDeOnzeTeam === team ? ['ACCEPT_MAO_DE_ONZE', 'DECLINE_MAO_DE_ONZE'] : [];
     case 'PLAY': {
@@ -139,6 +225,15 @@ export function applyAction(state: MatchState, action: GameAction): MatchState {
 
   let next: MatchState;
   switch (action.type) {
+    case 'SHUFFLE':
+      next = performShuffle(state, action.seat);
+      break;
+    case 'FINISH_SHUFFLE':
+      next = finishShuffle(state, action.seat);
+      break;
+    case 'CUT':
+      next = cutDeck(state, action.seat, action.depth ?? 'middle');
+      break;
     case 'PLAY_CARD':
       next = playCard(state, action.seat, parseCardId(action.cardId));
       break;
@@ -349,6 +444,9 @@ export interface SeatView {
   /** Quem dá as cartas nesta mão — informação pública na mesa (dirige a cerimônia de início). */
   dealerSeat: Seat;
   handValue: number;
+  /** Ceremony state (the deck itself never leaves the engine). */
+  deckVersion: number;
+  shuffleCount: number;
   proposedValue: number | null;
   phase: HandState['phase'];
   turnSeat: Seat;
@@ -378,6 +476,8 @@ export function viewForSeat(state: MatchState, seat: Seat): SeatView {
     handNumber: h.number,
     dealerSeat: h.dealerSeat,
     handValue: h.value,
+    deckVersion: h.deckVersion,
+    shuffleCount: h.shuffleCount,
     proposedValue: h.truco?.proposedValue ?? null,
     phase: h.phase,
     turnSeat: h.turnSeat,

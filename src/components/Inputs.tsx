@@ -21,9 +21,7 @@ import { OTP_LENGTH, sanitizeOtp } from '@/utils/otp';
  * verde do próprio design. No app nativo isso não existe, então o reset é só para a build web.
  * `outlineStyle` é uma propriedade do react-native-web e não está nos tipos do React Native.
  */
-const noWebOutline = (
-  Platform.OS === 'web' ? { outlineStyle: 'none' } : null
-) as TextStyle | null;
+const noWebOutline = (Platform.OS === 'web' ? { outlineStyle: 'none' } : null) as TextStyle | null;
 
 const inputFont = {
   fontFamily: fontFamily.semibold,

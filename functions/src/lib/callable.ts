@@ -62,7 +62,12 @@ export function obj(v: unknown, name: string): Record<string, unknown> {
   return v as Record<string, unknown>;
 }
 
-export function arr<T>(v: unknown, name: string, max: number, item: (x: unknown, i: number) => T): T[] {
+export function arr<T>(
+  v: unknown,
+  name: string,
+  max: number,
+  item: (x: unknown, i: number) => T,
+): T[] {
   if (!Array.isArray(v)) throw new Error(`${name} inválido.`);
   if (v.length > max) throw new Error(`${name} aceita no máximo ${max} itens.`);
   return v.map(item);

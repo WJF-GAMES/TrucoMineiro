@@ -11,8 +11,8 @@ interface Props {
   ring?: boolean;
   ringColor?: string;
   status?: PresenceState | null;
-  /** Small coin-like badge at the bottom-right (as in the header avatar). */
-  badge?: 'coin' | 'check' | null;
+  /** Small badge at the bottom-right (e.g. a check on a selected avatar). */
+  badge?: 'check' | null;
   style?: ViewStyle;
   selected?: boolean;
   testID?: string;
@@ -54,6 +54,10 @@ export function PlayerAvatar({
             borderRadius: size / 2,
           }}
           contentFit="cover"
+          // Memória além do disco: sem isto cada avatar que volta a aparecer é decodificado de
+          // novo (1–2 s no emulador) e a mesa mostra anéis vazios depois da distribuição.
+          cachePolicy="memory-disk"
+          transition={0}
         />
       </View>
       {status ? (
@@ -82,7 +86,7 @@ export function PlayerAvatar({
               width: size * 0.24,
               height: size * 0.24,
               borderRadius: size * 0.12,
-              backgroundColor: badge === 'coin' ? colors.gold : colors.primary,
+              backgroundColor: colors.primary,
             },
           ]}
         >

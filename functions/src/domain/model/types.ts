@@ -53,8 +53,6 @@ export interface Profile {
   /** Espelho de `playerProgress.currentLeagueId` — quem manda é o sistema de ligas. */
   leagueId: LeagueId;
   leaguePoints: number;
-  coins: number;
-  gems: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -351,7 +349,6 @@ export interface SessionMeta {
 
 export interface ProgressionResult {
   xpGained: number;
-  coinsGained: number;
   /** Pontos somados ao ranking da semana (nunca negativo — pontos semanais só acumulam). */
   leaguePointsDelta: number;
   leveledUp: boolean;
@@ -368,12 +365,7 @@ export function xpForLevel(level: number): number {
 // --- Amigos: contatos, bloqueios e convite por QR ----------------------------
 
 /** Relação do usuário logado com um jogador encontrado na agenda ou na busca. */
-export type FriendRelation =
-  | 'self'
-  | 'friend'
-  | 'request_sent'
-  | 'request_received'
-  | 'none';
+export type FriendRelation = 'self' | 'friend' | 'request_sent' | 'request_received' | 'none';
 
 /**
  * Jogador encontrado a partir de um telefone da agenda.

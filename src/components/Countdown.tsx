@@ -98,6 +98,8 @@ interface TextProps {
   /** Abaixo disso o relógio vira alerta. */
   warningMs?: number;
   format: (ms: number) => string;
+  /** Número grande, sem pílula (card de tempo do embaralho). */
+  big?: boolean;
   testID?: string;
 }
 
@@ -105,7 +107,7 @@ interface TextProps {
  * "00:08" ao lado do nome. Componente isolado de propósito: é o único pedaço da cerimônia que
  * re-renderiza de segundo em segundo, então nada mais da mesa paga por ele.
  */
-export function CountdownText({ deadlineAt, warningMs = 4000, format, testID }: TextProps) {
+export function CountdownText({ deadlineAt, warningMs = 4000, format, big, testID }: TextProps) {
   const [left, setLeft] = useState(() => Math.max(0, (deadlineAt ?? Date.now()) - Date.now()));
 
   useEffect(() => {
@@ -117,6 +119,18 @@ export function CountdownText({ deadlineAt, warningMs = 4000, format, testID }: 
   }, [deadlineAt]);
 
   const urgent = left <= warningMs;
+  if (big) {
+    return (
+      <AppText
+        variant="stat"
+        color={urgent ? colors.dangerSoft : colors.primaryBright}
+        style={styles.bigClock}
+        testID={testID}
+      >
+        {format(left)}
+      </AppText>
+    );
+  }
   const color = urgent ? colors.dangerSoft : colors.gold;
   return (
     <View style={[styles.clock, urgent && styles.clockUrgent]} testID={testID}>
@@ -143,4 +157,5 @@ const styles = StyleSheet.create({
   },
   clockUrgent: { borderColor: 'rgba(255, 77, 87, 0.6)' },
   clockText: { marginLeft: 5, fontVariant: ['tabular-nums'] },
+  bigClock: { fontSize: 30, lineHeight: 34, fontVariant: ['tabular-nums'] },
 });

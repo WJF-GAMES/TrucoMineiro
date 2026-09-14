@@ -49,7 +49,14 @@ export const diagnostics = onRequest({ region: REGION }, async (req, res) => {
     db.collection('seasons').get(),
   ]);
   const sessionsSnap = await rtdb.ref('gameSessions').limitToLast(1).get();
-  const sessions = (sessionsSnap.val() ?? {}) as Record<string, { meta?: unknown; state?: Record<string, unknown>; views?: Record<string, Record<string, unknown>> }>;
+  const sessions = (sessionsSnap.val() ?? {}) as Record<
+    string,
+    {
+      meta?: unknown;
+      state?: Record<string, unknown>;
+      views?: Record<string, Record<string, unknown>>;
+    }
+  >;
   const [sessionId, session] = Object.entries(sessions)[0] ?? [null, undefined];
 
   res.json({
@@ -79,7 +86,6 @@ export const diagnostics = onRequest({ region: REGION }, async (req, res) => {
     profiles: profiles.docs.map((d) => ({
       id: d.id,
       nickname: d.get('nickname'),
-      coins: d.get('coins'),
       avatarId: d.get('avatarId'),
     })),
   });

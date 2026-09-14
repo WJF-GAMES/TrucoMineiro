@@ -64,7 +64,11 @@ export async function indexUserPhone(uid: string): Promise<void> {
 /** Remove o usuário do diretório (exclusão de conta). */
 export async function removePhoneIndex(uid: string): Promise<void> {
   const user = (await db.doc(`users/${uid}`).get()).data() as { phoneHash?: string } | undefined;
-  if (user?.phoneHash) await db.doc(`phoneIndex/${user.phoneHash}`).delete().catch(() => undefined);
+  if (user?.phoneHash)
+    await db
+      .doc(`phoneIndex/${user.phoneHash}`)
+      .delete()
+      .catch(() => undefined);
 }
 
 /** Consome a cota diária do usuário. Devolve quantos números ainda restam. */
@@ -72,7 +76,8 @@ async function consumeQuota(uid: string, numbers: number): Promise<number> {
   const ref = db.doc(`contactSync/${uid}`);
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
-    const data = snap.data() as { windowStart?: number; calls?: number; numbers?: number } | undefined;
+    const data = snap.data() as
+      { windowStart?: number; calls?: number; numbers?: number } | undefined;
     const fresh = !data?.windowStart || now() - data.windowStart > DAY_MS;
     const windowStart = fresh ? now() : data!.windowStart!;
     const calls = (fresh ? 0 : (data?.calls ?? 0)) + 1;
@@ -129,7 +134,11 @@ export const matchPhoneContacts = authedCallable<{ phones: string[] }, MatchPhon
     const [profiles, friendships, sent, received, blocks] = await Promise.all([
       db.getAll(...uids.map((u) => db.doc(`profiles/${u}`))),
       db.getAll(...uids.map((u) => db.doc(`friendships/${uid}/friends/${u}`))),
-      db.collection('friendRequests').where('from', '==', uid).where('status', '==', 'pending').get(),
+      db
+        .collection('friendRequests')
+        .where('from', '==', uid)
+        .where('status', '==', 'pending')
+        .get(),
       db.collection('friendRequests').where('to', '==', uid).where('status', '==', 'pending').get(),
       blockedUids(uid),
     ]);
@@ -204,8 +213,7 @@ export const createFriendInviteToken = authedCallable<Record<string, never>, Fri
   async ({ uid }) => {
     const userRef = db.doc(`users/${uid}`);
     const current = (await userRef.get()).data() as
-      | { inviteToken?: string; inviteTokenExpiresAt?: number }
-      | undefined;
+      { inviteToken?: string; inviteTokenExpiresAt?: number } | undefined;
     // Reaproveita o token válido para o QR do usuário não mudar a cada abertura da tela.
     if (current?.inviteToken && (current.inviteTokenExpiresAt ?? 0) > now() + DAY_MS) {
       return {

@@ -25,7 +25,7 @@ Ciclo por feature: implementar → `npm run format` → `npm run lint` → `npm 
 
 1. Introdução → Login (`+55 61 9.9628-9726`) → OTP (`123456`) → Cadastro → Principal ✅
 2. Principal → Jogar → Contra a IA (Normal) → Mesa → partida até 12 pontos → Resultado com
-   XP/moedas/liga vindos de `finalizeMatch` ✅
+   XP/liga vindos de `finalizeMatch` ✅
 3. Recompensa diária (`claimReward`), com botão virando "Resgatado" e saldo atualizado ✅
 4. Jogar → Jogar Online → Criar Sala (código de 6 caracteres) → Completar com IA → Pronto →
    Iniciar partida → Mesa online (servidor autoritativo, uma ação por vez via `submitGameAction`
@@ -45,12 +45,14 @@ Estado final no projeto real: 1 perfil, 5 partidas, 180 XP, 15 pontos de liga, 1
 | `functions/test/contacts.test.ts` | determinismo do HMAC, teto de 200 por lote, rejeição de tudo que não é E.164, id determinístico da solicitação |
 | `src/features/friends/__tests__/useRoomInvites.test.ts` | convite de sala: lista ao vivo, descarte do convite vencido, entrar (joinRoom + limpeza), sala cheia/partida começada (limpa) versus offline (mantém para nova tentativa), recusar |
 | `src/screens/friends/__tests__/FriendsScreen.test.tsx` | cada botão da tela chamando a Function certa: jogar/convidar (inclusive amigo em partida), ficha do amigo (liga, números, remover, bloquear com confirmação), aceitar/recusar/cancelar solicitação, estado de carregando das solicitações, busca escondendo bloqueados e oferecendo "Aceitar" para quem já me convidou, convite de sala recebido, desbloqueio, e a flag `friends_enabled` desligada |
-| `src/features/game/__tests__/shuffleCeremony.test.ts` | quem embaralha/corta (o cortador é sempre adversário do embaralhador), progresso do gesto, formato e limites do relógio |
-| `src/features/game/__tests__/useShuffleCeremony.test.ts` | a máquina embaralhar→cortar→distribuir→mesa: botão travado até o mínimo, conclusão automática ao completar, estouro de tempo sem travar a mão, assento remoto encenado, relógio congelado na reconexão, recomeço a cada mão e cancelamento se a mesa cai |
+| `src/domain/game/__tests__/engine.test.ts` (cerimônia) | a mão começa em `SHUFFLING` sem cartas; cada `SHUFFLE` muda a ordem de verdade e sobe `deckVersion`/`shuffleCount` sempre sobre o baralho atual; só o dealer embaralha e só na fase certa; `FINISH_SHUFFLE` não reembaralha escondido; `CUT` gira o baralho e a distribuição consome exatamente a versão final; timeout sem mistura ainda dá baralho embaralhado; mão de onze só depois da distribuição; determinismo por seed (replay) |
+| `src/features/game/__tests__/shuffleCeremony.test.ts` | quem embaralha/corta, formato do relógio, profundidades do corte |
+| `src/features/game/__tests__/turnTimer.test.ts` (cerimônia) | timeout na cerimônia (`FINISH_SHUFFLE` / `CUT` no meio) e prazo por fase (10 s / 8 s / 25 s) |
 | `src/features/game/__tests__/trickPresentation.test.ts` | a vaza fechada fica na mesa com as quatro cartas e a vencedora (qualquer assento fechando, inclusive o local), reconstrução da última vaza quando a view já é da mão seguinte, fast-forward na reconexão, segurar → recolher → vazio pelo relógio, lote repetido não reinicia |
 | `src/features/game/__tests__/turnTimer.test.ts` | jogada automática por timeout: carta mais fraca (nunca a manilha), correr do truco, entregar mão de onze, nada fora da vez; formato do relógio |
 | `src/domain/game/__tests__/engine.test.ts` (`leadingPlay`) | 1ª vence, 2ª/3ª/4ª assumem, 1ª permanece, manilhas, empate entre adversários vs. parceiros |
-| `src/screens/game/__tests__/TableCeremony.test.tsx` | a tela em cada estado: gesto pedido, botão liberado, vez de outro jogador (sem ação nem relógio), sucesso, tempo esgotado, corte, reconexão e distribuição |
+| `src/screens/game/__tests__/TableCeremony.test.tsx` | a tela do embaralho (título, card de tempo, contador e qualidade da mistura, ESTÁ BOM travado até a primeira mistura, EMBARALHAR NOVAMENTE travado enquanto a mistura não volta), outro jogador embaralhando (sem botões), corte com as três opções, reconexão e distribuição |
+| `functions/test/rtdbState.test.ts` (cerimônia) | round-trip do baralho/versão/contagem no RTDB durante o embaralho |
 
 Pendente de teste manual em aparelho: o diálogo do sistema de contatos em Android e iOS
 (o Jest cobre o mapeamento, não o diálogo nativo), o QR lido por um segundo aparelho e o convite de

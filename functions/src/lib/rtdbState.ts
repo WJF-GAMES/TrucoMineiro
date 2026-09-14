@@ -32,17 +32,19 @@ export function normalizeStoredState(raw: unknown): StoredState | null {
     value: rawHand.value ?? 1,
     lastRaiserTeam: (rawHand.lastRaiserTeam ?? null) as Team | null,
     phase: (rawHand.phase ?? 'PLAY') as HandState['phase'],
+    // Cerimônia: o baralho vive no estado até a distribuição (nunca sai para as views).
+    deck: cards(rawHand.deck),
+    deckVersion: rawHand.deckVersion ?? 0,
+    shuffleCount: rawHand.shuffleCount ?? 0,
     hands: [0, 1, 2, 3].map((i) => cards((rawHand.hands as unknown[] | undefined)?.[i])),
     currentRound: plays(rawHand.currentRound),
     roundLeader: (rawHand.roundLeader ?? 0) as Seat,
     rounds: Array.isArray(rawHand.rounds)
-      ? rawHand.rounds.filter(Boolean).map(
-          (r): RoundResult => ({
-            winner: (r?.winner ?? null) as Team | null,
-            winnerSeat: (r?.winnerSeat ?? 0) as Seat,
-            plays: plays(r?.plays),
-          }),
-        )
+      ? rawHand.rounds.filter(Boolean).map((r): RoundResult => ({
+          winner: (r?.winner ?? null) as Team | null,
+          winnerSeat: (r?.winnerSeat ?? 0) as Seat,
+          plays: plays(r?.plays),
+        }))
       : [],
     turnSeat: (rawHand.turnSeat ?? 0) as Seat,
     truco: rawHand.truco ?? null,

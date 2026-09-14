@@ -68,7 +68,9 @@ export function useFriendInviteLink() {
     };
 
     // App aberto pelo link (frio) e link recebido com o app já aberto.
-    Linking.getInitialURL().then(handle).catch(() => undefined);
+    Linking.getInitialURL()
+      .then(handle)
+      .catch(() => undefined);
     const sub = Linking.addEventListener('url', (e) => void handle(e.url));
     return () => {
       active = false;

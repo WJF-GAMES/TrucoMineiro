@@ -1,14 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import Animated, {
-  FadeIn,
-  FadeInDown,
-  FadeOut,
-  LinearTransition,
-  ZoomIn,
-} from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, LinearTransition, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, gradients, radius, spacing } from '@/design-system';
 import {
@@ -25,7 +19,7 @@ import {
 import { cardId, nextStake, Seat, stakeName, teamOf, GameEvent } from '@/domain/game';
 import type { TableController, TablePlayer } from '@/features/game/types';
 import { relativePosition, type TablePosition } from '@/features/game/seatLayout';
-import { useShuffleCeremony } from '@/features/game/useShuffleCeremony';
+import { useCeremony } from '@/features/game/useCeremony';
 import { useTrickPresentation } from '@/features/game/useTrickPresentation';
 import { isHolding, type TrickPresentation } from '@/features/game/trickPresentation';
 import { useTurnTimer } from '@/features/game/useTurnTimer';
@@ -34,6 +28,8 @@ import { PlayingCard } from './PlayingCard';
 import { DraggableCard } from './DraggableCard';
 import { TrickCard, type TrickCardStatus } from './TrickCard';
 import { CeremonyStagePill, TableCeremony } from './TableCeremony';
+import { MatchCountdown } from './MatchCountdown';
+import { DealOverlay, type DealTargets, type Point } from './DealOverlay';
 import { haptic } from '@/utils/haptics';
 
 interface Props {
@@ -87,26 +83,21 @@ export function GameTable({ controller, onExit }: Props) {
    * Precisa ficar antes dos `return` de loading/erro: é um hook.
    */
   const tableLive = status === 'playing' || status === 'reconnecting';
+  // Abertura da partida: "3, 2, 1, Valendo!" antes do primeiro embaralho. Só na primeira mão,
+  // antes de qualquer ação — quem reconecta no meio não vê contagem.
+  const [countdownDone, setCountdownDone] = useState(false);
+  const countdownActive =
+    tableLive && !!view && view.handNumber === 1 && view.version === 0 && !countdownDone;
+  const finishCountdown = useCallback(() => setCountdownDone(true), []);
   // A vaza que fechou a mão anterior ainda está na mesa: a cerimônia da mão nova espera por ela.
   const trick = useTrickPresentation(view, controller.recentEvents);
   const holding = isHolding(trick);
-  const freshHand =
-    tableLive &&
-    !!view &&
-    !holding &&
-    view.rounds.length === 0 &&
-    view.currentRound.length === 0 &&
-    view.myCards.length === 3;
-  const ceremony = useShuffleCeremony({
-    handNumber: view?.handNumber ?? 0,
-    dealerSeat: view?.dealerSeat ?? null,
-    mySeat,
-    eligible: freshHand,
-    paused: status === 'reconnecting',
-  });
-
-  // Relógio da jogada local: só corre quando é o jogador quem decide e a mesa está livre.
-  const myMove = availableActions.length > 0 && !holding && !ceremony.active && !busy;
+  // Cerimônia dirigida pelo motor (SHUFFLING/CUTTING) + distribuição local depois do corte.
+  // Ela espera a vaza anterior sair da mesa e a contagem inicial acabar.
+  const ceremonyHeld = !tableLive || holding || countdownActive;
+  // Relógio da jogada local: corre para carta, truco, mão de onze e também para embaralhar e
+  // cortar (o estouro fecha o embaralhamento / corta no meio).
+  const myMove = availableActions.length > 0 && !holding && !countdownActive && !busy;
   const deadlineAt = useTurnTimer({
     view,
     mySeat,
@@ -114,14 +105,78 @@ export function GameTable({ controller, onExit }: Props) {
     paused: status === 'reconnecting',
     act,
   });
+  const ceremony = useCeremony({
+    view,
+    mySeat,
+    recentEvents: controller.recentEvents,
+    deadlineAt,
+    act,
+    held: ceremonyHeld,
+  });
+  const tableHold = ceremony.active || countdownActive;
 
   // Enquanto o baralho está sendo embaralhado ninguém joga — nem os bots. Sem isto a mão já
   // começaria andada por trás da cerimônia.
   const { setBotsPaused } = controller;
+  // Bots só param durante a distribuição (a mesa está mostrando as cartas voando); no embaralho e
+  // no corte eles agem pelo motor como qualquer jogador.
+  const botsHold = countdownActive || (ceremony.active && ceremony.stage === 'deal');
+
+  // Distribuição: as cartas voam do baralho até as posições reais (montinhos e slots da mão).
+  // As posições são medidas na hora em que o estágio começa — a mesa está montada por baixo.
+  const bodyRef = useRef<View>(null);
+  const crossRef = useRef<View>(null);
+  const handRef = useRef<View>(null);
+  const backsRefs = useRef<Record<'top' | 'left' | 'right', View | null>>({
+    top: null,
+    left: null,
+    right: null,
+  });
+  const [dealTargets, setDealTargets] = useState<DealTargets | null>(null);
+  const commitTargets = useCallback((t: DealTargets) => setDealTargets(t), []);
+  const dealing = ceremony.active && ceremony.stage === 'deal';
   useEffect(() => {
-    setBotsPaused(ceremony.active);
+    // Fora da distribuição as posições ficam guardadas (o layout é o mesmo); só a próxima
+    // distribuição as mede de novo.
+    if (!dealing) return;
+    let cancelled = false;
+    const body = bodyRef.current;
+    if (!body) return;
+    body.measureInWindow((bx, by) => {
+      const centerOf = (node: View | null): Promise<Point | null> =>
+        new Promise((resolve) => {
+          if (!node) return resolve(null);
+          node.measureInWindow((x, y, w, h) => resolve({ x: x - bx + w / 2, y: y - by + h / 2 }));
+        });
+      void Promise.all([
+        centerOf(crossRef.current),
+        centerOf(backsRefs.current.top),
+        centerOf(backsRefs.current.left),
+        centerOf(backsRefs.current.right),
+        new Promise<{ cx: number; cy: number } | null>((resolve) => {
+          const hand = handRef.current;
+          if (!hand) return resolve(null);
+          hand.measureInWindow((x, y, w, h) => resolve({ cx: x - bx + w / 2, cy: y - by + h / 2 }));
+        }),
+      ]).then(([origin, top, left, right, hand]) => {
+        if (cancelled || !origin || !hand) return;
+        const step = 82 + 10; // largura da carta na mão + gap
+        commitTargets({
+          origin,
+          seats: { top: top ?? undefined, left: left ?? undefined, right: right ?? undefined },
+          hand: [-1, 0, 1].map((i) => ({ x: hand.cx + i * step, y: hand.cy })),
+        });
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [dealing, commitTargets]);
+
+  useEffect(() => {
+    setBotsPaused(botsHold);
     return () => setBotsPaused(false);
-  }, [ceremony.active, setBotsPaused]);
+  }, [botsHold, setBotsPaused]);
 
   if (status === 'loading' || !view)
     return (
@@ -141,8 +196,8 @@ export function GameTable({ controller, onExit }: Props) {
   const us = view.scores[myTeam];
   const them = view.scores[myTeam === 0 ? 1 : 0];
   const isMyTurn = view.phase === 'PLAY' && view.turnSeat === mySeat;
-  const canPlay = availableActions.includes('PLAY_CARD') && !busy && !holding;
-  const canTruco = availableActions.includes('REQUEST_TRUCO') && !busy && !holding;
+  const canPlay = availableActions.includes('PLAY_CARD') && !busy && !holding && !tableHold;
+  const canTruco = availableActions.includes('REQUEST_TRUCO') && !busy && !holding && !tableHold;
   const responding = availableActions.includes('ACCEPT_TRUCO');
   const maoDeOnze = availableActions.includes('ACCEPT_MAO_DE_ONZE');
   const nextValue =
@@ -156,7 +211,7 @@ export function GameTable({ controller, onExit }: Props) {
   // novas só aparecem depois da cerimônia, senão o jogador as veria antes de embaralhar.
   // (Quando a mão acaba sem vaza — correram, mão de onze — a cerimônia entra no efeito seguinte,
   // no mesmo lote de eventos, então não há quadro em que as cartas novas apareçam antes dela.)
-  const handCards = trick.handEnded && holding ? [] : view.myCards;
+  const handCards = (trick.handEnded && holding) || tableHold ? [] : view.myCards;
 
   const top = seatAt('top');
   const left = seatAt('left');
@@ -251,16 +306,263 @@ export function GameTable({ controller, onExit }: Props) {
         <View style={{ width: 44 }} />
       </View>
 
-      {/* Cerimônia e mesa se sobrepõem no mesmo espaço e trocam por crossfade: sem isso a
+      {/* A mesa fica sempre montada e visível (avatares e assentos nunca recarregam); a cerimônia
+          é um overlay opaco — mesmo gradiente e feltro — que entra e sai por fade. Sem isso a
           distribuição terminava num corte seco, com a mesa inteira montando de uma vez. */}
-      <View style={styles.body}>
-        {ceremony.active ? (
+      <View style={styles.body} ref={bodyRef}>
+        <View style={styles.tableBody} pointerEvents={tableHold ? 'none' : 'auto'}>
+          {/* Table: three opponents around the felt and the played cards in a cross */}
+          <View style={styles.table}>
+            <View style={styles.seatTop}>
+              <SeatInfo
+                player={top}
+                view={view}
+                row
+                partner
+                hideBacks={dealing}
+                backsRef={(n) => (backsRefs.current.top = n)}
+              />
+            </View>
+            <View style={styles.seatLeft}>
+              <SeatInfo
+                player={left}
+                view={view}
+                hideBacks={dealing}
+                backsRef={(n) => (backsRefs.current.left = n)}
+              />
+            </View>
+            <View style={styles.seatRight}>
+              <SeatInfo
+                player={right}
+                view={view}
+                hideBacks={dealing}
+                backsRef={(n) => (backsRefs.current.right = n)}
+              />
+            </View>
+
+            <View style={styles.cross} pointerEvents="none" ref={crossRef}>
+              <PlayedSlot
+                seat={top?.seat}
+                pos="top"
+                trick={trick}
+                mySeat={mySeat}
+                style={styles.crossTop}
+              />
+              <PlayedSlot
+                seat={left?.seat}
+                pos="left"
+                trick={trick}
+                mySeat={mySeat}
+                style={styles.crossLeft}
+              />
+              <PlayedSlot
+                seat={right?.seat}
+                pos="right"
+                trick={trick}
+                mySeat={mySeat}
+                style={styles.crossRight}
+              />
+              <PlayedSlot
+                seat={mySeat}
+                pos="bottom"
+                trick={trick}
+                mySeat={mySeat}
+                style={styles.crossBottom}
+                mine
+              />
+            </View>
+
+            {/* Eu: avatar com o anel do tempo, e o relógio ao lado quando é minha vez */}
+            <View style={styles.seatMe} testID={`seat-${mySeat}`}>
+              <View style={styles.meAvatarRow}>
+                <View style={styles.meClockSpacer} />
+                {deadlineAt !== null ? (
+                  <CountdownRing
+                    deadlineAt={deadlineAt}
+                    totalMs={TURN_TIMING.turnMs}
+                    size={58}
+                    strokeWidth={3.5}
+                  >
+                    <PlayerAvatar
+                      avatarId={me?.avatarId}
+                      size={48}
+                      ringColor={colors.primaryBright}
+                    />
+                  </CountdownRing>
+                ) : (
+                  <View style={styles.meAvatarIdle}>
+                    <PlayerAvatar
+                      avatarId={me?.avatarId}
+                      size={48}
+                      ringColor={isMyTurn ? colors.primaryBright : colors.cardBorderStrong}
+                    />
+                  </View>
+                )}
+                <View style={styles.meClockSpacer}>
+                  {deadlineAt !== null ? (
+                    <CountdownText
+                      deadlineAt={deadlineAt}
+                      warningMs={TURN_TIMING.warningMs}
+                      format={formatTurnClock}
+                      testID="turn-clock"
+                    />
+                  ) : null}
+                </View>
+              </View>
+              <AppText variant="smallBold" numberOfLines={1}>
+                Você
+              </AppText>
+            </View>
+          </View>
+
+          {/* Status line */}
+          <View style={styles.statusLine}>
+            {status === 'reconnecting' ? (
+              <View style={styles.statusPill}>
+                <Ionicons name="cloud-offline" size={14} color={colors.gold} />
+                <AppText variant="smallBold" style={{ marginLeft: 6 }}>
+                  Reconectando...
+                </AppText>
+              </View>
+            ) : view.phase === 'TRUCO_RESPONSE' ? (
+              <AppText variant="smallBold" color={colors.gold} center>
+                {view.trucoRequesterTeam === myTeam
+                  ? `Aguardando resposta ao ${stakeName(view.proposedValue ?? 3)}...`
+                  : `Pediram ${stakeName(view.proposedValue ?? 3)}! Aceitar, aumentar ou correr?`}
+              </AppText>
+            ) : view.phase === 'MAO_DE_ONZE' ? (
+              <AppText variant="smallBold" color={colors.gold} center>
+                {view.maoDeOnzeTeam === myTeam
+                  ? 'Mão de onze! Jogar valendo 3 ou entregar 1?'
+                  : 'Os adversários decidem a mão de onze...'}
+              </AppText>
+            ) : tableHold ? (
+              <AppText variant="small" color={colors.textSecondary} center>
+                {countdownActive ? 'A partida vai começar' : 'Preparando a mão...'}
+              </AppText>
+            ) : holding && trick.resolved ? (
+              <AppText
+                variant="smallBold"
+                color={
+                  trick.resolved.winner === null
+                    ? colors.gold
+                    : trick.resolved.winner === myTeam
+                      ? colors.primaryBright
+                      : colors.dangerSoft
+                }
+                center
+                testID="trick-result"
+              >
+                {trick.resolved.winner === null
+                  ? 'Rodada empatada'
+                  : trick.resolved.winnerSeat === mySeat
+                    ? 'Você venceu a rodada!'
+                    : `${bySeat.get(trick.resolved.winnerSeat)?.nickname ?? '...'} venceu a rodada`}
+              </AppText>
+            ) : isMyTurn ? (
+              <AppText variant="smallBold" color={colors.primaryBright} center>
+                Sua vez! Escolha uma carta.
+              </AppText>
+            ) : (
+              <AppText variant="small" color={colors.textSecondary} center>
+                Vez de {turnPlayer?.nickname ?? '...'}
+              </AppText>
+            )}
+          </View>
+
+          {/* My hand */}
+          <View style={[styles.handArea, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+            <View style={styles.hand} testID="my-hand" ref={handRef}>
+              {handCards.map((c) => (
+                <Animated.View key={cardId(c)} layout={LinearTransition.duration(220)}>
+                  <DraggableCard
+                    card={c}
+                    width={82}
+                    onPlay={
+                      canPlay
+                        ? () => act({ type: 'PLAY_CARD', seat: mySeat, cardId: cardId(c) })
+                        : undefined
+                    }
+                    disabled={!canPlay}
+                    dimmed={!canPlay && view.phase === 'PLAY'}
+                    highlighted={canPlay}
+                  />
+                </Animated.View>
+              ))}
+            </View>
+
+            {/* Actions come strictly from availableActions */}
+            <View style={styles.actions}>
+              {maoDeOnze ? (
+                <>
+                  <PrimaryButton
+                    label="Jogar (vale 3)"
+                    size="md"
+                    style={styles.actionBtn}
+                    onPress={() => act({ type: 'ACCEPT_MAO_DE_ONZE', seat: mySeat })}
+                    disabled={busy}
+                  />
+                  <SecondaryButton
+                    label="Entregar 1"
+                    size="md"
+                    style={styles.actionBtn}
+                    onPress={() => act({ type: 'DECLINE_MAO_DE_ONZE', seat: mySeat })}
+                    disabled={busy}
+                  />
+                </>
+              ) : responding ? (
+                <>
+                  <PrimaryButton
+                    label="Aceitar"
+                    size="md"
+                    style={styles.actionBtn}
+                    onPress={() => act({ type: 'ACCEPT_TRUCO', seat: mySeat })}
+                    disabled={busy}
+                    testID="action-accept"
+                  />
+                  {availableActions.includes('RAISE') ? (
+                    <SecondaryButton
+                      label={stakeName(nextStake(view.proposedValue ?? 3) ?? 12)}
+                      size="md"
+                      style={styles.actionBtn}
+                      onPress={() => act({ type: 'RAISE', seat: mySeat })}
+                      disabled={busy}
+                      testID="action-raise"
+                    />
+                  ) : null}
+                  <SecondaryButton
+                    label="Correr"
+                    size="md"
+                    style={styles.actionBtn}
+                    onPress={() => act({ type: 'RUN', seat: mySeat })}
+                    disabled={busy}
+                    testID="action-run"
+                  />
+                </>
+              ) : canTruco ? (
+                <SecondaryButton
+                  label={CALL_LABELS[nextValue] ?? `Pedir ${nextValue}`}
+                  size="md"
+                  icon="flame"
+                  style={styles.trucoBtn}
+                  onPress={() => act({ type: 'REQUEST_TRUCO', seat: mySeat })}
+                  disabled={busy}
+                  testID="action-truco"
+                />
+              ) : null}
+            </View>
+          </View>
+        </View>
+
+        {ceremony.active && !dealing ? (
           <Animated.View
             key="ceremony"
             style={StyleSheet.absoluteFill}
             entering={FadeIn.duration(240)}
             exiting={FadeOut.duration(260)}
           >
+            <LinearGradient colors={gradients.table} style={StyleSheet.absoluteFill} />
+            <View style={styles.feltOverlay} pointerEvents="none" />
             <TableCeremony
               ceremony={ceremony}
               players={players}
@@ -268,239 +570,18 @@ export function GameTable({ controller, onExit }: Props) {
               reconnecting={status === 'reconnecting'}
             />
           </Animated.View>
-        ) : (
-          <Animated.View
-            key="table"
-            style={styles.tableBody}
-            entering={FadeIn.duration(320)}
-            exiting={FadeOut.duration(160)}
-          >
-            {/* Table: three opponents around the felt and the played cards in a cross */}
-            <View style={styles.table}>
-              <View style={styles.seatTop}>
-                <SeatInfo player={top} view={view} row partner />
-              </View>
-              <View style={styles.seatLeft}>
-                <SeatInfo player={left} view={view} />
-              </View>
-              <View style={styles.seatRight}>
-                <SeatInfo player={right} view={view} />
-              </View>
+        ) : null}
 
-              <View style={styles.cross} pointerEvents="none">
-                <PlayedSlot
-                  seat={top?.seat}
-                  pos="top"
-                  trick={trick}
-                  mySeat={mySeat}
-                  style={styles.crossTop}
-                />
-                <PlayedSlot
-                  seat={left?.seat}
-                  pos="left"
-                  trick={trick}
-                  mySeat={mySeat}
-                  style={styles.crossLeft}
-                />
-                <PlayedSlot
-                  seat={right?.seat}
-                  pos="right"
-                  trick={trick}
-                  mySeat={mySeat}
-                  style={styles.crossRight}
-                />
-                <PlayedSlot
-                  seat={mySeat}
-                  pos="bottom"
-                  trick={trick}
-                  mySeat={mySeat}
-                  style={styles.crossBottom}
-                  mine
-                />
-              </View>
+        {dealing && dealTargets && view.dealerSeat !== undefined ? (
+          <DealOverlay
+            targets={dealTargets}
+            dealerSeat={view.dealerSeat}
+            mySeat={mySeat}
+            myCards={view.myCards}
+          />
+        ) : null}
 
-              {/* Eu: avatar com o anel do tempo, e o relógio ao lado quando é minha vez */}
-              <View style={styles.seatMe} testID={`seat-${mySeat}`}>
-                <View style={styles.meAvatarRow}>
-                  <View style={styles.meClockSpacer} />
-                  {deadlineAt !== null ? (
-                    <CountdownRing
-                      deadlineAt={deadlineAt}
-                      totalMs={TURN_TIMING.turnMs}
-                      size={58}
-                      strokeWidth={3.5}
-                    >
-                      <PlayerAvatar
-                        avatarId={me?.avatarId}
-                        size={48}
-                        ringColor={colors.primaryBright}
-                      />
-                    </CountdownRing>
-                  ) : (
-                    <View style={styles.meAvatarIdle}>
-                      <PlayerAvatar
-                        avatarId={me?.avatarId}
-                        size={48}
-                        ringColor={isMyTurn ? colors.primaryBright : colors.cardBorderStrong}
-                      />
-                    </View>
-                  )}
-                  <View style={styles.meClockSpacer}>
-                    {deadlineAt !== null ? (
-                      <CountdownText
-                        deadlineAt={deadlineAt}
-                        warningMs={TURN_TIMING.warningMs}
-                        format={formatTurnClock}
-                        testID="turn-clock"
-                      />
-                    ) : null}
-                  </View>
-                </View>
-                <AppText variant="smallBold" numberOfLines={1}>
-                  Você
-                </AppText>
-              </View>
-            </View>
-
-            {/* Status line */}
-            <View style={styles.statusLine}>
-              {status === 'reconnecting' ? (
-                <View style={styles.statusPill}>
-                  <Ionicons name="cloud-offline" size={14} color={colors.gold} />
-                  <AppText variant="smallBold" style={{ marginLeft: 6 }}>
-                    Reconectando...
-                  </AppText>
-                </View>
-              ) : view.phase === 'TRUCO_RESPONSE' ? (
-                <AppText variant="smallBold" color={colors.gold} center>
-                  {view.trucoRequesterTeam === myTeam
-                    ? `Aguardando resposta ao ${stakeName(view.proposedValue ?? 3)}...`
-                    : `Pediram ${stakeName(view.proposedValue ?? 3)}! Aceitar, aumentar ou correr?`}
-                </AppText>
-              ) : view.phase === 'MAO_DE_ONZE' ? (
-                <AppText variant="smallBold" color={colors.gold} center>
-                  {view.maoDeOnzeTeam === myTeam
-                    ? 'Mão de onze! Jogar valendo 3 ou entregar 1?'
-                    : 'Os adversários decidem a mão de onze...'}
-                </AppText>
-              ) : holding && trick.resolved ? (
-                <AppText
-                  variant="smallBold"
-                  color={
-                    trick.resolved.winner === null
-                      ? colors.gold
-                      : trick.resolved.winner === myTeam
-                        ? colors.primaryBright
-                        : colors.dangerSoft
-                  }
-                  center
-                  testID="trick-result"
-                >
-                  {trick.resolved.winner === null
-                    ? 'Rodada empatada'
-                    : trick.resolved.winnerSeat === mySeat
-                      ? 'Você venceu a rodada!'
-                      : `${bySeat.get(trick.resolved.winnerSeat)?.nickname ?? '...'} venceu a rodada`}
-                </AppText>
-              ) : isMyTurn ? (
-                <AppText variant="smallBold" color={colors.primaryBright} center>
-                  Sua vez! Escolha uma carta.
-                </AppText>
-              ) : (
-                <AppText variant="small" color={colors.textSecondary} center>
-                  Vez de {turnPlayer?.nickname ?? '...'}
-                </AppText>
-              )}
-            </View>
-
-            {/* My hand */}
-            <View style={[styles.handArea, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-              <View style={styles.hand} testID="my-hand">
-                {handCards.map((c, i) => (
-                  <Animated.View
-                    key={cardId(c)}
-                    entering={FadeInDown.delay(i * 80)}
-                    layout={LinearTransition.duration(220)}
-                  >
-                    <DraggableCard
-                      card={c}
-                      width={82}
-                      onPlay={
-                        canPlay
-                          ? () => act({ type: 'PLAY_CARD', seat: mySeat, cardId: cardId(c) })
-                          : undefined
-                      }
-                      disabled={!canPlay}
-                      dimmed={!canPlay && view.phase === 'PLAY'}
-                      highlighted={canPlay}
-                    />
-                  </Animated.View>
-                ))}
-              </View>
-
-              {/* Actions come strictly from availableActions */}
-              <View style={styles.actions}>
-                {maoDeOnze ? (
-                  <>
-                    <PrimaryButton
-                      label="Jogar (vale 3)"
-                      size="md"
-                      style={styles.actionBtn}
-                      onPress={() => act({ type: 'ACCEPT_MAO_DE_ONZE', seat: mySeat })}
-                      disabled={busy}
-                    />
-                    <SecondaryButton
-                      label="Entregar 1"
-                      size="md"
-                      style={styles.actionBtn}
-                      onPress={() => act({ type: 'DECLINE_MAO_DE_ONZE', seat: mySeat })}
-                      disabled={busy}
-                    />
-                  </>
-                ) : responding ? (
-                  <>
-                    <PrimaryButton
-                      label="Aceitar"
-                      size="md"
-                      style={styles.actionBtn}
-                      onPress={() => act({ type: 'ACCEPT_TRUCO', seat: mySeat })}
-                      disabled={busy}
-                      testID="action-accept"
-                    />
-                    {availableActions.includes('RAISE') ? (
-                      <SecondaryButton
-                        label={stakeName(nextStake(view.proposedValue ?? 3) ?? 12)}
-                        size="md"
-                        style={styles.actionBtn}
-                        onPress={() => act({ type: 'RAISE', seat: mySeat })}
-                        disabled={busy}
-                        testID="action-raise"
-                      />
-                    ) : null}
-                    <SecondaryButton
-                      label="Correr"
-                      size="md"
-                      style={styles.actionBtn}
-                      onPress={() => act({ type: 'RUN', seat: mySeat })}
-                      disabled={busy}
-                      testID="action-run"
-                    />
-                  </>
-                ) : canTruco ? (
-                  <SecondaryButton
-                    label={CALL_LABELS[nextValue] ?? `Pedir ${nextValue}`}
-                    size="md"
-                    icon="flame"
-                    style={styles.trucoBtn}
-                    onPress={() => act({ type: 'REQUEST_TRUCO', seat: mySeat })}
-                    disabled={busy}
-                    testID="action-truco"
-                  />
-                ) : null}
-              </View>
-            </View>
-          </Animated.View>
-        )}
+        {countdownActive ? <MatchCountdown onDone={finishCountdown} /> : null}
       </View>
 
       {/* Resultado da mão anterior. Fica fora do ramo acima porque a mão seguinte já começa com a
@@ -528,11 +609,16 @@ function SeatInfo({
   view,
   row,
   partner,
+  hideBacks,
+  backsRef,
 }: {
   player?: TablePlayer;
   view: NonNullable<TableController['view']>;
   row?: boolean;
   partner?: boolean;
+  /** Durante a distribuição os versos chegam voando: o montinho real fica invisível até lá. */
+  hideBacks?: boolean;
+  backsRef?: (node: View | null) => void;
 }) {
   if (!player) return <View />;
   const isTurn = view.phase === 'PLAY' && view.turnSeat === player.seat;
@@ -568,8 +654,8 @@ function SeatInfo({
             </AppText>
           </View>
         ) : null}
-        <View style={styles.backs}>
-          {Array.from({ length: count }).map((_, i) => (
+        <View style={[styles.backs, hideBacks && styles.hidden]} ref={backsRef}>
+          {Array.from({ length: hideBacks ? 3 : count }).map((_, i) => (
             <PlayingCard
               key={i}
               faceDown
@@ -709,6 +795,18 @@ const styles = StyleSheet.create({
   roundDot: { width: 9, height: 9, borderRadius: 5 },
 
   body: { flex: 1 },
+  // Cópia do feltro para o overlay da cerimônia (o do root fica coberto pelo gradiente opaco).
+  feltOverlay: {
+    position: 'absolute',
+    left: '7%',
+    right: '7%',
+    top: '8%',
+    bottom: '34%',
+    borderRadius: 180,
+    backgroundColor: 'rgba(20, 110, 70, 0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(120, 220, 160, 0.14)',
+  },
   tableBody: { flex: 1 },
   table: { flex: 1, position: 'relative' },
   seatTop: { position: 'absolute', top: 4, left: 0, right: 0, alignItems: 'center' },
@@ -718,7 +816,8 @@ const styles = StyleSheet.create({
   seatInfoRow: { flexDirection: 'row', alignItems: 'center' },
   seatMeta: { alignItems: 'center', marginTop: 4 },
   seatName: { maxWidth: 96, textAlign: 'center' },
-  backs: { flexDirection: 'row', marginTop: 3 },
+  backs: { flexDirection: 'row', marginTop: 3, minHeight: 29 },
+  hidden: { opacity: 0 },
   backOverlap: { marginLeft: -9 },
   disconnected: {
     position: 'absolute',

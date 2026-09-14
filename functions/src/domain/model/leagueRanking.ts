@@ -36,9 +36,7 @@ export interface RankableMember {
 
 /** Ordena e atribui `currentRank` 1..n (cópia — não muta a entrada). */
 export function rankMembers<T extends RankableMember>(members: T[]): (T & { rank: number })[] {
-  return [...members]
-    .sort(compareMembers)
-    .map((member, index) => ({ ...member, rank: index + 1 }));
+  return [...members].sort(compareMembers).map((member, index) => ({ ...member, rank: index + 1 }));
 }
 
 /**
@@ -99,10 +97,7 @@ export function resolveWeeklyOutcomes(
 }
 
 /** Texto da regra semanal ("Os 5 primeiros sobem..."), sempre derivado dos números do backend. */
-export function weeklyRuleText(zones: {
-  promotionCount: number;
-  relegationCount: number;
-}): string {
+export function weeklyRuleText(zones: { promotionCount: number; relegationCount: number }): string {
   const { promotionCount: up, relegationCount: down } = zones;
   if (up === 0 && down === 0) {
     return 'Seu grupo ainda é pequeno demais para promoção e rebaixamento nesta semana.';

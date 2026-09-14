@@ -63,12 +63,7 @@ export function FriendSheet({ entry, busy, onClose, onPlay, onRemove, onBlock }:
   const state = presence?.state ?? 'offline';
   const league = leagueById(profile.leagueId);
 
-  const confirm = (
-    title: string,
-    message: string,
-    actionLabel: string,
-    run: () => void,
-  ) =>
+  const confirm = (title: string, message: string, actionLabel: string, run: () => void) =>
     Alert.alert(title, message, [
       { text: 'Cancelar', style: 'cancel' },
       { text: actionLabel, style: 'destructive', onPress: run },

@@ -11,7 +11,7 @@ Tokens em `src/design-system/` — nenhuma tela usa valores arbitrários fora de
 | card | `rgba(20,62,59,0.72)` + borda `rgba(120,200,170,0.22)` | Cards "vidro" (Mais, Liga, Perfil, Configurações) |
 | input | `rgba(4,21,23,0.85)` | Campos de telefone, apelido, busca |
 | primary / primaryBright / primaryDark / primaryDeep | `#05c875` / `#1ee38c` / `#03a25e` / `#006330` | CTA verde (gradiente claro→escuro), chips ativos, tab ativa, barras de progresso |
-| gold | `#edbe0f` | Moedas, "VER TODOS", troféu, ícones de destaque |
+| gold | `#edbe0f` | "VER TODOS", troféu, valor da mão, ícones de destaque |
 | danger | `#f00d17` | Derrotas, badge "Mais popular", "Sair da conta", "Excluir Conta" |
 | blue / blueDeep | `#025bb3` / `#023f80` | Card "JOGAR CONTRA A IA" |
 | orange / orangeDeep | `#be6824` / `#7a3a12` | Card "JOGAR ONLINE" |
@@ -42,5 +42,5 @@ Componentes de jogo: PlayingCard (frente nativa / verso vermelho), GameTable, Ga
 
 ## Regras
 - Ícones somente de `icons.ts` (Ionicons). Nada de emoji como asset.
-- Dados do mockup (João da Serra, 1.250 moedas…) nunca são hardcoded: vêm de Firestore/RTDB.
+- Dados do mockup (João da Serra, 124 partidas…) nunca são hardcoded: vêm de Firestore/RTDB.
 - Responsividade por Flexbox + SafeArea + aspectRatio; nada de coordenadas absolutas para a interface inteira.

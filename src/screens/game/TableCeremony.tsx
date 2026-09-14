@@ -1,25 +1,36 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, icons, radius, spacing } from '@/design-system';
-import { AppText, CountdownRing, CountdownText, PlayerAvatar, PrimaryButton } from '@/components';
+import {
+  AppText,
+  CountdownRing,
+  CountdownText,
+  PlayerAvatar,
+  PrimaryButton,
+  SecondaryButton,
+} from '@/components';
 import type { Seat } from '@/domain/game';
 import type { TablePlayer } from '@/features/game/types';
 import { relativePosition } from '@/features/game/seatLayout';
 import {
   CEREMONY_TIMING,
+  CUT_DEPTHS,
   CeremonyStage,
+  type CutDepth,
+  cutSplit,
   formatSeatClock,
   cutterSeat,
   seatStatus,
   shufflerSeat,
 } from '@/features/game/shuffleCeremony';
-import type { ShuffleCeremony } from '@/features/game/useShuffleCeremony';
+import type { ShuffleCeremony } from '@/features/game/useCeremony';
+import { haptic } from '@/utils/haptics';
 import { CutDeck } from './CutDeck';
-import { DealingCards } from './DealingCards';
-import { DeckHint, ShuffleDeck, ShuffleProgressBar } from './ShuffleDeck';
+import { PlayingCard } from './PlayingCard';
+import { ShuffleAnimation } from './ShuffleAnimation';
 
 interface Props {
   ceremony: ShuffleCeremony;
@@ -73,6 +84,12 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
   const copy = ceremonyCopy(ceremony, actorName);
   const showDeal = ceremony.stage === 'deal';
   const showCut = ceremony.stage === 'cut';
+  // Onde cortar: escolha do jogador local — vai no `CUT` para o motor. Quem não corta vê o meio.
+  const { cutDepth, setCutDepth } = ceremony;
+  const cutChooser = showCut && ceremony.iAmActor && !ceremony.celebrating && !reconnecting;
+  const showShuffle = ceremony.stage === 'shuffle';
+  const shuffleChooser = showShuffle && ceremony.iAmActor && !reconnecting;
+  const shuffleFeedback = shuffleCopy(ceremony.shuffleCount);
 
   return (
     <View
@@ -88,8 +105,9 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
       <View style={styles.centre}>
         <Animated.View
           key={copy.key}
-          entering={FadeIn.duration(220)}
-          exiting={FadeOut.duration(140)}
+          // O texto novo só entra depois de o antigo sair: sem o atraso os dois se sobrepõem.
+          entering={FadeIn.delay(110).duration(200)}
+          exiting={FadeOut.duration(100)}
           accessibilityLiveRegion="polite"
           style={styles.title}
         >
@@ -97,14 +115,38 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
             {copy.title}
           </AppText>
           <AppText
-            variant={compact ? 'h2' : 'h1'}
+            variant={copy.subtitle ? 'body' : compact ? 'h2' : 'h1'}
             center
-            color={copy.accent}
-            style={styles.subtitle}
+            color={copy.subtitle ? colors.textSecondary : copy.accent}
+            style={copy.subtitle ? styles.subtitleSmall : styles.subtitle}
           >
             {copy.highlight}
           </AppText>
         </Animated.View>
+
+        {showShuffle && ceremony.deadlineAt !== null && ceremony.stageTotalMs !== null ? (
+          <View style={styles.timerCard} testID="shuffle-timer">
+            <Ionicons name={icons.stopwatch} size={26} color={colors.primaryBright} />
+            <View style={styles.timerMeta}>
+              <AppText variant="caption" color={colors.textSecondary} numberOfLines={1}>
+                Tempo para embaralhar
+              </AppText>
+              <CountdownText
+                deadlineAt={ceremony.deadlineAt}
+                warningMs={CEREMONY_TIMING.warningMs}
+                format={formatShuffleClock}
+                big
+                testID="shuffle-clock"
+              />
+            </View>
+            <CountdownRing
+              deadlineAt={ceremony.deadlineAt}
+              totalMs={ceremony.stageTotalMs}
+              size={34}
+              strokeWidth={5}
+            />
+          </View>
+        ) : null}
 
         <View style={styles.deckRow}>
           <View style={styles.sideSeat}>
@@ -114,23 +156,24 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
           <View style={[styles.deckArea, { transform: [{ scale: deckScale }] }]}>
             <Animated.View
               key={ceremony.stage}
-              entering={FadeIn.duration(180)}
-              exiting={FadeOut.duration(140)}
+              entering={FadeIn.delay(80).duration(180)}
+              exiting={FadeOut.duration(90)}
             >
               {showDeal ? (
-                <DealingCards durationMs={CEREMONY_TIMING.dealMs} />
+                <View style={styles.dealStack}>
+                  <PlayingCard faceDown width={66} />
+                </View>
               ) : showCut ? (
                 <CutDeck
-                  interactive={ceremony.iAmActor && !ceremony.celebrating && !reconnecting}
+                  interactive={cutChooser}
                   onCut={ceremony.finish}
                   done={ceremony.celebrating}
+                  depth={cutDepth}
                 />
               ) : (
-                <ShuffleDeck
-                  interactive={ceremony.iAmActor && !ceremony.celebrating && !reconnecting}
-                  progress={ceremony.progress}
-                  onBump={ceremony.bump}
-                  settled={ceremony.celebrating}
+                <ShuffleAnimation
+                  shuffleCount={ceremony.shuffleCount}
+                  interactive={shuffleChooser}
                 />
               )}
             </Animated.View>
@@ -141,8 +184,35 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
           </View>
         </View>
 
-        {ceremony.stage === 'shuffle' ? (
-          <ShuffleProgressBar progress={ceremony.progress} done={ceremony.celebrating} />
+        {showShuffle ? (
+          <View style={styles.mixCard} testID="shuffle-status">
+            <AppText variant="bodyBold" center>
+              Mistura do baralho
+            </AppText>
+            <View style={styles.mixDots}>
+              {[1, 2, 3].map((n) => (
+                <View
+                  key={n}
+                  style={[styles.mixDot, ceremony.shuffleCount >= n && styles.mixDotOn]}
+                />
+              ))}
+            </View>
+            <AppText variant="small" color={colors.textSecondary} center>
+              {ceremony.shuffleCount === 0
+                ? 'Nenhuma mistura ainda'
+                : ceremony.shuffleCount === 1
+                  ? '1 mistura realizada'
+                  : `${ceremony.shuffleCount} misturas realizadas`}
+            </AppText>
+            {shuffleFeedback ? (
+              <View style={styles.mixFeedback}>
+                <Ionicons name={icons.checkCircle} size={14} color={colors.primaryBright} />
+                <AppText variant="smallBold" color={colors.primaryBright} style={{ marginLeft: 6 }}>
+                  {shuffleFeedback}
+                </AppText>
+              </View>
+            ) : null}
+          </View>
         ) : null}
 
         <View style={styles.hintSlot}>
@@ -172,7 +242,7 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
           <AppText variant="h3" numberOfLines={1}>
             {me?.nickname ?? 'Você'}
           </AppText>
-          {ceremony.actorSeat === mySeat && ceremony.deadlineAt !== null ? (
+          {ceremony.actorSeat === mySeat && ceremony.deadlineAt !== null && !showShuffle ? (
             <CountdownText
               deadlineAt={ceremony.deadlineAt}
               warningMs={CEREMONY_TIMING.warningMs}
@@ -187,19 +257,48 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
         </View>
       </View>
 
-      {/* Rodapé explicativo + ação principal */}
-      {!compact ? (
+      {/* Rodapé: opções de corte para quem corta; senão os três passos do ritual */}
+      {cutChooser ? (
+        <CutOptions depth={cutDepth} onChange={setCutDepth} compact={compact} />
+      ) : !compact && !shuffleChooser ? (
         <StepsFooter stage={ceremony.stage} shufflerName={shufflerName} cutterName={cutterName} />
       ) : null}
 
       <View style={styles.ctaSlot}>
-        {copy.cta && !reconnecting ? (
+        {shuffleChooser ? (
+          <>
+            <View style={styles.shuffleActions}>
+              <SecondaryButton
+                label="EMBARALHAR NOVAMENTE"
+                icon={icons.refresh}
+                size="lg"
+                style={styles.shuffleAgain}
+                onPress={ceremony.bump}
+                disabled={ceremony.shuffleBusy}
+                testID="ceremony-shuffle"
+              />
+              <PrimaryButton
+                label="ESTÁ BOM"
+                icon={icons.checkCircle}
+                size="lg"
+                style={styles.shuffleDone}
+                onPress={ceremony.finish}
+                disabled={!ceremony.canFinish || ceremony.shuffleBusy}
+                testID="ceremony-finish"
+              />
+            </View>
+            <AppText variant="small" color={colors.textMuted} center style={styles.ctaNote}>
+              {copy.ctaNote}
+            </AppText>
+          </>
+        ) : copy.cta && !reconnecting ? (
           <>
             <PrimaryButton
               label={copy.cta}
               icon={icons.checkCircle}
               onPress={ceremony.finish}
               disabled={!copy.ctaEnabled}
+              tone={cutChooser ? 'gold' : 'primary'}
               testID="ceremony-finish"
             />
             <AppText variant="small" color={colors.textMuted} center style={styles.ctaNote}>
@@ -297,6 +396,80 @@ function SeatAvatar({
         {avatar}
       </CountdownRing>
     </Animated.View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Opções de corte (alto / meio / baixo)
+// ---------------------------------------------------------------------------
+
+function CutOptions({
+  depth,
+  onChange,
+  compact,
+}: {
+  depth: CutDepth;
+  onChange: (d: CutDepth) => void;
+  compact: boolean;
+}) {
+  return (
+    <View style={styles.cutOptions} testID="cut-options">
+      {CUT_DEPTHS.map((d) => {
+        const selected = d.id === depth;
+        const split = cutSplit(d.id);
+        return (
+          <Pressable
+            key={d.id}
+            accessibilityRole="radio"
+            accessibilityState={{ selected }}
+            accessibilityLabel={d.label + '. ' + d.description}
+            onPress={() => {
+              haptic.selection();
+              onChange(d.id);
+            }}
+            style={({ pressed }) => [
+              styles.cutOption,
+              selected && styles.cutOptionSelected,
+              pressed && { opacity: 0.85 },
+            ]}
+            testID={'cut-' + d.id}
+          >
+            {!compact ? <MiniSplit top={split.top} bottom={split.bottom} /> : null}
+            <AppText
+              variant="smallBold"
+              center
+              color={selected ? colors.gold : colors.text}
+              style={styles.cutOptionLabel}
+            >
+              {d.label}
+            </AppText>
+            <AppText variant="caption" center color={colors.textMuted}>
+              {d.description}
+            </AppText>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** Miniatura do baralho partido: espessura de cada metade conforme a opção. */
+function MiniSplit({ top, bottom }: { top: number; bottom: number }) {
+  const w = 44;
+  const h = 14;
+  const stack = (n: number) => (
+    <View style={{ width: w, height: h + n * 3 }}>
+      {Array.from({ length: n }, (_, i) => (
+        <View key={i} style={[styles.miniCard, { width: w, height: h, top: (n - 1 - i) * 3 }]} />
+      ))}
+    </View>
+  );
+  return (
+    <View style={styles.miniSplit}>
+      {stack(top)}
+      <View style={styles.miniLine} />
+      {stack(bottom)}
+    </View>
   );
 }
 
@@ -427,10 +600,36 @@ function statusLabel(seat: Seat, ceremony: ShuffleCeremony, dealerSeat: Seat): s
     : 'Aguardando...';
 }
 
+/** "08s" — o relógio grande do card de tempo do embaralho. */
+function formatShuffleClock(ms: number): string {
+  return `${String(Math.ceil(Math.max(0, ms) / 1000)).padStart(2, '0')}s`;
+}
+
+/** Feedback textual da qualidade da mistura (só UX, não é regra). */
+function shuffleCopy(count: number): string | null {
+  if (count <= 0) return null;
+  if (count === 1) return 'O baralho começou a ser misturado.';
+  if (count === 2) return 'O baralho já está bem misturado.';
+  return 'O baralho está ótimo!';
+}
+
+/** Dica curta sob o baralho. */
+function DeckHint({ text }: { text: string }) {
+  return (
+    <View style={styles.hintBox}>
+      <AppText variant="small" color={colors.textSecondary} center>
+        {text}
+      </AppText>
+    </View>
+  );
+}
+
 interface Copy {
   key: string;
   title: string;
   highlight: string;
+  /** O destaque é uma instrução curta (menor), não a segunda linha do título. */
+  subtitle?: boolean;
   accent: string;
   hint: string | null;
   cta: string | null;
@@ -484,9 +683,10 @@ function ceremonyCopy(c: ShuffleCeremony, actorName: string): Copy {
       ? {
           ...base,
           key: 'cut-me',
-          title: 'Sua vez de',
-          highlight: 'cortar o baralho.',
-          hint: 'Arraste para definir o corte e confirme.',
+          title: 'Cortar o Baralho',
+          highlight: 'Arraste a parte superior para escolher onde cortar.',
+          subtitle: true,
+          hint: 'Você pode cortar em cima, no meio ou embaixo.',
           cta: 'CONFIRMAR CORTE',
           ctaEnabled: true,
           ctaNote: 'Depois do corte, as cartas serão distribuídas.',
@@ -506,14 +706,15 @@ function ceremonyCopy(c: ShuffleCeremony, actorName: string): Copy {
     ? {
         ...base,
         key: 'shuffle-me',
-        title: 'Sua vez de',
-        highlight: 'embaralhar o baralho.',
-        hint: 'Toque ou arraste para embaralhar e preparar o corte.',
-        cta: 'FINALIZAR EMBARALHAMENTO',
+        title: 'Embaralhar o Baralho',
+        highlight: 'Você pode embaralhar quantas vezes quiser dentro do tempo.',
+        subtitle: true,
+        hint: null,
+        cta: 'ESTÁ BOM',
         ctaEnabled: c.canFinish,
         ctaNote: c.canFinish
-          ? 'Depois de embaralhar, o próximo passo será cortar o baralho.'
-          : 'Embaralhe mais um pouco para liberar.',
+          ? 'Continue embaralhando ou toque em ESTÁ BOM.'
+          : 'Toque em EMBARALHAR NOVAMENTE para misturar o baralho.',
         waiting: '',
       }
     : {
@@ -548,6 +749,82 @@ const styles = StyleSheet.create({
   // Acima das cartas da distribuição: elas passam por trás do texto, não por cima.
   title: { zIndex: 2 },
   subtitle: { marginTop: 2 },
+  timerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginTop: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: colors.card,
+    gap: 14,
+  },
+  timerMeta: { alignItems: 'center', minWidth: 150 },
+  mixCard: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: colors.card,
+  },
+  mixDots: { flexDirection: 'row', gap: 10, marginVertical: 6 },
+  mixDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: 'rgba(255,255,255,0.18)' },
+  mixDotOn: { backgroundColor: colors.primaryBright },
+  mixFeedback: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  shuffleActions: { flexDirection: 'row', gap: 10 },
+  shuffleAgain: { flex: 1 },
+  shuffleDone: { flex: 1 },
+  hintBox: {
+    alignSelf: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(0,0,0,0.32)',
+  },
+  dealStack: { alignItems: 'center', justifyContent: 'center', height: 158 },
+  subtitleSmall: { marginTop: 6, maxWidth: 300 },
+  cutOptions: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  cutOption: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderColor: colors.cardBorder,
+    backgroundColor: colors.card,
+  },
+  cutOptionSelected: {
+    borderColor: colors.gold,
+    shadowColor: colors.gold,
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  cutOptionLabel: { marginTop: 8 },
+  miniSplit: { alignItems: 'center' },
+  miniLine: {
+    width: 54,
+    borderTopWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255,255,255,0.7)',
+    marginVertical: 3,
+  },
+  miniCard: {
+    position: 'absolute',
+    left: 0,
+    borderRadius: 4,
+    backgroundColor: '#b8142a',
+    borderWidth: 1.5,
+    borderColor: '#f5ecd8',
+  },
   deckRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', marginTop: 10 },
   deckArea: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   hintSlot: { minHeight: 44, justifyContent: 'center', marginTop: 12 },

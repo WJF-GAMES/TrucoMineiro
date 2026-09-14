@@ -8,9 +8,13 @@ import {
   getAvailableActions,
   seatsToAct,
   viewForSeat,
+  skipCeremony,
 } from '../engine/engine';
 import { createRng } from '../engine/rng';
 import { MatchState, Seat, teamOf } from '../state/types';
+
+/** Mão já embaralhada e cortada: os testes de jogo começam com as cartas na mão. */
+const dealt = (seed: number, targetScore?: number) => skipCeremony(createMatch(seed, targetScore));
 
 /**
  * Reproduces what the app does in a match against the AI: seat 0 is human, seats 1-3 are AI, and the
@@ -32,7 +36,7 @@ describe('single-step AI driver (useAiGame flow)', () => {
     for (let g = 0; g < 200; g++) {
       const rng = createRng(g * 7919 + 3);
       const humanRng = createRng(g * 104729 + 11);
-      let state: MatchState = createMatch(g * 31 + 5);
+      let state: MatchState = dealt(g * 31 + 5);
       let steps = 0;
 
       while (state.status === 'PLAYING') {
@@ -67,7 +71,7 @@ describe('single-step AI driver (useAiGame flow)', () => {
     for (let g = 0; g < 400 && !sawSharedResponsibility; g++) {
       const rng = createRng(g * 13 + 1);
       const humanRng = createRng(g * 7 + 5);
-      let state = createMatch(g * 17 + 2);
+      let state = dealt(g * 17 + 2);
       let steps = 0;
 
       while (state.status === 'PLAYING' && steps < 2000) {
@@ -98,7 +102,7 @@ describe('single-step AI driver (useAiGame flow)', () => {
   it('still plays for the AI when only AI seats can act', () => {
     const seats = aiSeats();
     const rng = createRng(99);
-    const state = createMatch(42);
+    const state = dealt(42);
     // Hand 1 starts with seat 0 (human) leading, so no AI may act yet.
     expect(seatsToAct(state)).toEqual([0]);
     expect(nextAIAction(state, seats, rng)).toBeNull();

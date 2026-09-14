@@ -6,7 +6,7 @@ Tipos em `src/domain/model/types.ts` (compartilhados com Functions).
 | Coleção | Doc | Campos principais | Escrita |
 |---|---|---|---|
 | users/{uid} | privado | createdAt, lastSeenAt, fcmTokens{token:{platform,updatedAt}}, phoneHash, inviteToken, inviteTokenExpiresAt | Functions |
-| profiles/{uid} | público | nickname, nicknameLower, avatarId, countryCode, level, xp, xpToNext, leagueId (espelho de playerProgress), leaguePoints, coins, gems, ownedItems[], createdAt, updatedAt | Functions |
+| profiles/{uid} | público | nickname, nicknameLower, avatarId, countryCode, level, xp, xpToNext, leagueId (espelho de playerProgress), leaguePoints, gems, ownedItems[], createdAt, updatedAt | Functions |
 | playerStats/{uid} | público | matches, wins, losses, winRate, aiMatches, onlineMatches, trucosCalled, trucosAccepted, bestStreak, currentStreak, hardWins | Functions (progressão) |
 | matchHistory/{matchId} | | mode, difficulty?, playerIds[], players[], scores, winnerTeam, handsPlayed, finishedAt — **lock de idempotência** | Functions |
 | leagueDefinitions/{leagueId} | catálogo das 20 ligas | order, displayName, assetKey (`shield_<id>`), previousLeagueId, nextLeagueId, isFirst, isLast, active | seedCatalog / leagueAdmin |
@@ -26,8 +26,6 @@ Tipos em `src/domain/model/types.ts` (compartilhados com Functions).
 | phoneIndex/{hmac} | ilegível por regra | uid, updatedAt — HMAC-SHA256(CONTACTS_PEPPER, E.164) | Functions |
 | contactSync/{uid} | ilegível por regra | windowStart, calls, numbers (cota diária do match) | Functions |
 | friendInviteTokens/{token} | ilegível por regra | uid, createdAt, expiresAt (QR / link de convite) | Functions |
-| rewards/{uid}_{rewardId} | lock | coins, claimedAt | Functions |
-| purchases/{uid}_{itemId} | | priceCoins, purchasedAt | Functions |
 
 Índices: `firestore.indexes.json` (matchHistory playerIds+finishedAt; friendRequests to+status /
 from+status; weeklyLeagueGroups leagueId+weekKey+memberCount e weekKey+status; playerProgress

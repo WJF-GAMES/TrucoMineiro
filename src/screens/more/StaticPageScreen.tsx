@@ -24,8 +24,8 @@ const PAGES: Record<
         body: 'Respeito, amizade e boa resenha. Apelidos ofensivos, trapaças ou uso de programas automatizados resultam em suspensão.',
       },
       {
-        heading: '4. Moedas e gemas',
-        body: 'Moedas e gemas são itens virtuais sem valor monetário, não reembolsáveis e não transferíveis.',
+        heading: '4. Anúncios',
+        body: 'O app é gratuito e mantido por anúncios. Nenhum anúncio dá vantagem no jogo, e nada é cobrado do jogador.',
       },
       {
         heading: '5. Alterações',

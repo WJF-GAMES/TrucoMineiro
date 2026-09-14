@@ -13,6 +13,9 @@ import {
   shuffleProgress,
   shufflerSeat,
   stageDurationMs,
+  CUT_DEPTHS,
+  CUT_STACK_CARDS,
+  cutSplit,
 } from '../shuffleCeremony';
 import { teamOf, type Seat } from '@/domain/game';
 
@@ -89,5 +92,19 @@ describe('relógio', () => {
     expect(stageDurationMs('cut')).toBe(CEREMONY_TIMING.cutMs);
     expect(stageDurationMs('deal')).toBeNull();
     expect(stageDurationMs('done')).toBeNull();
+  });
+});
+
+describe('cutSplit', () => {
+  it('reparte as cartas desenhadas conforme a profundidade do corte', () => {
+    expect(cutSplit('high')).toEqual({ top: 1, bottom: 3 });
+    expect(cutSplit('middle')).toEqual({ top: 2, bottom: 2 });
+    expect(cutSplit('low')).toEqual({ top: 3, bottom: 1 });
+    CUT_DEPTHS.forEach((d) => {
+      const s = cutSplit(d.id);
+      expect(s.top + s.bottom).toBe(CUT_STACK_CARDS);
+      expect(s.top).toBeGreaterThan(0);
+      expect(s.bottom).toBeGreaterThan(0);
+    });
   });
 });

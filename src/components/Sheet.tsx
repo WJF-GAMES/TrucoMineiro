@@ -32,10 +32,7 @@ export function Sheet({
           accessibilityLabel="Fechar"
           onPress={onClose}
         />
-        <View
-          style={[styles.sheet, { paddingBottom: insets.bottom + spacing.xl }]}
-          testID={testID}
-        >
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.xl }]} testID={testID}>
           <View style={styles.grabber} />
           <View style={styles.header}>
             <View style={styles.titles}>

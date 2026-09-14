@@ -50,8 +50,11 @@ for (const difficulty of difficulties) {
         state.hand.hands.reduce((a, h) => a + h.length, 0) +
         state.hand.currentRound.length +
         state.hand.rounds.length * 4;
-      if (state.hand.phase !== 'FINISHED' && totalCards !== 12)
+      const ceremony = state.hand.phase === 'SHUFFLING' || state.hand.phase === 'CUTTING';
+      const expectedCards = ceremony ? 0 : 12;
+      if (state.hand.phase !== 'FINISHED' && totalCards !== expectedCards)
         throw new Error(`Impossible card count ${totalCards} at match ${g}`);
+      if (state.hand.deck.length !== 40) throw new Error(`Deck lost cards at match ${g}`);
     }
     if (state.scores[0] < 12 && state.scores[1] < 12)
       throw new Error('Match finished without a winner');

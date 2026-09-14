@@ -22,7 +22,6 @@
 | match_completed / match_won / match_lost | resultado | mode, difficulty, won |
 | rematch_clicked | "Jogar novamente" | mode |
 | store_viewed | Loja | tab |
-| reward_claimed | recompensa diária | coins |
 | friends_screen_viewed | abertura da aba Amigos | — |
 | friends_search_used | busca por apelido | — |
 | friend_request_sent / friend_request_accepted | Amigos | source? |

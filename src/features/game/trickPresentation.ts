@@ -1,4 +1,11 @@
-import { leadingPlay, type GameEvent, type PlayedCard, type Seat, type SeatView, type Team } from '@/domain/game';
+import {
+  leadingPlay,
+  type GameEvent,
+  type PlayedCard,
+  type Seat,
+  type SeatView,
+  type Team,
+} from '@/domain/game';
 
 /**
  * Apresentação da vaza na mesa.

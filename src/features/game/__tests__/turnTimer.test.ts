@@ -1,6 +1,9 @@
-import { createMatch, parseCardId, viewForSeat, applyAction } from '@/domain/game';
+import { createMatch, parseCardId, viewForSeat, applyAction, skipCeremony } from '@/domain/game';
 import type { MatchState } from '@/domain/game';
-import { TURN_TIMING, formatTurnClock, timeoutAction } from '../turnTimer';
+import { TURN_TIMING, formatTurnClock, timeoutAction, turnDurationMs } from '../turnTimer';
+
+/** Mão já embaralhada e cortada: os testes de jogo começam com as cartas na mão. */
+const dealt = (seed: number, targetScore?: number) => skipCeremony(createMatch(seed, targetScore));
 
 function withHands(m: MatchState, hands: string[][]): MatchState {
   return { ...m, hand: { ...m.hand, hands: hands.map((h) => h.map(parseCardId)) } };
@@ -8,19 +11,19 @@ function withHands(m: MatchState, hands: string[][]): MatchState {
 
 describe('timeoutAction', () => {
   it('joga a carta mais fraca quando o tempo de jogar acaba', () => {
-    const m = withHands(createMatch(1), [['3E', '4O', 'KP'], ['5E'], ['5O'], ['5P']]);
+    const m = withHands(dealt(1), [['3E', '4O', 'KP'], ['5E'], ['5O'], ['5P']]);
     const a = timeoutAction(viewForSeat(m, 0), 0);
     expect(a).toEqual({ type: 'PLAY_CARD', seat: 0, cardId: '4O' });
   });
 
   it('nunca escolhe a manilha como carta mais fraca', () => {
-    const m = withHands(createMatch(1), [['4P', 'QO'], ['5E'], ['5O'], ['5P']]);
+    const m = withHands(dealt(1), [['4P', 'QO'], ['5E'], ['5O'], ['5P']]);
     const a = timeoutAction(viewForSeat(m, 0), 0);
     expect(a).toEqual({ type: 'PLAY_CARD', seat: 0, cardId: 'QO' });
   });
 
   it('corre quando o tempo de responder ao truco acaba', () => {
-    let m = createMatch(1);
+    let m = dealt(1);
     m = applyAction(m, { type: 'REQUEST_TRUCO', seat: 0 });
     expect(timeoutAction(viewForSeat(m, 1), 1)).toEqual({ type: 'RUN', seat: 1 });
     // Quem pediu não tem nada a fazer.
@@ -28,7 +31,7 @@ describe('timeoutAction', () => {
   });
 
   it('entrega a mão de onze quando o tempo acaba', () => {
-    const m = createMatch(1);
+    const m = dealt(1);
     const at11: MatchState = {
       ...m,
       scores: [11, 0],
@@ -41,8 +44,38 @@ describe('timeoutAction', () => {
   });
 
   it('não faz nada fora da vez', () => {
-    const m = createMatch(1);
+    const m = dealt(1);
     expect(timeoutAction(viewForSeat(m, 1), 1)).toBeNull();
+  });
+});
+
+describe('timeoutAction na cerimônia', () => {
+  it('fecha o embaralhamento com o baralho como está e corta no meio', () => {
+    const m = createMatch(1); // dealer 3 embaralha
+    expect(timeoutAction(viewForSeat(m, 3), 3)).toEqual({ type: 'FINISH_SHUFFLE', seat: 3 });
+    expect(timeoutAction(viewForSeat(m, 0), 0)).toBeNull();
+    const cutting = applyAction(m, { type: 'FINISH_SHUFFLE', seat: 3 });
+    expect(timeoutAction(viewForSeat(cutting, 0), 0)).toEqual({
+      type: 'CUT',
+      seat: 0,
+      depth: 'middle',
+    });
+  });
+  it('usa o prazo de cada fase', () => {
+    expect(turnDurationMs('SHUFFLING')).toBe(TURN_TIMING.shuffleMs);
+    expect(turnDurationMs('CUTTING')).toBe(TURN_TIMING.cutMs);
+    expect(turnDurationMs('PLAY')).toBe(TURN_TIMING.turnMs);
+    expect(turnDurationMs('TRUCO_RESPONSE')).toBe(TURN_TIMING.turnMs);
+  });
+});
+
+describe('chave da decisão', () => {
+  it('cada mistura muda a versão da partida (é o hook que mantém um único prazo por estágio)', () => {
+    const m = createMatch(1);
+    const once = applyAction(m, { type: 'SHUFFLE', seat: 3 });
+    expect(once.version).toBe(m.version + 1);
+    expect(once.hand.phase).toBe('SHUFFLING');
+    expect(once.hand.number).toBe(m.hand.number);
   });
 });
 

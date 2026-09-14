@@ -159,8 +159,6 @@ function baseProfile(id: string, over: Partial<Profile> = {}): Profile {
     xpToNext: 300,
     leagueId: 'gold',
     leaguePoints: 1200,
-    coins: 0,
-    gems: 0,
     createdAt: 0,
     updatedAt: 0,
     ...over,
@@ -199,14 +197,16 @@ const renderScreen = () =>
   );
 
 /** Liga os snapshots do backend (amigos, presença, solicitações, bloqueios e convites). */
-async function seed(options: {
-  friends?: string[];
-  presence?: Record<string, Presence['state']>;
-  incoming?: FriendRequest[];
-  outgoing?: FriendRequest[];
-  blocked?: string[];
-  invites?: RoomInvite[];
-} = {}) {
+async function seed(
+  options: {
+    friends?: string[];
+    presence?: Record<string, Presence['state']>;
+    incoming?: FriendRequest[];
+    outgoing?: FriendRequest[];
+    blocked?: string[];
+    invites?: RoomInvite[];
+  } = {},
+) {
   const view = await renderScreen();
   await act(async () => {
     mockEmit.friends?.((options.friends ?? []).map((id) => ({ id })));
@@ -410,9 +410,7 @@ describe('FriendsScreen — busca', () => {
 describe('FriendsScreen — convites de sala', () => {
   it('convite recebido entra na sala e vai para o lobby', async () => {
     const view = await seed({
-      invites: [
-        { code: 'ABC123', from: 'zeh', fromNickname: 'Zé Truco', createdAt: Date.now() },
-      ],
+      invites: [{ code: 'ABC123', from: 'zeh', fromNickname: 'Zé Truco', createdAt: Date.now() }],
     });
 
     expect(await view.findByText('Convites para jogar')).toBeTruthy();

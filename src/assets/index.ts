@@ -16,7 +16,6 @@ export const images = {
   modeOnline: require('../../assets/images/cards/mode_online.png'),
   bannerAmigos: require('../../assets/images/banners/amigos_turma.png'),
   bannerTemporada: require('../../assets/images/banners/temporada_minas.png'),
-  coin: require('../../assets/images/icons/coin.png'),
 } as const;
 
 export const avatarImages: Record<AvatarId, number> = {

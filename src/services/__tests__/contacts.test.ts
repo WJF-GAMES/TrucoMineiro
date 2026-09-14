@@ -1,8 +1,4 @@
-import {
-  getContactsPermission,
-  readDeviceContacts,
-  requestContactsPermission,
-} from '../contacts';
+import { getContactsPermission, readDeviceContacts, requestContactsPermission } from '../contacts';
 
 jest.mock('expo-contacts', () => ({
   ContactField: { FULL_NAME: 'fullName', PHONES: 'phones' },
@@ -80,9 +76,11 @@ describe('leitura da agenda', () => {
     const result = await readDeviceContacts();
     expect(result).toHaveLength(1_100);
     expect(contacts.Contact.getAllDetails).toHaveBeenCalledTimes(3);
-    expect(contacts.Contact.getAllDetails.mock.calls.map((c: [unknown, { offset: number }]) =>
-      c[1].offset,
-    )).toEqual([0, 500, 1000]);
+    expect(
+      contacts.Contact.getAllDetails.mock.calls.map(
+        (c: [unknown, { offset: number }]) => c[1].offset,
+      ),
+    ).toEqual([0, 500, 1000]);
   });
 
   it('informa o progresso para a tela não parecer travada', async () => {

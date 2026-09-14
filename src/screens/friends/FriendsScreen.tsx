@@ -368,9 +368,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
               kind="empty"
               icon="mail-open"
               title={term ? 'Nada com esse nome' : 'Nenhuma solicitação'}
-              message={
-                term ? 'Tente outro apelido.' : 'Quando alguém te adicionar, aparece aqui.'
-              }
+              message={term ? 'Tente outro apelido.' : 'Quando alguém te adicionar, aparece aqui.'}
               compact
             />
           ),

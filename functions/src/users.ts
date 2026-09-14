@@ -5,9 +5,6 @@ import { AVATAR_IDS, AvatarId, PlayerStats, Profile, xpForLevel } from './domain
 import { indexUserPhone, removePhoneIndex } from './contacts';
 import { ensureAssignment, leaveCurrentLeagueGroup } from './leagues';
 
-export const DEFAULT_COINS = 500;
-export const DEFAULT_GEMS = 20;
-
 export function defaultProfile(uid: string): Profile {
   return {
     id: uid,
@@ -20,8 +17,6 @@ export function defaultProfile(uid: string): Profile {
     xpToNext: xpForLevel(1),
     leagueId: 'bronze',
     leaguePoints: 0,
-    coins: DEFAULT_COINS,
-    gems: DEFAULT_GEMS,
     createdAt: now(),
     updatedAt: now(),
   };
@@ -183,7 +178,8 @@ export const deleteAccount = authedCallable<Record<string, never>, { ok: true }>
       batch.delete(b.ref);
       batch.delete(db.doc(`blocks/${b.id}/blocked/${uid}`));
     });
-    const user = (await db.doc(`users/${uid}`).get()).data() as { inviteToken?: string } | undefined;
+    const user = (await db.doc(`users/${uid}`).get()).data() as
+      { inviteToken?: string } | undefined;
     if (user?.inviteToken) batch.delete(db.doc(`friendInviteTokens/${user.inviteToken}`));
     batch.delete(db.doc(`contactSync/${uid}`));
     // Sai do diretório de telefones ANTES de apagar users/{uid}, que guarda o hash.

@@ -25,11 +25,7 @@ export {
   inviteFriendToRoom,
   onPresenceWritten,
 } from './social';
-export {
-  matchPhoneContacts,
-  createFriendInviteToken,
-  resolveFriendInviteToken,
-} from './contacts';
+export { matchPhoneContacts, createFriendInviteToken, resolveFriendInviteToken } from './contacts';
 export {
   bootstrapLeagueSystemForUser,
   ensureUserLeagueAssignment,

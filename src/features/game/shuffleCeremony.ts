@@ -28,8 +28,8 @@ export const CEREMONY_TIMING = {
   successMs: 850,
   /** "Agora é hora de cortar." — respiro entre os estágios. */
   handoffMs: 900,
-  /** Cartas voando para os quatro assentos. */
-  dealMs: 1_150,
+  /** Cartas voando para os quatro assentos (ver `DEAL_TIMING`): a mesa real assume depois. */
+  dealMs: 1_990,
   /** Quanto um bot/adversário demora "embaralhando" (puramente cosmético). */
   remoteShuffleMs: 1_900,
   /** Idem para o corte. */
@@ -59,11 +59,7 @@ export function actorSeatFor(stage: CeremonyStage, dealerSeat: Seat): Seat | nul
   return null;
 }
 
-export function seatStatus(
-  seat: Seat,
-  stage: CeremonyStage,
-  dealerSeat: Seat,
-): SeatCeremonyStatus {
+export function seatStatus(seat: Seat, stage: CeremonyStage, dealerSeat: Seat): SeatCeremonyStatus {
   if (actorSeatFor(stage, dealerSeat) === seat) return 'acting';
   if (stage === 'shuffle' && cutterSeat(dealerSeat) === seat) return 'next';
   return 'waiting';
@@ -106,3 +102,47 @@ export function stageDurationMs(stage: CeremonyStage): number | null {
   if (stage === 'cut') return CEREMONY_TIMING.cutMs;
   return null;
 }
+
+/**
+ * Onde cortar — alto (poucas cartas de cima), no meio ou baixo (a maior parte de cima).
+ * Apresentação pura: o motor/servidor já definiu a ordem; isto só desenha o monte de cima com
+ * mais ou menos cartas e dá ao jogador a sensação de escolha do truco de mesa.
+ */
+export type CutDepth = 'high' | 'middle' | 'low';
+
+export const CUT_DEPTHS: readonly {
+  id: CutDepth;
+  label: string;
+  description: string;
+  /** Cartas desenhadas no monte de cima (de um total de `CUT_STACK_CARDS`). */
+  topCards: number;
+}[] = [
+  { id: 'high', label: 'Corte alto', description: 'Tira poucas cartas de cima', topCards: 1 },
+  { id: 'middle', label: 'Corte no meio', description: 'Divide o baralho ao meio', topCards: 2 },
+  { id: 'low', label: 'Corte baixo', description: 'Tira a maior parte de cima', topCards: 3 },
+];
+
+export const CUT_STACK_CARDS = 4;
+
+export function cutSplit(depth: CutDepth): { top: number; bottom: number } {
+  const top = CUT_DEPTHS.find((d) => d.id === depth)?.topCards ?? 2;
+  return { top, bottom: CUT_STACK_CARDS - top };
+}
+
+/**
+ * Distribuição: doze cartas saem do baralho uma a uma e pousam onde vão ficar; no fim, as do
+ * jogador local viram no lugar. `CEREMONY_TIMING.dealMs` cobre `DEAL_TOTAL_MS` com folga.
+ */
+export const DEAL_TIMING = {
+  /** Intervalo entre uma carta e a seguinte saindo do baralho. */
+  staggerMs: 95,
+  /** Voo do baralho até o destino. */
+  flyMs: 340,
+  /** Respiro antes de virar as minhas cartas. */
+  flipDelayMs: 120,
+  /** Virada das minhas cartas no lugar. */
+  flipMs: 320,
+} as const;
+
+export const DEAL_TOTAL_MS =
+  DEAL_TIMING.staggerMs * 11 + DEAL_TIMING.flyMs + DEAL_TIMING.flipDelayMs + DEAL_TIMING.flipMs;

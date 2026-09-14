@@ -79,11 +79,7 @@ export function LeagueHistoryTab() {
       contentContainerStyle={styles.list}
       renderItem={({ item }) => (
         <Surface style={styles.row} padding={10}>
-          <Image
-            source={leagueShield(item.leagueId)}
-            style={styles.shield}
-            contentFit="contain"
-          />
+          <Image source={leagueShield(item.leagueId)} style={styles.shield} contentFit="contain" />
           <View style={styles.info}>
             <AppText variant="bodyBold" numberOfLines={1}>
               {weekLabel(item.weekKey)}

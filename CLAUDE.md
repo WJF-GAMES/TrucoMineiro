@@ -30,7 +30,8 @@ npx expo start --port 8081               # http://localhost:8081 abre a build we
   O mesmo domínio roda nas Functions (copiado por `functions/scripts/sync-domain.js` no build).
 - **A UI não decide regra**: as ações vêm de `getAvailableActions` / `view.availableActions`.
 - **Dados do mockup não são dados reais**: tudo vem de Firestore/RTDB.
-- **Cliente nunca é autoridade**: XP, moedas, liga, vitórias e resultado só mudam via Cloud Functions.
+- **Cliente nunca é autoridade**: XP, liga, vitórias e resultado só mudam via Cloud Functions.
+- **Não existe moeda virtual**: nada de moedas, gemas, loja de itens ou recompensa em moeda (monetização só por anúncios).
 - Não commitar sem pedido explícito.
 
 ## Estrutura

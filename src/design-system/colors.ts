@@ -61,6 +61,7 @@ export type ColorToken = keyof typeof colors;
 export const gradients = {
   screen: [colors.bgTop, colors.bgMid, colors.bgBottom] as const,
   primaryButton: ['#1fd98a', '#05b96a', '#04834a'] as const,
+  goldButton: ['#ffd23f', '#edbe0f', '#c99a06'] as const,
   primaryChip: ['#1fd98a', '#059c5a'] as const,
   quickPlay: ['#0a6a3c', '#054a2c'] as const,
   modeIa: ['#0f6fd1', '#023f80'] as const,

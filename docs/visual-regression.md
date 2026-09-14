@@ -58,6 +58,6 @@ Aprovadas: Introdução, Login, Cadastro, Jogar, Liga, Amigos, Mais, Loja, Perfi
 Diferenças conhecidas e aceitas:
 - A referência tem proporção ~0.58 e o device 0.45: sobra altura, distribuída como respiro
   (Introdução: madeira da mesa; demais telas: espaço no rodapé antes da Bottom Navigation).
-- Dados do mockup (1.250 moedas, 124 partidas, "2.384 online") **não** são reproduzidos: as telas
+- Dados do mockup (124 partidas, "2.384 online") **não** são reproduzidos: as telas
   mostram os valores reais do Firestore/RTDB, como exige o requisito.
 - Na Loja, os itens fora de "Destaques" usam avatar circular (a referência só mostra a aba Destaques).

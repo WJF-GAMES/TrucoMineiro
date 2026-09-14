@@ -85,13 +85,8 @@ save(crop((173, 686, 304, 762)), 'banners/amigos_turma.png')
 save(crop((757, 627, 901, 750)), 'banners/loja_personalize.png')
 save(crop((1234, 430, 1511, 521)), 'banners/temporada_minas.png')
 
-# ---- Store coin stacks
-save(key_dark(crop((655, 795, 703, 829))), 'icons/coins_small.png')
-save(key_dark(crop((745, 795, 793, 829))), 'icons/coins_medium.png')
-save(key_dark(crop((835, 795, 883, 829))), 'icons/coins_large.png')
+# (Moedas e gemas não existem mais no produto: os recortes coins_*/coin/gem foram removidos.)
 
 # ---- Currency icons (circular), shields
-save(circle(crop(sq(1005, 59, 10)), 1), 'icons/coin.png')
-save(circle(crop(sq(1102, 59, 10)), 1), 'icons/gem.png')
 save(key_dark(crop((1279, 104, 1340, 176)), 30, 100), 'icons/shield_bronze.png')
 save(key_dark(crop((1436, 178, 1486, 224)), 30, 110), 'icons/shield_silver.png')

@@ -215,8 +215,7 @@ export function filterAgenda(result: AgendaMatchResult, query: string): AgendaMa
   if (!term) return result;
   return {
     matched: result.matched.filter(
-      (m) =>
-        m.contactName.toLowerCase().includes(term) || m.nickname.toLowerCase().includes(term),
+      (m) => m.contactName.toLowerCase().includes(term) || m.nickname.toLowerCase().includes(term),
     ),
     unmatched: result.unmatched.filter((u) => u.contactName.toLowerCase().includes(term)),
   };

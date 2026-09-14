@@ -40,7 +40,7 @@ describe('LEAGUE_SHIELDS', () => {
     }
   });
 
-  it('não usa os assets de moeda/gema como brasão', () => {
+  it('não expõe assets de moeda/gema (não existem mais no produto)', () => {
     const naoSaoLigas = ['coin', 'coins_small', 'coins_medium', 'coins_large', 'gem'];
     for (const league of LEAGUE_DEFINITIONS) {
       expect(naoSaoLigas).not.toContain(league.assetKey);

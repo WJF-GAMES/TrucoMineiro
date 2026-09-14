@@ -82,18 +82,16 @@ export const ACHIEVEMENTS: Achievement[] = [
 interface RewardTable {
   xpWin: number;
   xpLoss: number;
-  coinsWin: number;
-  coinsLoss: number;
   /** Pontos da liga na semana. Nunca negativos: o ranking semanal só acumula. */
   lpWin: number;
   lpLoss: number;
 }
 
 const REWARDS: Record<'online' | AIDifficultyId, RewardTable> = {
-  online: { xpWin: 80, xpLoss: 30, coinsWin: 50, coinsLoss: 10, lpWin: 25, lpLoss: 8 },
-  easy: { xpWin: 30, xpLoss: 10, coinsWin: 15, coinsLoss: 5, lpWin: 5, lpLoss: 1 },
-  normal: { xpWin: 60, xpLoss: 20, coinsWin: 30, coinsLoss: 8, lpWin: 10, lpLoss: 3 },
-  hard: { xpWin: 90, xpLoss: 30, coinsWin: 45, coinsLoss: 10, lpWin: 15, lpLoss: 5 },
+  online: { xpWin: 80, xpLoss: 30, lpWin: 25, lpLoss: 8 },
+  easy: { xpWin: 30, xpLoss: 10, lpWin: 5, lpLoss: 1 },
+  normal: { xpWin: 60, xpLoss: 20, lpWin: 10, lpLoss: 3 },
+  hard: { xpWin: 90, xpLoss: 30, lpWin: 15, lpLoss: 5 },
 };
 
 export interface MatchOutcomeInput {
@@ -110,7 +108,7 @@ export interface MatchOutcomeInput {
 }
 
 /**
- * Applies XP / coins / league points / stats / achievements for every human player of a match.
+ * Applies XP / league points / stats / achievements for every human player of a match.
  * Idempotent: the matchHistory document is created inside the same transaction and acts as the lock.
  */
 export async function processProgression(
@@ -123,7 +121,8 @@ export async function processProgression(
 
   const result = await db.runTransaction(async (tx) => {
     const history = await tx.get(historyRef);
-    if (history.exists) return { alreadyProcessed: true, byUid: {} as Record<string, ProgressionResult> };
+    if (history.exists)
+      return { alreadyProcessed: true, byUid: {} as Record<string, ProgressionResult> };
 
     const profileRefs = humans.map((h) => db.doc(`profiles/${h.uid}`));
     const statsRefs = humans.map((h) => db.doc(`playerStats/${h.uid}`));
@@ -150,7 +149,6 @@ export async function processProgression(
           { unlocked?: Record<string, number> } | undefined) ?? {};
 
       const xpGained = Math.round((won ? table.xpWin : table.xpLoss) * mult);
-      const coinsGained = won ? table.coinsWin : table.coinsLoss;
       const lpDelta = won ? table.lpWin : table.lpLoss;
 
       // Level
@@ -176,7 +174,6 @@ export async function processProgression(
         xpToNext,
         leaguePoints: Math.max(0, profile.leaguePoints + lpDelta),
         leagueId,
-        coins: profile.coins + coinsGained,
         updatedAt: now(),
       });
 
@@ -212,7 +209,6 @@ export async function processProgression(
 
       byUid[h.uid] = {
         xpGained,
-        coinsGained,
         leaguePointsDelta: lpDelta,
         leveledUp,
         newLevel: level,

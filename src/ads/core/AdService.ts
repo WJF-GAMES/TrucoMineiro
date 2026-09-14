@@ -64,9 +64,7 @@ async function doInitialize() {
       maxAdContentRating: MaxAdContentRating.PG,
       tagForChildDirectedTreatment: false,
       tagForUnderAgeOfConsent: false,
-      ...(testDeviceIdentifiers().length
-        ? { testDeviceIdentifiers: testDeviceIdentifiers() }
-        : {}),
+      ...(testDeviceIdentifiers().length ? { testDeviceIdentifiers: testDeviceIdentifiers() } : {}),
     });
     await mobileAds().initialize();
   } catch (e) {

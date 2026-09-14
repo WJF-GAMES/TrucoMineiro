@@ -325,9 +325,8 @@ describe('useContactsSync — apagado em Configurações', () => {
     expect(result.current.result.unmatched).toHaveLength(3);
 
     // É o que a tela Configurações chama — a aba Amigos continua montada por trás.
-    const { clearContactsSync } = jest.requireActual<
-      typeof import('../contactsCache')
-    >('../contactsCache');
+    const { clearContactsSync } =
+      jest.requireActual<typeof import('../contactsCache')>('../contactsCache');
     await act(async () => {
       await clearContactsSync('me');
     });

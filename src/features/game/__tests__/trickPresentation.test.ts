@@ -1,4 +1,4 @@
-import { applyAction, createMatch, parseCardId, viewForSeat } from '@/domain/game';
+import { applyAction, createMatch, parseCardId, viewForSeat, skipCeremony } from '@/domain/game';
 import type { GameEvent, MatchState, PlayedCard, Seat } from '@/domain/game';
 import {
   EMPTY_TRICK,
@@ -10,6 +10,9 @@ import {
   type TrickPresentation,
 } from '../trickPresentation';
 
+/** Mão já embaralhada e cortada: os testes de jogo começam com as cartas na mão. */
+const dealt = (seed: number, targetScore?: number) => skipCeremony(createMatch(seed, targetScore));
+
 /** Mão fixa: assento 3 (o último a jogar) fecha a vaza com a carta mais forte. */
 const HANDS = [
   ['4E', '5E', '6E'], // 0
@@ -19,7 +22,7 @@ const HANDS = [
 ];
 
 function rigged(): MatchState {
-  const m = createMatch(1);
+  const m = dealt(1);
   return { ...m, hand: { ...m.hand, hands: HANDS.map((h) => h.map(parseCardId)) } };
 }
 
@@ -75,7 +78,7 @@ describe('presentTrick', () => {
   it('funciona para qualquer assento que feche a vaza', () => {
     for (const closer of [0, 1, 2, 3] as Seat[]) {
       // Dealer escolhido para que `closer` seja o último da vaza.
-      const m = createMatch(1);
+      const m = dealt(1);
       const dealer = closer;
       const first = ((dealer + 1) % 4) as Seat;
       let s: MatchState = {
@@ -173,7 +176,7 @@ describe('presentTrick', () => {
   });
 
   it('empate entre adversários fecha a vaza sem vencedora destacada', () => {
-    const m = createMatch(1);
+    const m = dealt(1);
     const s0: MatchState = {
       ...m,
       hand: {

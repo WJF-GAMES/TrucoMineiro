@@ -129,7 +129,12 @@ export const set = asyncNoop;
 export const update = asyncNoop;
 export const remove = asyncNoop;
 export const serverTimestamp = () => Date.now();
-export const onDisconnect = () => ({ set: asyncNoop, update: asyncNoop, remove: asyncNoop, cancel: asyncNoop });
+export const onDisconnect = () => ({
+  set: asyncNoop,
+  update: asyncNoop,
+  remove: asyncNoop,
+  cancel: asyncNoop,
+});
 
 // --- functions ---------------------------------------------------------------
 export const getFunctions = () => ({});

@@ -30,8 +30,6 @@ export function maxNationalDigits(country: CountryCode): number {
   return MAX_NATIONAL_DIGITS[country] ?? 15;
 }
 
-
-
 /**
  * Brazilian display mask: "(61) 9.9628-9726" for mobile (11 digits) and
  * "(61) 9628-9726" for landline (10 digits). Mask is presentation only.

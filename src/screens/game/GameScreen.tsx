@@ -52,6 +52,14 @@ function AiGame({
   seed,
 }: RootScreenProps<'Game'> & { difficulty: 'easy' | 'normal' | 'hard'; seed: number }) {
   const finishing = useRef(false);
+  // O resultado abre por timer; se a tela sair antes (saída manual), o timer morre junto.
+  const resultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (resultTimer.current) clearTimeout(resultTimer.current);
+    },
+    [],
+  );
 
   const onFinished = useCallback(
     async (state: MatchState, record: AiMatchRecord) => {
@@ -66,7 +74,6 @@ function AiGame({
       const analysis = buildMatchAnalysis(state.events, teamOf(0));
       let progression: {
         xpGained?: number;
-        coinsGained?: number;
         leaguePointsDelta?: number;
         leveledUp?: boolean;
       } = {};
@@ -75,7 +82,6 @@ function AiGame({
         if (res.progression) {
           progression = {
             xpGained: res.progression.xpGained,
-            coinsGained: res.progression.coinsGained,
             leaguePointsDelta: res.progression.leaguePointsDelta,
             leveledUp: res.progression.leveledUp,
           };
@@ -90,17 +96,20 @@ function AiGame({
         );
       }
       // finalizeAiMatch já consumiu parte do tempo da apresentação; o resto espera aqui.
-      setTimeout(() => {
-        navigation.replace('MatchResult', {
-          mode: 'ai',
-          won,
-          scores: state.scores,
-          difficulty,
-          analysis,
-          ...progression,
-          rematch: { mode: 'ai', difficulty },
-        });
-      }, Math.max(0, RESULT_DELAY_MS - (Date.now() - finishedAt)));
+      resultTimer.current = setTimeout(
+        () => {
+          navigation.replace('MatchResult', {
+            mode: 'ai',
+            won,
+            scores: state.scores,
+            difficulty,
+            analysis,
+            ...progression,
+            rematch: { mode: 'ai', difficulty },
+          });
+        },
+        Math.max(0, RESULT_DELAY_MS - (Date.now() - finishedAt)),
+      );
     },
     [navigation, difficulty],
   );
@@ -155,7 +164,6 @@ function OnlineGame({ navigation, sessionId }: RootScreenProps<'Game'> & { sessi
           scores,
           analysis: analysisOf(events.current, myTeam),
           xpGained: earned?.xpGained,
-          coinsGained: earned?.coinsGained,
           leaguePointsDelta: earned?.leaguePointsDelta,
           leveledUp: earned?.leveledUp,
           rematch: { mode: 'online', roomCode: null },
@@ -166,7 +174,8 @@ function OnlineGame({ navigation, sessionId }: RootScreenProps<'Game'> & { sessi
     if (controller.status === 'abandoned') {
       navigated.current = true;
       toast.info('Partida encerrada', 'Um jogador abandonou a mesa.');
-      setTimeout(() => navigation.replace('Main', { screen: 'Play' }), 600);
+      const t = setTimeout(() => navigation.replace('Main', { screen: 'Play' }), 600);
+      return () => clearTimeout(t);
     }
   }, [controller.status, controller.view, controller.progression, myTeam, navigation]);
 

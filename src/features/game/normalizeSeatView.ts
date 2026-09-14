@@ -16,7 +16,9 @@ export function normalizeSeatView(raw: unknown): RemoteSeatView | null {
   if (typeof v.seat !== 'number' || typeof v.phase !== 'string') return null;
 
   const plays = (list: unknown): PlayedCard[] =>
-    Array.isArray(list) ? list.filter((p): p is PlayedCard => Boolean(p && (p as PlayedCard).card)) : [];
+    Array.isArray(list)
+      ? list.filter((p): p is PlayedCard => Boolean(p && (p as PlayedCard).card))
+      : [];
 
   return {
     seat: v.seat,
@@ -27,8 +29,10 @@ export function normalizeSeatView(raw: unknown): RemoteSeatView | null {
     handNumber: v.handNumber ?? 1,
     // Servidores antigos não enviavam `dealerSeat`. No início da mão — o único momento em que a
     // cerimônia usa isso — o líder da rodada é o assento seguinte ao de quem dá as cartas.
-    dealerSeat: (v.dealerSeat ?? (((v.roundLeader ?? 0) + 3) % 4)) as SeatView['dealerSeat'],
+    dealerSeat: (v.dealerSeat ?? ((v.roundLeader ?? 0) + 3) % 4) as SeatView['dealerSeat'],
     handValue: v.handValue ?? 1,
+    deckVersion: v.deckVersion ?? 0,
+    shuffleCount: v.shuffleCount ?? 0,
     proposedValue: v.proposedValue ?? null,
     phase: v.phase as SeatView['phase'],
     turnSeat: v.turnSeat ?? 0,

@@ -105,8 +105,8 @@ export function AddManuallySheet({
         />
       </View>
       <AppText variant="small" color={colors.textMuted} style={styles.hint}>
-        Para adicionar pelo número, use “Sincronizar contatos”: assim só aparece gente que já
-        está na sua agenda.
+        Para adicionar pelo número, use “Sincronizar contatos”: assim só aparece gente que já está
+        na sua agenda.
       </AppText>
       <PrimaryButton
         label="Enviar solicitação"

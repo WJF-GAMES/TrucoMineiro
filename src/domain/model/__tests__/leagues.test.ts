@@ -133,7 +133,11 @@ describe('promoção e rebaixamento', () => {
 
 // --- Ranking / resultado da semana ---------------------------------------------------------
 
-const member = (uid: string, weeklyPoints: number, extra: Partial<{ tiebreakScore: number; wins: number; joinedAt: number }> = {}) => ({
+const member = (
+  uid: string,
+  weeklyPoints: number,
+  extra: Partial<{ tiebreakScore: number; wins: number; joinedAt: number }> = {},
+) => ({
   uid,
   weeklyPoints,
   tiebreakScore: extra.tiebreakScore ?? 0,
@@ -200,7 +204,10 @@ describe('resolveWeeklyOutcomes', () => {
   });
 
   it('quem não pontuou na semana não sobe de liga', () => {
-    const out = resolveWeeklyOutcomes('gold', group(20, () => 0));
+    const out = resolveWeeklyOutcomes(
+      'gold',
+      group(20, () => 0),
+    );
     expect(out.filter((o) => o.result === 'promoted')).toHaveLength(0);
     expect(out.filter((o) => o.result === 'relegated')).toHaveLength(5);
     expect(out[0]!.nextLeagueId).toBe('gold');

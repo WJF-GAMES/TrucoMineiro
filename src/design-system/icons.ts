@@ -84,5 +84,8 @@ export const icons = {
   hand: 'hand-left' as IoniconName,
   stopwatch: 'stopwatch' as IoniconName,
   checkCircle: 'checkmark-circle' as IoniconName,
+  tip: 'bulb' as IoniconName,
+  arrowLeft: 'arrow-back' as IoniconName,
+  arrowRight: 'arrow-forward' as IoniconName,
   sync: 'sync' as IoniconName,
 } as const;

@@ -4,7 +4,6 @@ import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { colors, spacing } from '@/design-system';
-import { images } from '@/assets';
 import { AppText, PrimaryButton, Screen, SecondaryButton, Surface } from '@/components';
 import { logEvent } from '@/services/firebase/analytics';
 import { haptic } from '@/utils/haptics';
@@ -25,7 +24,6 @@ export function MatchResultScreen({ navigation, route }: RootScreenProps<'MatchR
     scores,
     mode,
     xpGained,
-    coinsGained,
     leaguePointsDelta,
     leveledUp,
     rematch,
@@ -142,11 +140,6 @@ export function MatchResultScreen({ navigation, route }: RootScreenProps<'MatchR
           </AppText>
           <View style={styles.rewardRow}>
             <RewardItem label="XP" value={xpGained !== undefined ? `+${xpGained}` : '—'} />
-            <RewardItem
-              label="Moedas"
-              value={coinsGained !== undefined ? `+${coinsGained}` : '—'}
-              image={images.coin}
-            />
             <RewardItem
               label="Liga"
               value={

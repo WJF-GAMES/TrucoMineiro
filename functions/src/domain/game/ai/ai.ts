@@ -1,6 +1,6 @@
 import { Card, cardId } from '../cards/card';
 import { MAX_STRENGTH, cardStrength } from '../rules/strength';
-import { GameAction, Seat, Team, teamOf } from '../state/types';
+import { GameAction, Seat, Team, teamOf, CutDepth } from '../state/types';
 import { Rng } from '../engine/rng';
 import { AIObservation } from './observation';
 
@@ -91,9 +91,33 @@ function chooseCardSmart(obs: AIObservation, aggressive: boolean): Card {
 // Difficulties
 // ---------------------------------------------------------------------------
 
+const CUT_DEPTHS: readonly CutDepth[] = ['high', 'middle', 'low'];
+
+/**
+ * Cerimônia (igual para as três dificuldades): mistura de uma a três vezes — o alvo é sorteado a
+ * cada chamada no mesmo RNG, então o replay no servidor reproduz — e corta em algum lugar.
+ * `null` quando a vez é de jogar de verdade.
+ */
+export function ceremonyDecision(obs: AIObservation, rng: Rng): GameAction | null {
+  const a = obs.availableActions;
+  const seat = obs.seat;
+  if (a.includes('SHUFFLE')) {
+    const target = 1 + Math.floor(rng.next() * 3);
+    return obs.shuffleCount < target ? { type: 'SHUFFLE', seat } : { type: 'FINISH_SHUFFLE', seat };
+  }
+  if (a.includes('FINISH_SHUFFLE')) return { type: 'FINISH_SHUFFLE', seat };
+  if (a.includes('CUT')) {
+    const depth = CUT_DEPTHS[Math.floor(rng.next() * CUT_DEPTHS.length)] ?? 'middle';
+    return { type: 'CUT', seat, depth };
+  }
+  return null;
+}
+
 export const easyAI: AIPlayer = {
   difficulty: 'easy',
   decide(obs, rng) {
+    const ceremony = ceremonyDecision(obs, rng);
+    if (ceremony) return ceremony;
     const a = obs.availableActions;
     const seat = obs.seat;
     if (a.includes('ACCEPT_MAO_DE_ONZE')) {
@@ -114,6 +138,8 @@ export const easyAI: AIPlayer = {
 export const normalAI: AIPlayer = {
   difficulty: 'normal',
   decide(obs, rng) {
+    const ceremony = ceremonyDecision(obs, rng);
+    if (ceremony) return ceremony;
     const a = obs.availableActions;
     const seat = obs.seat;
     const power = handPower(obs);
@@ -139,6 +165,8 @@ export const normalAI: AIPlayer = {
 export const hardAI: AIPlayer = {
   difficulty: 'hard',
   decide(obs, rng) {
+    const ceremony = ceremonyDecision(obs, rng);
+    if (ceremony) return ceremony;
     const a = obs.availableActions;
     const seat = obs.seat;
     const power = handPower(obs);

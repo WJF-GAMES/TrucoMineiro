@@ -13,7 +13,11 @@ import type { LeagueRankingMember, LeagueScreenSnapshot } from '@/domain/model/t
  */
 
 const mockSnapshot = jest.fn();
-const mockSubscribe = jest.fn((..._args: unknown[]) => () => undefined);
+const mockSubscribe = jest.fn(
+  (..._args: unknown[]) =>
+    () =>
+      undefined,
+);
 
 jest.mock('@/services/firebase/functions', () => ({
   getLeagueScreenSnapshot: (...args: unknown[]) => mockSnapshot(...args),
@@ -135,7 +139,9 @@ describe('LeagueScreen', () => {
     mockSnapshot.mockResolvedValue(snapshotWith(12));
     const view = await renderScreen();
 
-    expect(await view.findByText(/Os 3 primeiros sobem de liga e os 3 últimos descem/)).toBeTruthy();
+    expect(
+      await view.findByText(/Os 3 primeiros sobem de liga e os 3 últimos descem/),
+    ).toBeTruthy();
     expect(view.getByText('1º - 3º')).toBeTruthy();
     expect(view.getByText('10º - 12º')).toBeTruthy();
   });

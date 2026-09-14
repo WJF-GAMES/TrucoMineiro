@@ -22,6 +22,8 @@ import { devLog } from '@/utils/devLog';
 import { TRICK_RESOLVE_PAUSE_MS } from './trickPresentation';
 
 const AI_DELAY_MS = 900;
+/** Entre uma mistura e a próxima (e até o "está bom") a IA leva um tempo humano. */
+const AI_SHUFFLE_MS = 750;
 // Depois de uma vaza fechar a mesa ainda mostra a quarta carta, a vencedora e o recolhimento.
 const ROUND_END_PAUSE_MS = TRICK_RESOLVE_PAUSE_MS;
 
@@ -68,9 +70,27 @@ export function useAiGame(
   );
   const { state, recentEvents } = snapshot;
   const apply = useCallback((action: GameAction) => {
-    devLog(action.type, { seat: action.seat, ...('cardId' in action ? { card: action.cardId } : {}) });
+    devLog(action.type, {
+      seat: action.seat,
+      ...('cardId' in action ? { card: action.cardId } : {}),
+    });
     setSnapshot((prev) => {
+      // Toques atrasados, timers velhos e closures antigas chegam aqui com ações que a mesa já
+      // não aceita. O motor lança nesse caso — e lançar dentro do updater derruba a árvore
+      // inteira (tela em branco). A ação inválida é ignorada e registrada.
+      if (!getAvailableActions(prev.state, action.seat).includes(action.type)) {
+        devLog('REJECTED', {
+          type: action.type,
+          seat: action.seat,
+          version: prev.state.version,
+          phase: prev.state.hand.phase,
+        });
+        return prev;
+      }
       const next = applyAction(prev.state, action);
+      // O registro da partida (verificado no servidor) só leva ações aceitas. O updater pode
+      // rodar duas vezes com o mesmo objeto: o dedupe por referência evita a duplicata.
+      if (actions.current[actions.current.length - 1] !== action) actions.current.push(action);
       const recentEvents = next.events.slice(prev.state.events.length);
       devLog('EVENTS', recentEvents.map((e) => e.type).join(','), { version: next.version });
       return { state: next, recentEvents };
@@ -118,30 +138,29 @@ export function useAiGame(
     commitBusy(true);
     const lastEvent = state.events[state.events.length - 1];
     const pause =
-      lastEvent?.type === 'ROUND_ENDED' ||
-      lastEvent?.type === 'HAND_ENDED' ||
-      lastEvent?.type === 'HAND_STARTED'
+      lastEvent?.type === 'ROUND_ENDED' || lastEvent?.type === 'HAND_ENDED'
         ? ROUND_END_PAUSE_MS
-        : AI_DELAY_MS;
-    const timer = setTimeout(() => {
-      actions.current.push(action);
-      apply(action);
-    }, pause);
+        : state.hand.phase === 'SHUFFLING' || state.hand.phase === 'CUTTING'
+          ? AI_SHUFFLE_MS
+          : AI_DELAY_MS;
+    const timer = setTimeout(() => apply(action), pause);
     return () => {
       clearTimeout(timer);
       commitBusy(false);
     };
   }, [state, aiSeats, botsPaused, apply, commitBusy]);
 
-  const act = useCallback((action: GameAction) => {
-    if (action.type === 'PLAY_CARD') logEvent('card_played', { mode: 'ai' });
-    if (action.type === 'REQUEST_TRUCO' || action.type === 'RAISE')
-      logEvent('truco_requested', { mode: 'ai' });
-    if (action.type === 'ACCEPT_TRUCO') logEvent('truco_accepted', { mode: 'ai' });
-    if (action.type === 'RUN') logEvent('truco_rejected', { mode: 'ai' });
-    actions.current.push(action);
-    apply(action);
-  }, [apply]);
+  const act = useCallback(
+    (action: GameAction) => {
+      if (action.type === 'PLAY_CARD') logEvent('card_played', { mode: 'ai' });
+      if (action.type === 'REQUEST_TRUCO' || action.type === 'RAISE')
+        logEvent('truco_requested', { mode: 'ai' });
+      if (action.type === 'ACCEPT_TRUCO') logEvent('truco_accepted', { mode: 'ai' });
+      if (action.type === 'RUN') logEvent('truco_rejected', { mode: 'ai' });
+      apply(action);
+    },
+    [apply],
+  );
 
   const view = useMemo(() => viewForSeat(state, 0), [state]);
   const players: TablePlayer[] = useMemo(

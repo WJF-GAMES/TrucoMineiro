@@ -3,6 +3,7 @@
 Pasta `src/domain/game/` — TypeScript puro, sem React/React Native/Firebase (regra de lint em `eslint.config.js`).
 
 ## Regras implementadas
+
 - Baralho de 40 cartas (4,5,6,7,Q,J,K,A,2,3 × ♣♥♠♦). Embaralhamento Fisher-Yates com PRNG determinístico (mulberry32).
 - Força: manilhas fixas **Zap (4♣) > 7♥ > Espadilha (A♠) > 7♦**, depois 3 > 2 > A > K > J > Q > 7 > 6 > 5 > 4. Cartas iguais (não manilha) empatam.
 - 4 jogadores em duplas: assentos 0 e 2 (time 0) contra 1 e 3 (time 1). Assento 0 é o jogador local.
@@ -11,8 +12,17 @@ Pasta `src/domain/game/` — TypeScript puro, sem React/React Native/Firebase (r
 - Apostas: 1 → Truco (3) → Seis (6) → Nove (9) → Doze (12). Quem fez o último aumento aceito não pode pedir de novo; o time que responde pode **aceitar**, **aumentar** ou **correr** (correr entrega o valor atual).
 - Mão de onze: time com 11 pontos decide jogar valendo 3 ou entregar 1. Ambos com 11: mão normal sem truco.
 - Partida até 12 pontos; `dealerSeat` gira a cada mão.
+- **Cerimônia real**: a mão começa em `SHUFFLING` com o baralho já embaralhado uma vez pelo motor
+  (`deck`, `deckVersion: 0`, `shuffleCount: 0`, ninguém com cartas). O dealer pode `SHUFFLE`
+  quantas vezes quiser (cada uma reembaralha **o baralho atual** com o PRNG e sobe
+  `deckVersion`/`shuffleCount`) e fecha com `FINISH_SHUFFLE` (nada é reembaralhado escondido).
+  Em `CUTTING` o assento seguinte faz `CUT` com `depth` (`high`/`middle`/`low` = 10/20/30 cartas
+  de cima vão para baixo, `deckVersion` sobe de novo) e o motor distribui na mesma ação
+  (`HAND_DEALT`). Só então vem `MAO_DE_ONZE`/`PLAY`. `skipCeremony(state)` é um helper de
+  teste/ferramenta. Determinístico pelo seed: o replay no servidor reproduz misturas e corte.
 
 ## API
+
 ```ts
 createMatch(seed, targetScore = 12): MatchState
 getAvailableActions(state, seat): ActionType[]      // a UI só renderiza o que vier daqui
@@ -21,38 +31,46 @@ viewForSeat(state, seat): SeatView                  // esconde as mãos dos outr
 seatsToAct(state): Seat[]
 decideHand(results): Team | null | undefined
 ```
-Ações: `PLAY_CARD`, `REQUEST_TRUCO`, `ACCEPT_TRUCO`, `RAISE`, `RUN`, `ACCEPT_MAO_DE_ONZE`, `DECLINE_MAO_DE_ONZE`.
-Eventos (`state.events`): HAND_STARTED, CARD_PLAYED, ROUND_ENDED, TRUCO_REQUESTED/ACCEPTED/RAISED, RAN, MAO_DE_ONZE_*, HAND_ENDED, MATCH_ENDED.
+
+Ações: `SHUFFLE`, `FINISH_SHUFFLE`, `CUT`, `PLAY_CARD`, `REQUEST_TRUCO`, `ACCEPT_TRUCO`, `RAISE`, `RUN`, `ACCEPT_MAO_DE_ONZE`, `DECLINE_MAO_DE_ONZE`.
+Eventos (`state.events`): HAND_STARTED, SHUFFLE_PERFORMED, SHUFFLE_FINALIZED, CUT_DONE, HAND_DEALT, CARD_PLAYED, ROUND_ENDED, TRUCO_REQUESTED/ACCEPTED/RAISED, RAN, MAO_DE_ONZE_*, HAND_ENDED, MATCH_ENDED.
+
+A IA decide a cerimônia em `ceremonyDecision` (igual nas três dificuldades): mistura de 1 a 3
+vezes (alvo sorteado no mesmo RNG, logo replicável no servidor) e corta em profundidade aleatória.
 
 ## IA (`ai/`)
+
 - `AIObservation` = projeção do `SeatView`: só as próprias cartas, contagens, cartas jogadas, placar, valor, ações disponíveis.
 - `easy`: aleatória com pouca agressividade. `normal`: heurística (força da mão, parceiro ganhando, carta mínima que vence). `hard`: heurística + blefe (12%) + leitura de placar (aceita truco "desesperado" quando correr perde a partida).
 - `runAITurns` / `nextAIAction` conduzem os assentos de IA; o RNG da IA é separado (`aiSeed`) para replay no servidor.
 
 ## Testes
+
 `npm run test:engine` — 34 testes (baralho, força, empates, truco, mão de onze, views, IA válida em 900 partidas).
 `npm run test:sim -- 3000` — simulação em massa: 9.000 partidas (3 dificuldades) sem deadlock/loop/estado impossível; ~60–90 ações por partida; win rate ~50%.
 
 ## Cerimônia de início de mão (UI)
 
-Entre o `HAND_STARTED` e a primeira carta a mesa roda um ritual de três etapas —
-**embaralhar → cortar → distribuir**. É **apresentação, não regra**: as cartas já vêm embaralhadas
-pelo motor (Fisher-Yates com PRNG semeado) ou pelo servidor, e nada do que o jogador faz aqui muda
-ordem, mão ou resultado. O cliente continua sem ser autoridade.
+Embaralhar → cortar → distribuir, agora **dirigida pelo motor** (não é mais só apresentação):
 
-- **Quem faz o quê** vem de `dealerSeat` (campo público do `SeatView`): quem dá as cartas embaralha,
-  e quem corta é `nextSeat(dealerSeat)` — sempre um adversário do embaralhador e o primeiro a jogar.
-- **Onde vive**: `src/features/game/shuffleCeremony.ts` (derivações puras e tempos),
-  `useShuffleCeremony.ts` (máquina de estados) e `src/screens/game/TableCeremony.tsx` + `ShuffleDeck`
-  / `CutDeck` / `DealingCards` (a tela e as animações). `src/domain/game` não sabe que ela existe.
-- **Quando roda**: só numa mão que está começando (`rounds` e `currentRound` vazios, três cartas na
-  mão). Quem reconecta no meio da mão cai direto na mesa.
-- **Como fecha**: o jogador conclui (gesto ou botão), o tempo acaba (conclusão automática, sem
-  punição) ou o assento é de outro jogador/bot e a conclusão é encenada. As jogadas automáticas
-  ficam suspensas durante a cerimônia (`TableController.setBotsPaused`), senão a mão começaria
-  andada por trás do baralho.
-- **Prazo**: local por padrão (`CEREMONY_TIMING`), porque nenhuma regra depende dele. Quando o
-  servidor passar a publicar um prazo por etapa, basta alimentar `serverDeadlineAt` no hook.
+- `src/features/game/useCeremony.ts` deriva o estágio de `view.phase` (`SHUFFLING` → shuffle,
+  `CUTTING` → cut) e mantém um único estágio local, "deal", por `CEREMONY_TIMING.dealMs` depois do
+  `CUT_DONE`. Quem age vem de `dealerSeat`/`cutterSeatOf`. "EMBARALHAR NOVAMENTE" envia `SHUFFLE`
+  (um por vez: o botão trava até `shuffleCount` mudar ou 1,2 s), "ESTÁ BOM" envia
+  `FINISH_SHUFFLE` (só com ≥ 1 mistura), "CONFIRMAR CORTE" envia `CUT` com a profundidade
+  escolhida.
+- Prazo: `useTurnTimer` com `turnDurationMs(phase)` — 10 s para embaralhar (um prazo para o
+  estágio inteiro, as misturas não o reiniciam), 8 s para cortar, 25 s para jogar. Ao estourar,
+  `timeoutAction` fecha o embaralhamento com o baralho como está / corta no meio. O prazo é local
+  ao ator; o servidor ainda não publica prazos (pendência).
+- Tela: `src/screens/game/TableCeremony.tsx` — no embaralho, título/subtítulo, card "Tempo para
+  embaralhar" com anel, `ShuffleAnimation` (dois montes, cartas trançando, setas), card "Mistura do
+  baralho" (● ● ● + contador + feedback), botões e rodapé; quem assiste vê a mesma animação a cada
+  `SHUFFLE_PERFORMED`. No corte, `CutDeck` + `CutOptions` (alto/meio/baixo). A distribuição roda
+  na mesa (`DealOverlay`): cada carta pousa no montinho ou no slot real e as do jogador viram no
+  lugar.
+- Abertura da partida: `MatchCountdown` ("3, 2, 1, Valendo!") antes do primeiro embaralho.
+- `src/domain/game` não sabe de animação nenhuma; mas o baralho, as misturas e o corte são dele.
 
 ## Apresentação da vaza (UI)
 
