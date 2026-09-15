@@ -20,6 +20,8 @@ export interface AIObservation {
   phase: SeatView['phase'];
   /** Quantas vezes o baralho já foi misturado nesta mão (a IA decide quando "está bom"). */
   shuffleCount: number;
+  /** Quantas vezes o baralho já foi cortado nesta mão (a IA decide quando para de cortar). */
+  cutCount: number;
   availableActions: ActionType[];
   roundLeader: Seat;
   trucoRequesterTeam: Team | null;
@@ -40,6 +42,7 @@ export function observe(view: SeatView): AIObservation {
     proposedValue: view.proposedValue,
     phase: view.phase,
     shuffleCount: view.shuffleCount,
+    cutCount: view.cutCount,
     availableActions: view.availableActions,
     roundLeader: view.roundLeader,
     trucoRequesterTeam: view.trucoRequesterTeam,

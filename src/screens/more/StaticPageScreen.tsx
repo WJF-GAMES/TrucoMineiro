@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { colors, spacing } from '@/design-system';
 import { AppText, GameHeader, Screen, Surface } from '@/components';
+import { APP_VERSION } from '@/utils/appVersion';
 import type { RootScreenProps, StaticPageKind } from '@/navigation/types';
 
 const PAGES: Record<
@@ -99,7 +100,7 @@ const PAGES: Record<
         heading: 'Regras',
         body: 'Partidas até 12 pontos, 4 jogadores em duplas. Truco vale 3, depois Seis, Nove e Doze. Mão de onze: quem está com 11 decide se joga a mão valendo 3.',
       },
-      { heading: 'Créditos', body: 'Feito por Mooby. Versão 1.0.0.' },
+      { heading: 'Créditos', body: `Feito por Mooby. Versão ${APP_VERSION}.` },
     ],
   },
   tips: {

@@ -231,10 +231,15 @@ export function OtpScreen({ navigation }: RootScreenProps<'Otp'>) {
 
           <Pressable
             accessibilityRole="button"
+            // Ícone + texto: sem rótulo explícito o leitor de tela lê o conteúdo, e o ícone
+            // entra no meio do anúncio. Todas as outras ações desta tela já são rotuladas.
+            accessibilityLabel="Alterar telefone"
+            accessibilityHint="Volta para informar outro número."
             onPress={() => {
               clearPending();
               navigation.navigate('Login');
             }}
+            hitSlop={8}
             style={styles.changePhone}
           >
             <Ionicons name={icons.phone} size={16} color={colors.text} />

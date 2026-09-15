@@ -107,9 +107,15 @@ export function ceremonyDecision(obs: AIObservation, rng: Rng): GameAction | nul
   }
   if (a.includes('FINISH_SHUFFLE')) return { type: 'FINISH_SHUFFLE', seat };
   if (a.includes('CUT')) {
-    const depth = CUT_DEPTHS[Math.floor(rng.next() * CUT_DEPTHS.length)] ?? 'middle';
-    return { type: 'CUT', seat, depth };
+    // Corta uma ou duas vezes, pelo mesmo critério do embaralhamento, e então fecha.
+    const target = 1 + Math.floor(rng.next() * 2);
+    if (obs.cutCount < target) {
+      const depth = CUT_DEPTHS[Math.floor(rng.next() * CUT_DEPTHS.length)] ?? 'middle';
+      return { type: 'CUT', seat, depth };
+    }
+    return { type: 'FINISH_CUT', seat };
   }
+  if (a.includes('FINISH_CUT')) return { type: 'FINISH_CUT', seat };
   return null;
 }
 

@@ -56,6 +56,12 @@ export function TextField({
       ) : null}
       <View style={[styles.field, error ? styles.fieldError : null]}>
         <TextInput
+          // O rótulo é um `Text` separado acima do campo: sem isto o leitor de tela anuncia o
+          // campo pelo *placeholder* ("João da Serra") em vez do que ele pede ("Seu apelido"),
+          // e a mensagem de erro, que está fora do campo, nunca chega a quem não vê a tela.
+          // `PhoneInput` e `OtpInput` já rotulavam os seus; este é o campo genérico do app.
+          accessibilityLabel={label}
+          accessibilityHint={error ?? hint}
           placeholderTextColor={colors.textMuted}
           style={[styles.input, inputFont]}
           {...props}

@@ -498,6 +498,16 @@ export function GameTable({ controller, onExit }: Props) {
 
           {/* My hand */}
           <View style={[styles.handArea, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+            {/* A faixa da mão era um retângulo quase preto com uma borda dura por cima: na mesa
+                ele lia como um corte, e não como o fim do feltro. Agora é o mesmo degradê que o
+                resto do app usa para descer até o fundo — começa transparente (o feltro continua
+                aparecendo) e fecha na cor da tela, sem aresta nenhuma. */}
+            <LinearGradient
+              colors={gradients.fadeToBottom}
+              locations={[0, 0.45, 1]}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
             <View style={styles.hand} testID="my-hand" ref={handRef}>
               {handCards.map((c) => (
                 <Animated.View key={cardId(c)} layout={LinearTransition.duration(220)}>
@@ -908,13 +918,9 @@ const styles = StyleSheet.create({
     borderColor: colors.gold,
   },
   handArea: {
-    backgroundColor: 'rgba(0, 20, 14, 0.62)',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 10,
+    // O fundo é o degradê acima; sem cor de fundo nem borda o feltro desce até as cartas.
+    paddingTop: 18,
     paddingHorizontal: spacing.screen,
-    borderTopWidth: 1,
-    borderTopColor: colors.cardBorder,
   },
   seatMe: { position: 'absolute', bottom: 2, left: 0, right: 0, alignItems: 'center' },
   meAvatarRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },

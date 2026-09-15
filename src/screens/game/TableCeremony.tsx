@@ -124,27 +124,60 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
           </AppText>
         </Animated.View>
 
-        {showShuffle && ceremony.deadlineAt !== null && ceremony.stageTotalMs !== null ? (
-          <View style={styles.timerCard} testID="shuffle-timer">
-            <Ionicons name={icons.stopwatch} size={26} color={colors.primaryBright} />
-            <View style={styles.timerMeta}>
-              <AppText variant="caption" color={colors.textSecondary} numberOfLines={1}>
-                Tempo para embaralhar
-              </AppText>
-              <CountdownText
+        {/* Prazo e progresso do gesto no MESMO cartão.
+            Antes eram dois blocos separados (relógio em cima, "Mistura do baralho" embaixo) e o
+            número de misturas ainda aparecia numa terceira e numa quarta frase. Quem embaralha
+            precisa de duas respostas — quanto tempo resta e quantas vezes já misturei — e elas
+            agora moram juntas, uma vez cada. */}
+        {(showShuffle || showCut) &&
+        ceremony.deadlineAt !== null &&
+        ceremony.stageTotalMs !== null ? (
+          <View style={styles.stageCard} testID={showCut ? 'cut-status' : 'shuffle-status'}>
+            <View style={styles.timerCard} testID="shuffle-timer">
+              <Ionicons name={icons.stopwatch} size={26} color={colors.primaryBright} />
+              <View style={styles.timerMeta}>
+                <AppText variant="caption" color={colors.textSecondary} numberOfLines={1}>
+                  {showCut ? 'Tempo para cortar' : 'Tempo para embaralhar'}
+                </AppText>
+                <CountdownText
+                  deadlineAt={ceremony.deadlineAt}
+                  warningMs={CEREMONY_TIMING.warningMs}
+                  format={formatShuffleClock}
+                  big
+                  testID="shuffle-clock"
+                />
+              </View>
+              <CountdownRing
                 deadlineAt={ceremony.deadlineAt}
-                warningMs={CEREMONY_TIMING.warningMs}
-                format={formatShuffleClock}
-                big
-                testID="shuffle-clock"
+                totalMs={ceremony.stageTotalMs}
+                size={34}
+                strokeWidth={5}
               />
             </View>
-            <CountdownRing
-              deadlineAt={ceremony.deadlineAt}
-              totalMs={ceremony.stageTotalMs}
-              size={34}
-              strokeWidth={5}
-            />
+            <View style={styles.stageDivider} />
+            <View style={styles.gestureRow}>
+              <View style={styles.mixDots}>
+                {[1, 2, 3].map((n) => (
+                  <View
+                    key={n}
+                    style={[
+                      styles.mixDot,
+                      (showCut ? ceremony.cutCount : ceremony.shuffleCount) >= n && styles.mixDotOn,
+                    ]}
+                  />
+                ))}
+              </View>
+              <AppText
+                variant="small"
+                color={colors.textSecondary}
+                numberOfLines={1}
+                style={styles.gestureText}
+              >
+                {showCut
+                  ? cutCountCopy(ceremony.cutCount)
+                  : (shuffleFeedback ?? shuffleCountCopy(ceremony.shuffleCount))}
+              </AppText>
+            </View>
           </View>
         ) : null}
 
@@ -165,8 +198,8 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
                 </View>
               ) : showCut ? (
                 <CutDeck
-                  interactive={cutChooser}
-                  onCut={ceremony.finish}
+                  interactive={cutChooser && !ceremony.shuffleBusy}
+                  onCut={ceremony.bump}
                   done={ceremony.celebrating}
                   depth={cutDepth}
                 />
@@ -184,37 +217,6 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
           </View>
         </View>
 
-        {showShuffle ? (
-          <View style={styles.mixCard} testID="shuffle-status">
-            <AppText variant="bodyBold" center>
-              Mistura do baralho
-            </AppText>
-            <View style={styles.mixDots}>
-              {[1, 2, 3].map((n) => (
-                <View
-                  key={n}
-                  style={[styles.mixDot, ceremony.shuffleCount >= n && styles.mixDotOn]}
-                />
-              ))}
-            </View>
-            <AppText variant="small" color={colors.textSecondary} center>
-              {ceremony.shuffleCount === 0
-                ? 'Nenhuma mistura ainda'
-                : ceremony.shuffleCount === 1
-                  ? '1 mistura realizada'
-                  : `${ceremony.shuffleCount} misturas realizadas`}
-            </AppText>
-            {shuffleFeedback ? (
-              <View style={styles.mixFeedback}>
-                <Ionicons name={icons.checkCircle} size={14} color={colors.primaryBright} />
-                <AppText variant="smallBold" color={colors.primaryBright} style={{ marginLeft: 6 }}>
-                  {shuffleFeedback}
-                </AppText>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-
         <View style={styles.hintSlot}>
           {reconnecting ? (
             <View style={styles.syncPill}>
@@ -223,7 +225,7 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
                 Sincronizando com a mesa...
               </AppText>
             </View>
-          ) : copy.hint ? (
+          ) : copy.hint && (ceremony.celebrating || (!shuffleChooser && !cutChooser)) ? (
             <DeckHint text={copy.hint} />
           ) : null}
         </View>
@@ -242,7 +244,13 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
           <AppText variant="h3" numberOfLines={1}>
             {me?.nickname ?? 'Você'}
           </AppText>
-          {ceremony.actorSeat === mySeat && ceremony.deadlineAt !== null && !showShuffle ? (
+          {/* O relógio só aparece aqui quando o estágio não tem cartão próprio: no embaralho e
+              no corte o prazo já está grande no cartão, e dois contadores na mesma tela
+              disputavam a atenção sem dizer nada a mais. */}
+          {ceremony.actorSeat === mySeat &&
+          ceremony.deadlineAt !== null &&
+          !showShuffle &&
+          !showCut ? (
             <CountdownText
               deadlineAt={ceremony.deadlineAt}
               warningMs={CEREMONY_TIMING.warningMs}
@@ -265,7 +273,42 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
       ) : null}
 
       <View style={styles.ctaSlot}>
-        {shuffleChooser ? (
+        {cutChooser ? (
+          <>
+            {/* Mesmo par do embaralhamento: repetir o gesto à esquerda, fechar à direita.
+                O corte também pode ser repetido quantas vezes o jogador quiser no prazo. */}
+            <View style={styles.shuffleActions}>
+              <SecondaryButton
+                label="CORTAR"
+                icon={icons.cut}
+                size="lg"
+                style={styles.shuffleAgain}
+                onPress={ceremony.bump}
+                disabled={ceremony.shuffleBusy}
+                accessibilityLabel={
+                  ceremony.cutCount === 0 ? 'Cortar o baralho' : 'Cortar novamente'
+                }
+                testID="ceremony-cut"
+              />
+              <PrimaryButton
+                label="CONFIRMAR"
+                icon={icons.checkCircle}
+                size="lg"
+                tone="gold"
+                style={styles.shuffleDone}
+                onPress={ceremony.finish}
+                disabled={ceremony.shuffleBusy}
+                accessibilityLabel="Confirmar corte"
+                testID="ceremony-finish"
+              />
+            </View>
+            {copy.ctaNote ? (
+              <AppText variant="small" color={colors.textMuted} center style={styles.ctaNote}>
+                {copy.ctaNote}
+              </AppText>
+            ) : null}
+          </>
+        ) : shuffleChooser ? (
           <>
             <View style={styles.shuffleActions}>
               {/* "EMBARALHAR NOVAMENTE" não cabia: são dois botões `lg` com ícone dividindo
@@ -292,9 +335,11 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
                 testID="ceremony-finish"
               />
             </View>
-            <AppText variant="small" color={colors.textMuted} center style={styles.ctaNote}>
-              {copy.ctaNote}
-            </AppText>
+            {copy.ctaNote ? (
+              <AppText variant="small" color={colors.textMuted} center style={styles.ctaNote}>
+                {copy.ctaNote}
+              </AppText>
+            ) : null}
           </>
         ) : copy.cta && !reconnecting ? (
           <>
@@ -306,9 +351,11 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
               tone={cutChooser ? 'gold' : 'primary'}
               testID="ceremony-finish"
             />
-            <AppText variant="small" color={colors.textMuted} center style={styles.ctaNote}>
-              {copy.ctaNote}
-            </AppText>
+            {copy.ctaNote ? (
+              <AppText variant="small" color={colors.textMuted} center style={styles.ctaNote}>
+                {copy.ctaNote}
+              </AppText>
+            ) : null}
           </>
         ) : (
           <View style={styles.waitingPill} accessibilityLiveRegion="polite">
@@ -620,6 +667,18 @@ function formatShuffleClock(ms: number): string {
   return `${String(Math.ceil(Math.max(0, ms) / 1000)).padStart(2, '0')}s`;
 }
 
+/** Quantas misturas já foram feitas, por extenso. */
+function shuffleCountCopy(count: number): string {
+  if (count === 0) return 'Nenhuma mistura ainda';
+  return count === 1 ? '1 mistura realizada' : `${count} misturas realizadas`;
+}
+
+/** Idem para o corte, que também é repetível dentro do prazo. */
+function cutCountCopy(count: number): string {
+  if (count === 0) return 'Nenhum corte ainda';
+  return count === 1 ? '1 corte realizado' : `${count} cortes realizados`;
+}
+
 /** Feedback textual da qualidade da mistura (só UX, não é regra). */
 function shuffleCopy(count: number): string | null {
   if (count <= 0) return null;
@@ -699,12 +758,12 @@ function ceremonyCopy(c: ShuffleCeremony, actorName: string): Copy {
           ...base,
           key: 'cut-me',
           title: 'Cortar o Baralho',
-          highlight: 'Arraste a parte superior para escolher onde cortar.',
+          highlight: 'Você pode cortar quantas vezes quiser dentro do tempo.',
           subtitle: true,
-          hint: 'Você pode cortar em cima, no meio ou embaixo.',
-          cta: 'CONFIRMAR CORTE',
+          hint: 'Arraste o baralho para cortar em cima, no meio ou embaixo.',
+          cta: 'CONFIRMAR',
           ctaEnabled: true,
-          ctaNote: 'Depois do corte, as cartas serão distribuídas.',
+          ctaNote: '',
           waiting: '',
         }
       : {
@@ -727,9 +786,9 @@ function ceremonyCopy(c: ShuffleCeremony, actorName: string): Copy {
         hint: null,
         cta: 'ESTÁ BOM',
         ctaEnabled: c.canFinish,
-        ctaNote: c.canFinish
-          ? 'Continue embaralhando ou toque em ESTÁ BOM.'
-          : 'Toque em EMBARALHAR para misturar o baralho.',
+        // Sem nota: o subtítulo já diz que pode repetir e os dois botões dizem o resto. A frase
+        // aqui era a quarta repetição da mesma ideia na mesma tela.
+        ctaNote: '',
         waiting: '',
       }
     : {
@@ -764,9 +823,8 @@ const styles = StyleSheet.create({
   // Acima das cartas da distribuição: elas passam por trás do texto, não por cima.
   title: { zIndex: 2 },
   subtitle: { marginTop: 2 },
-  timerCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  // Cartão único do estágio: o relógio em cima, o progresso do gesto embaixo.
+  stageCard: {
     alignSelf: 'center',
     marginTop: 10,
     paddingHorizontal: 16,
@@ -775,24 +833,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
     backgroundColor: colors.card,
-    gap: 14,
   },
+  timerCard: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   timerMeta: { alignItems: 'center', minWidth: 150 },
-  mixCard: {
-    alignSelf: 'stretch',
-    alignItems: 'center',
-    marginTop: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    backgroundColor: colors.card,
+  stageDivider: {
+    height: 1,
+    backgroundColor: colors.divider,
+    marginTop: 8,
+    marginBottom: 7,
   },
-  mixDots: { flexDirection: 'row', gap: 10, marginVertical: 6 },
-  mixDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: 'rgba(255,255,255,0.18)' },
+  gestureRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  gestureText: { flexShrink: 1 },
+  mixDots: { flexDirection: 'row', gap: 7 },
+  mixDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.18)' },
   mixDotOn: { backgroundColor: colors.primaryBright },
-  mixFeedback: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   shuffleActions: { flexDirection: 'row', gap: 10 },
   shuffleAgain: { flex: 1 },
   shuffleDone: { flex: 1 },

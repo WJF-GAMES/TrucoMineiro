@@ -71,6 +71,7 @@ function startHand(state: MatchState, dealerSeat: Seat): MatchState {
     deck,
     deckVersion: 0,
     shuffleCount: 0,
+    cutCount: 0,
     hands: Array.from({ length: PLAYERS }, () => []),
     currentRound: [],
     roundLeader: firstSeat,
@@ -130,19 +131,40 @@ function finishShuffle(state: MatchState, seat: Seat): MatchState {
   });
 }
 
+/**
+ * Um corte. Repetível dentro do prazo, como o embaralhamento: cada `CUT` roda o baralho que
+ * ficou do corte anterior (nunca a ordem original) e a mão só é distribuída no `FINISH_CUT`.
+ */
 function cutDeck(state: MatchState, seat: Seat, depth: CutDepth): MatchState {
   const hand = state.hand;
   const n = CUT_SIZE[depth];
   // The top `n` cards go under the rest: a real cut, on the exact deck the dealer left.
   const deck = [...hand.deck.slice(n), ...hand.deck.slice(0, n)];
   const deckVersion = hand.deckVersion + 1;
-  const cut = emit(withHand(state, { deck, deckVersion }), {
+  const cutCount = hand.cutCount + 1;
+  return emit(withHand(state, { deck, deckVersion, cutCount }), {
     type: 'CUT_DONE',
     seat,
     depth,
     deckVersion,
+    cutCount,
   });
-  return dealHand(cut);
+}
+
+/**
+ * Fecha o corte e distribui. O corte é obrigatório na mesa: se o prazo estourou sem nenhum
+ * corte, o baralho é cortado no meio antes de distribuir.
+ */
+function finishCut(state: MatchState, seat: Seat): MatchState {
+  const cut = state.hand.cutCount === 0 ? cutDeck(state, seat, 'middle') : state;
+  const hand = cut.hand;
+  const next = emit(cut, {
+    type: 'CUT_FINALIZED',
+    seat,
+    deckVersion: hand.deckVersion,
+    cutCount: hand.cutCount,
+  });
+  return dealHand(next);
 }
 
 function dealHand(state: MatchState): MatchState {
@@ -166,8 +188,9 @@ export function skipCeremony(state: MatchState): MatchState {
   let s = state;
   if (s.hand.phase === 'SHUFFLING')
     s = applyAction(s, { type: 'FINISH_SHUFFLE', seat: s.hand.dealerSeat });
+  // `FINISH_CUT` sem nenhum corte corta no meio sozinho: mesmo baralho de antes.
   if (s.hand.phase === 'CUTTING')
-    s = applyAction(s, { type: 'CUT', seat: cutterSeatOf(s.hand.dealerSeat), depth: 'middle' });
+    s = applyAction(s, { type: 'FINISH_CUT', seat: cutterSeatOf(s.hand.dealerSeat) });
   return s;
 }
 
@@ -185,7 +208,7 @@ export function getAvailableActions(state: MatchState, seat: Seat): ActionType[]
     case 'SHUFFLING':
       return hand.dealerSeat === seat ? ['SHUFFLE', 'FINISH_SHUFFLE'] : [];
     case 'CUTTING':
-      return cutterSeatOf(hand.dealerSeat) === seat ? ['CUT'] : [];
+      return cutterSeatOf(hand.dealerSeat) === seat ? ['CUT', 'FINISH_CUT'] : [];
     case 'MAO_DE_ONZE':
       return hand.maoDeOnzeTeam === team ? ['ACCEPT_MAO_DE_ONZE', 'DECLINE_MAO_DE_ONZE'] : [];
     case 'PLAY': {
@@ -233,6 +256,9 @@ export function applyAction(state: MatchState, action: GameAction): MatchState {
       break;
     case 'CUT':
       next = cutDeck(state, action.seat, action.depth ?? 'middle');
+      break;
+    case 'FINISH_CUT':
+      next = finishCut(state, action.seat);
       break;
     case 'PLAY_CARD':
       next = playCard(state, action.seat, parseCardId(action.cardId));
@@ -447,6 +473,8 @@ export interface SeatView {
   /** Ceremony state (the deck itself never leaves the engine). */
   deckVersion: number;
   shuffleCount: number;
+  /** Quantos cortes já foram dados nesta mão (o corte é repetível dentro do prazo). */
+  cutCount: number;
   proposedValue: number | null;
   phase: HandState['phase'];
   turnSeat: Seat;
@@ -478,6 +506,7 @@ export function viewForSeat(state: MatchState, seat: Seat): SeatView {
     handValue: h.value,
     deckVersion: h.deckVersion,
     shuffleCount: h.shuffleCount,
+    cutCount: h.cutCount,
     proposedValue: h.truco?.proposedValue ?? null,
     phase: h.phase,
     turnSeat: h.turnSeat,

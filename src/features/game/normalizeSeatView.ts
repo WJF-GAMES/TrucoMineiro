@@ -33,6 +33,7 @@ export function normalizeSeatView(raw: unknown): RemoteSeatView | null {
     handValue: v.handValue ?? 1,
     deckVersion: v.deckVersion ?? 0,
     shuffleCount: v.shuffleCount ?? 0,
+    cutCount: v.cutCount ?? 0,
     proposedValue: v.proposedValue ?? null,
     phase: v.phase as SeatView['phase'],
     turnSeat: v.turnSeat ?? 0,

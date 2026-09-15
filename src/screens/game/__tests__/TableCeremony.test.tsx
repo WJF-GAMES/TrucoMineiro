@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { Seat } from '@/domain/game';
 import type { TablePlayer } from '@/features/game/types';
@@ -43,6 +43,7 @@ const ceremony = (patch: Partial<ShuffleCeremony> = {}): ShuffleCeremony => ({
   deadlineAt: Date.now() + CEREMONY_TIMING.shuffleMs,
   stageTotalMs: CEREMONY_TIMING.shuffleMs,
   shuffleCount: 0,
+  cutCount: 0,
   shuffleBusy: false,
   bump: jest.fn(),
   finish: jest.fn(),
@@ -88,8 +89,9 @@ describe('TableCeremony', () => {
   it('libera ESTÁ BOM depois da primeira mistura e conta as misturas', async () => {
     const finish = jest.fn();
     await show(ceremony({ shuffleCount: 1, progress: 1 / 3, canFinish: true, finish }));
-    expect(screen.getByText('1 mistura realizada')).toBeOnTheScreen();
+    // Uma linha só para o progresso: a contagem e a "qualidade" diziam a mesma coisa duas vezes.
     expect(screen.getByText('O baralho começou a ser misturado.')).toBeOnTheScreen();
+    expect(screen.queryByText('1 mistura realizada')).toBeNull();
     expect(screen.getByTestId('ceremony-finish')).toBeEnabled();
     fireEvent.press(screen.getByTestId('ceremony-finish'));
     expect(finish).toHaveBeenCalledTimes(1);
@@ -97,8 +99,20 @@ describe('TableCeremony', () => {
 
   it('com três misturas o baralho está ótimo', async () => {
     await show(ceremony({ shuffleCount: 3, progress: 1, canFinish: true }));
-    expect(screen.getByText('3 misturas realizadas')).toBeOnTheScreen();
     expect(screen.getByText('O baralho está ótimo!')).toBeOnTheScreen();
+    expect(screen.queryByText('3 misturas realizadas')).toBeNull();
+  });
+
+  it('o prazo e o progresso dividem um único cartão, sem nota repetindo os botões', async () => {
+    await show(ceremony({ shuffleCount: 0 }));
+    const card = screen.getByTestId('shuffle-status');
+    // O relógio do estágio vive dentro do mesmo cartão do progresso.
+    expect(within(card).getByTestId('shuffle-clock')).toBeOnTheScreen();
+    expect(within(card).getByText('Nenhuma mistura ainda')).toBeOnTheScreen();
+    // E o texto "Mistura do baralho" some: o cartão já está no contexto do embaralhamento.
+    expect(screen.queryByText('Mistura do baralho')).toBeNull();
+    expect(screen.queryByText('Toque em EMBARALHAR para misturar o baralho.')).toBeNull();
+    expect(screen.queryByText('Continue embaralhando ou toque em ESTÁ BOM.')).toBeNull();
   });
 
   it('quando é outro que embaralha, bloqueia a ação e diz de quem se espera', async () => {
@@ -125,15 +139,18 @@ describe('TableCeremony', () => {
     expect(screen.getByText('Embaralhamos por você.')).toBeOnTheScreen();
   });
 
+  const cutStage = (patch: Partial<ShuffleCeremony> = {}) =>
+    ceremony({ stage: 'cut', stageTotalMs: CEREMONY_TIMING.cutMs, canFinish: true, ...patch });
+
   it('troca o gesto e o texto no corte', async () => {
-    await show(ceremony({ stage: 'cut', stageTotalMs: CEREMONY_TIMING.cutMs, canFinish: false }));
+    await show(cutStage());
     expect(screen.getByText('Cortar o Baralho')).toBeOnTheScreen();
-    expect(
-      screen.getByText('Arraste a parte superior para escolher onde cortar.'),
-    ).toBeOnTheScreen();
+    expect(screen.getByText('Você pode cortar quantas vezes quiser dentro do tempo.')).toBeOnTheScreen();
+    // O corte tem prazo próprio na tela: é dentro dele que o gesto pode ser repetido.
+    expect(screen.getByText('Tempo para cortar')).toBeOnTheScreen();
     // As três opções de corte, o meio selecionado por padrão, e a escolha vai para a cerimônia
     // (é ela quem manda a profundidade no `CUT` para o motor).
-    const c = ceremony({ stage: 'cut', stageTotalMs: CEREMONY_TIMING.cutMs, canFinish: false });
+    const c = cutStage();
     await show(c);
     expect(screen.getByTestId('cut-options')).toBeOnTheScreen();
     expect(screen.getByTestId('cut-middle')).toBeSelected();
@@ -143,8 +160,36 @@ describe('TableCeremony', () => {
     expect(c.setCutDepth).toHaveBeenCalledWith('high');
     await show(ceremony({ ...c, cutDepth: 'high' }));
     expect(screen.getByTestId('cut-high')).toBeSelected();
-    // O corte é um gesto único: o botão nunca fica travado.
-    expect(screen.getByTestId('ceremony-finish')).toBeEnabled();
+  });
+
+  it('CORTAR pede um corte real e conta os cortes; CONFIRMAR fecha o estágio', async () => {
+    const c = cutStage();
+    await show(c);
+    expect(screen.getByText('Nenhum corte ainda')).toBeOnTheScreen();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('ceremony-cut'));
+    });
+    expect(c.bump).toHaveBeenCalledTimes(1);
+    expect(c.finish).not.toHaveBeenCalled();
+
+    await show(cutStage({ cutCount: 1 }));
+    expect(screen.getByText('1 corte realizado')).toBeOnTheScreen();
+
+    const c3 = cutStage({ cutCount: 3 });
+    await show(c3);
+    expect(screen.getByText('3 cortes realizados')).toBeOnTheScreen();
+    // Cortar de novo continua liberado: o prazo é o único limite.
+    expect(screen.getByTestId('ceremony-cut')).toBeEnabled();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('ceremony-finish'));
+    });
+    expect(c3.finish).toHaveBeenCalledTimes(1);
+  });
+
+  it('enquanto um corte não volta do motor os dois botões ficam travados', async () => {
+    await show(cutStage({ cutCount: 1, shuffleBusy: true }));
+    expect(screen.getByTestId('ceremony-cut')).toBeDisabled();
+    expect(screen.getByTestId('ceremony-finish')).toBeDisabled();
   });
 
   it('quem não corta não vê as opções de corte', async () => {

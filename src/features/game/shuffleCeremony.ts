@@ -1,4 +1,5 @@
 import { nextSeat, type Seat } from '@/domain/game';
+import { TURN_TIMING } from './turnTimer';
 
 /**
  * Cerimônia de início de mão: **embaralhar → cortar → distribuir**.
@@ -17,23 +18,49 @@ export type CeremonyStage = 'shuffle' | 'cut' | 'deal' | 'done';
 /** O que cada assento está fazendo no estágio atual (dirige avatar, halo e microcopy). */
 export type SeatCeremonyStatus = 'acting' | 'next' | 'waiting';
 
+/**
+ * Distribuição: doze cartas saem do baralho uma a uma e pousam onde vão ficar; no fim, as do
+ * jogador local viram no lugar.
+ */
+export const DEAL_TIMING = {
+  /** Intervalo entre uma carta e a seguinte saindo do baralho. */
+  staggerMs: 110,
+  /** Voo do baralho até o destino. */
+  flyMs: 360,
+  /** Respiro antes de virar as minhas cartas. */
+  flipDelayMs: 140,
+  /** Virada das minhas cartas no lugar. */
+  flipMs: 340,
+} as const;
+
+export const DEAL_TOTAL_MS =
+  DEAL_TIMING.staggerMs * 11 + DEAL_TIMING.flyMs + DEAL_TIMING.flipDelayMs + DEAL_TIMING.flipMs;
+
 export const CEREMONY_TIMING = {
-  /** Tempo do jogador da vez para embaralhar antes do fallback automático. */
-  shuffleMs: 10_000,
-  /** Tempo para cortar. O corte é um gesto único, então é mais curto. */
-  cutMs: 8_000,
+  /**
+   * Prazos dos estágios. Quem manda no relógio é `TURN_TIMING` (é dele que sai o `deadlineAt`
+   * de verdade, em `useCeremony`/`useTurnTimer`): aqui são só apelidos, para o anel de progresso
+   * e o contador desenharem exatamente o mesmo tempo que o motor cobra. Duplicar o número faria
+   * a barra andar num ritmo e o prazo acabar noutro.
+   */
+  shuffleMs: TURN_TIMING.shuffleMs,
+  cutMs: TURN_TIMING.cutMs,
   /** Últimos segundos em que o contador vira alerta (cor + vibração). */
-  warningMs: 4_000,
+  warningMs: 5_000,
   /** "Baralho embaralhado!" antes de passar o baralho adiante. */
-  successMs: 850,
+  successMs: 1_100,
   /** "Agora é hora de cortar." — respiro entre os estágios. */
-  handoffMs: 900,
-  /** Cartas voando para os quatro assentos (ver `DEAL_TIMING`): a mesa real assume depois. */
-  dealMs: 1_990,
+  handoffMs: 1_200,
+  /**
+   * Cartas voando para os quatro assentos: derivado de `DEAL_TOTAL_MS` com uma folga, para a
+   * mesa real só assumir depois de a última carta pousar. Antes era um número solto que precisava
+   * ser lembrado a cada ajuste da animação.
+   */
+  dealMs: DEAL_TOTAL_MS + 180,
   /** Quanto um bot/adversário demora "embaralhando" (puramente cosmético). */
-  remoteShuffleMs: 1_900,
+  remoteShuffleMs: 2_200,
   /** Idem para o corte. */
-  remoteCutMs: 1_100,
+  remoteCutMs: 1_500,
 } as const;
 
 /** Gestos curtos necessários para liberar o botão e para completar sozinho. */
@@ -128,21 +155,3 @@ export function cutSplit(depth: CutDepth): { top: number; bottom: number } {
   const top = CUT_DEPTHS.find((d) => d.id === depth)?.topCards ?? 2;
   return { top, bottom: CUT_STACK_CARDS - top };
 }
-
-/**
- * Distribuição: doze cartas saem do baralho uma a uma e pousam onde vão ficar; no fim, as do
- * jogador local viram no lugar. `CEREMONY_TIMING.dealMs` cobre `DEAL_TOTAL_MS` com folga.
- */
-export const DEAL_TIMING = {
-  /** Intervalo entre uma carta e a seguinte saindo do baralho. */
-  staggerMs: 95,
-  /** Voo do baralho até o destino. */
-  flyMs: 340,
-  /** Respiro antes de virar as minhas cartas. */
-  flipDelayMs: 120,
-  /** Virada das minhas cartas no lugar. */
-  flipMs: 320,
-} as const;
-
-export const DEAL_TOTAL_MS =
-  DEAL_TIMING.staggerMs * 11 + DEAL_TIMING.flyMs + DEAL_TIMING.flipDelayMs + DEAL_TIMING.flipMs;

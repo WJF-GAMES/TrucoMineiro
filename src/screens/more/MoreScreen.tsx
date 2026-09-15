@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
-import * as Application from 'expo-application';
 import { colors, spacing } from '@/design-system';
 import { DangerButton, GameHeader, MenuCard, MenuGroup, MenuItem, Screen } from '@/components';
 import { signOut } from '@/services/firebase/auth';
 import { toast } from '@/stores/toastStore';
 import { AdsDebugPanel } from '@/ads';
+import { APP_VERSION } from '@/utils/appVersion';
 import type { TabScreenProps } from '@/navigation/types';
 
 export function MoreScreen({ navigation }: TabScreenProps<'More'>) {
   const [leaving, setLeaving] = useState(false);
   const [adsDebugOpen, setAdsDebugOpen] = useState(false);
-  const version = Application.nativeApplicationVersion ?? '1.0.0';
 
   const logout = () => {
     Alert.alert('Sair da conta', 'Você precisará informar seu telefone novamente para entrar.', [
@@ -72,7 +71,7 @@ export function MoreScreen({ navigation }: TabScreenProps<'More'>) {
         <MenuItem
           icon="information-circle"
           title="Sobre o Truco Mineiro"
-          subtitle={`Versão ${version}`}
+          subtitle={`Versão ${APP_VERSION}`}
           onPress={() => navigation.navigate('StaticPage', { kind: 'about' })}
         />
       </MenuGroup>

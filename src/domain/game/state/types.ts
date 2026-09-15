@@ -71,10 +71,12 @@ export interface HandState {
    * `SHUFFLE` reshuffles this exact deck (never the original order) and the `CUT` rotates it.
    */
   deck: Card[];
-  /** Bumps on every shuffle and on the cut: the deal consumes exactly the last version. */
+  /** Bumps on every shuffle and on every cut: the deal consumes exactly the last version. */
   deckVersion: number;
   /** How many times the dealer shuffled this hand (feedback for the table). */
   shuffleCount: number;
+  /** How many times the cutter cut this hand. Like the shuffle, the cut can be repeated. */
+  cutCount: number;
   hands: Card[][]; // index = seat
   currentRound: PlayedCard[];
   roundLeader: Seat;
@@ -109,6 +111,7 @@ export type ActionType =
   | 'SHUFFLE'
   | 'FINISH_SHUFFLE'
   | 'CUT'
+  | 'FINISH_CUT'
   | 'PLAY_CARD'
   | 'REQUEST_TRUCO'
   | 'ACCEPT_TRUCO'
@@ -121,6 +124,7 @@ export type GameAction =
   | { type: 'SHUFFLE'; seat: Seat }
   | { type: 'FINISH_SHUFFLE'; seat: Seat }
   | { type: 'CUT'; seat: Seat; depth?: CutDepth }
+  | { type: 'FINISH_CUT'; seat: Seat }
   | { type: 'PLAY_CARD'; seat: Seat; cardId: string }
   | { type: 'REQUEST_TRUCO'; seat: Seat }
   | { type: 'ACCEPT_TRUCO'; seat: Seat }
@@ -133,7 +137,8 @@ export type GameEvent =
   | { type: 'HAND_STARTED'; number: number; dealerSeat: Seat; firstSeat: Seat }
   | { type: 'SHUFFLE_PERFORMED'; seat: Seat; deckVersion: number; shuffleCount: number }
   | { type: 'SHUFFLE_FINALIZED'; seat: Seat; deckVersion: number; shuffleCount: number }
-  | { type: 'CUT_DONE'; seat: Seat; depth: CutDepth; deckVersion: number }
+  | { type: 'CUT_DONE'; seat: Seat; depth: CutDepth; deckVersion: number; cutCount: number }
+  | { type: 'CUT_FINALIZED'; seat: Seat; deckVersion: number; cutCount: number }
   | { type: 'HAND_DEALT'; number: number; firstSeat: Seat }
   | { type: 'CARD_PLAYED'; seat: Seat; card: Card }
   | { type: 'ROUND_ENDED'; round: number; winner: Team | null; winnerSeat: Seat }

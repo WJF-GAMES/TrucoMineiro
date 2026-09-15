@@ -6,8 +6,12 @@ import { AppText } from '@/components';
 import { haptic } from '@/utils/haptics';
 import { nowMs } from '@/utils/clock';
 
-/** Cada número fica este tempo na tela; "Valendo!" fecha a contagem. */
-export const COUNTDOWN_STEP_MS = 850;
+/**
+ * Cada número fica este tempo na tela; "Valendo!" fecha a contagem.
+ * Uma contagem regressiva é lida no compasso do segundo: com 850 ms ela passava antes de o
+ * jogador reconhecer a mesa, que é justamente o que esta abertura existe para dar.
+ */
+export const COUNTDOWN_STEP_MS = 1_000;
 export const COUNTDOWN_STEPS = ['3', '2', '1', 'Valendo!'] as const;
 export const COUNTDOWN_TOTAL_MS = COUNTDOWN_STEP_MS * COUNTDOWN_STEPS.length;
 

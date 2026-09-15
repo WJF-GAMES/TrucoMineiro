@@ -9,14 +9,22 @@ import { cardId, cardStrength, type GameAction, type Seat, type SeatView } from 
  * decidir regra: só escolhe entre as ações que `availableActions` já liberou.
  */
 export const TURN_TIMING = {
-  /** Tempo para jogar uma carta ou responder a um truco. */
-  turnMs: 25_000,
-  /** Tempo para embaralhar (quantas vezes quiser) antes de o sistema fechar sozinho. */
-  shuffleMs: 10_000,
-  /** Tempo para cortar. */
-  cutMs: 8_000,
+  /**
+   * Tempo para jogar uma carta ou responder a um truco.
+   *
+   * Ritmo de mesa, não de relógio de xadrez: o jogador precisa ler as cartas na mesa, o placar,
+   * quanto vale a mão e só então decidir. Com 25 s a partida passava a sensação de pressa.
+   */
+  turnMs: 30_000,
+  /**
+   * Tempo para embaralhar (quantas vezes quiser) antes de o sistema fechar sozinho.
+   * São vários gestos seguidos mais a decisão de parar — o prazo é o mais longo da cerimônia.
+   */
+  shuffleMs: 15_000,
+  /** Tempo para cortar: escolher entre alto/meio/baixo e confirmar. */
+  cutMs: 12_000,
   /** A partir daqui o relógio vira alerta (cor + vibração). */
-  warningMs: 5_000,
+  warningMs: 6_000,
 } as const;
 
 /** Duração do prazo conforme o que o jogador tem de decidir. */
@@ -31,7 +39,8 @@ export function timeoutAction(view: SeatView, seat: Seat): GameAction | null {
   const actions = view.availableActions;
   // Cerimônia: o tempo acabou → fecha o embaralhamento com o baralho como está / corta no meio.
   if (actions.includes('FINISH_SHUFFLE')) return { type: 'FINISH_SHUFFLE', seat };
-  if (actions.includes('CUT')) return { type: 'CUT', seat, depth: 'middle' };
+  // `FINISH_CUT` corta no meio sozinho quando ninguém cortou: um único fechamento para o estágio.
+  if (actions.includes('FINISH_CUT')) return { type: 'FINISH_CUT', seat };
   if (actions.includes('RUN')) return { type: 'RUN', seat };
   if (actions.includes('DECLINE_MAO_DE_ONZE')) return { type: 'DECLINE_MAO_DE_ONZE', seat };
   if (actions.includes('PLAY_CARD') && view.myCards.length > 0) {

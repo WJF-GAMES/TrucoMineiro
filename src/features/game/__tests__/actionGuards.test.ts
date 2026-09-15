@@ -102,7 +102,7 @@ describe('useCeremony.finish', () => {
       finish();
     });
     expect(actFn).toHaveBeenCalledTimes(1);
-    expect(actFn).toHaveBeenCalledWith({ type: 'CUT', seat: cutter, depth: 'middle' });
+    expect(actFn).toHaveBeenCalledWith({ type: 'FINISH_CUT', seat: cutter });
   });
 
   it('manda a profundidade escolhida no CUT', async () => {
@@ -120,17 +120,52 @@ describe('useCeremony.finish', () => {
       }),
     );
     await act(async () => result.current.setCutDepth('high'));
-    await act(async () => result.current.finish());
+    await act(async () => result.current.bump());
     expect(actFn).toHaveBeenCalledWith({ type: 'CUT', seat: cutter, depth: 'high' });
+  });
+
+  it('corta quantas vezes o jogador quiser enquanto o estágio não fecha', async () => {
+    const { state, cutter } = stateAtCutting(3);
+    const actFn = jest.fn();
+    const { result, rerender } = await renderHook<
+      ReturnType<typeof useCeremony>,
+      { view: SeatView }
+    >(
+      ({ view }) =>
+        useCeremony({
+          view,
+          mySeat: cutter,
+          recentEvents: NO_EVENTS,
+          deadlineAt: null,
+          act: actFn,
+          held: false,
+        }),
+      { initialProps: { view: viewForSeat(state, cutter) } },
+    );
+
+    // Cada corte só libera o botão quando o contador da view sobe (a trava evita o toque duplo).
+    let live = state;
+    for (const depth of ['high', 'low', 'middle'] as const) {
+      await act(async () => result.current.setCutDepth(depth));
+      await act(async () => result.current.bump());
+      live = applyAction(live, { type: 'CUT', seat: cutter, depth });
+      await rerender({ view: viewForSeat(live, cutter) });
+    }
+
+    expect(actFn).toHaveBeenCalledTimes(3);
+    expect(actFn.mock.calls.map((c) => c[0].depth)).toEqual(['high', 'low', 'middle']);
+    expect(live.hand.cutCount).toBe(3);
+    expect(live.hand.phase).toBe('CUTTING');
+
+    // E o estágio só termina quando o jogador fecha.
+    await act(async () => result.current.finish());
+    expect(actFn).toHaveBeenLastCalledWith({ type: 'FINISH_CUT', seat: cutter });
   });
 
   it('não corta quando a view viva já saiu de CUTTING', async () => {
     const { state, cutter } = stateAtCutting(3);
     const cutting = viewForSeat(state, cutter);
-    const dealt = viewForSeat(
-      applyAction(state, { type: 'CUT', seat: cutter, depth: 'middle' }),
-      cutter,
-    );
+    const dealt = viewForSeat(applyAction(state, { type: 'FINISH_CUT', seat: cutter }), cutter);
     const actFn = jest.fn();
     const { result, rerender } = await renderHook<
       ReturnType<typeof useCeremony>,

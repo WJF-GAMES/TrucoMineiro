@@ -20,7 +20,7 @@ export interface ShuffleCeremony {
   iAmActor: boolean;
   /** 0..1 da mistura (três misturas = cheio). */
   progress: number;
-  /** Já houve pelo menos uma mistura: "ESTÁ BOM" liberado. */
+  /** O estágio já pode ser fechado: uma mistura no embaralho, sempre no corte. */
   canFinish: boolean;
   /** Estágio terminado, a transição está a caminho (só a distribuição usa). */
   celebrating: boolean;
@@ -30,13 +30,19 @@ export interface ShuffleCeremony {
   stageTotalMs: number | null;
   /** Quantas vezes o baralho já foi misturado nesta mão. */
   shuffleCount: number;
-  /** Uma mistura foi pedida e ainda não voltou do motor/servidor. */
+  /** Quantas vezes o baralho já foi cortado nesta mão. */
+  cutCount: number;
+  /** Uma mistura ou um corte foi pedido e ainda não voltou do motor/servidor. */
   shuffleBusy: boolean;
-  /** "EMBARALHAR NOVAMENTE": uma mistura real no motor. */
+  /**
+   * "EMBARALHAR NOVAMENTE" / "CORTAR": uma mistura ou um corte real no motor.
+   * Como o embaralhamento, o corte pode ser repetido quantas vezes o jogador quiser enquanto o
+   * prazo do estágio não acabar — cada um sobre o baralho que o anterior deixou.
+   */
   bump: () => void;
-  /** "ESTÁ BOM" / "CONFIRMAR CORTE". */
+  /** "ESTÁ BOM" / "CONFIRMAR CORTE": fecha o estágio. */
   finish: () => void;
-  /** Onde cortar (só apresentação até o corte; o corte real leva a profundidade). */
+  /** Onde cortar: a profundidade que o próximo corte usa. */
   cutDepth: CutDepth;
   setCutDepth: (d: CutDepth) => void;
 }
@@ -65,6 +71,7 @@ const INACTIVE: Omit<ShuffleCeremony, 'bump' | 'finish' | 'setCutDepth'> = {
   deadlineAt: null,
   stageTotalMs: null,
   shuffleCount: 0,
+  cutCount: 0,
   shuffleBusy: false,
   cutDepth: 'middle',
 };
@@ -109,13 +116,16 @@ export function useCeremony({ view, mySeat, recentEvents, deadlineAt, act, held 
   const [shuffleBusy, setShuffleBusy] = useState(false);
   const commitBusy = useCallback((b: boolean) => setShuffleBusy(b), []);
   const shuffleCount = view?.shuffleCount ?? 0;
-  const seenCount = useRef(shuffleCount);
+  const cutCount = view?.cutCount ?? 0;
+  // A trava vale para os dois gestos repetíveis: o contador que mudou libera o botão de novo.
+  const gestureCount = shuffleCount + cutCount;
+  const seenCount = useRef(gestureCount);
   useEffect(() => {
-    if (shuffleCount !== seenCount.current) {
-      seenCount.current = shuffleCount;
+    if (gestureCount !== seenCount.current) {
+      seenCount.current = gestureCount;
       commitBusy(false);
     }
-  }, [shuffleCount, commitBusy]);
+  }, [gestureCount, commitBusy]);
   useEffect(() => {
     if (!shuffleBusy) return;
     const t = setTimeout(() => commitBusy(false), 1200);
@@ -146,13 +156,23 @@ export function useCeremony({ view, mySeat, recentEvents, deadlineAt, act, held 
   }, [active, stage, dealerSeat]);
 
   const bump = useCallback(() => {
-    if (!view || !iAmActor || stage !== 'shuffle' || shuffleBusy) return;
-    if (!view.availableActions.includes('SHUFFLE')) return;
-    commitBusy(true);
-    haptic.light();
-    devLog('SHUFFLE', { count: view.shuffleCount + 1 });
-    void act({ type: 'SHUFFLE', seat: mySeat });
-  }, [view, iAmActor, stage, shuffleBusy, commitBusy, act, mySeat]);
+    if (!view || !iAmActor || shuffleBusy) return;
+    if (stage === 'shuffle') {
+      if (!view.availableActions.includes('SHUFFLE')) return;
+      commitBusy(true);
+      haptic.light();
+      devLog('SHUFFLE', { count: view.shuffleCount + 1 });
+      void act({ type: 'SHUFFLE', seat: mySeat });
+      return;
+    }
+    if (stage === 'cut') {
+      if (!view.availableActions.includes('CUT')) return;
+      commitBusy(true);
+      haptic.light();
+      devLog('CUT', { count: view.cutCount + 1, depth: cutDepth });
+      void act({ type: 'CUT', seat: mySeat, depth: cutDepth });
+    }
+  }, [view, iAmActor, stage, shuffleBusy, commitBusy, act, mySeat, cutDepth]);
 
   // `finish` chega por gesto (runOnJS) e pode ser entregue atrasado, com a closure de um render
   // antigo: decide sempre pela view viva e fecha cada estágio (mão:fase) uma vez só.
@@ -171,9 +191,10 @@ export function useCeremony({ view, mySeat, recentEvents, deadlineAt, act, held 
       if (live.shuffleCount < 1) return;
       devLog('CEREMONY_COMPLETE', 'shuffle', { count: live.shuffleCount });
       action = { type: 'FINISH_SHUFFLE', seat: mySeat };
-    } else if (live.phase === 'CUTTING' && live.availableActions.includes('CUT')) {
-      devLog('CEREMONY_COMPLETE', 'cut', { depth: cutDepth });
-      action = { type: 'CUT', seat: mySeat, depth: cutDepth };
+    } else if (live.phase === 'CUTTING' && live.availableActions.includes('FINISH_CUT')) {
+      devLog('CEREMONY_COMPLETE', 'cut', { count: live.cutCount, depth: cutDepth });
+      // Sem nenhum corte no prazo, o motor corta no meio ao fechar: o corte nunca é pulado.
+      action = { type: 'FINISH_CUT', seat: mySeat };
     }
     if (!action) return;
     finishedFor.current = key;
@@ -194,13 +215,15 @@ export function useCeremony({ view, mySeat, recentEvents, deadlineAt, act, held 
       dealerSeat,
       actorSeat,
       iAmActor,
-      progress: Math.min(1, shuffleCount / 3),
-      canFinish: shuffleCount >= 1,
+      progress: stage === 'cut' ? Math.min(1, cutCount / 2) : Math.min(1, shuffleCount / 3),
+      // O corte pode ser fechado a qualquer momento: quem não cortar leva o corte no meio.
+      canFinish: stage === 'cut' ? true : shuffleCount >= 1,
       celebrating: stage === 'deal',
       timedOut: false,
       deadlineAt: iAmActor ? deadlineAt : null,
       stageTotalMs: totalMs,
       shuffleCount,
+      cutCount,
       shuffleBusy,
       bump,
       finish,
@@ -214,6 +237,7 @@ export function useCeremony({ view, mySeat, recentEvents, deadlineAt, act, held 
     actorSeat,
     iAmActor,
     shuffleCount,
+    cutCount,
     shuffleBusy,
     deadlineAt,
     bump,

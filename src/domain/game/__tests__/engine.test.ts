@@ -392,20 +392,29 @@ describe('cerimônia: embaralhar → cortar → distribuir', () => {
     expect(finalized.hand.deckVersion).toBe(2);
     expect(finalized.hand.phase).toBe('CUTTING');
     expect(finalized.hand.turnSeat).toBe(0);
-    expect(getAvailableActions(finalized, 0)).toEqual(['CUT']);
+    expect(getAvailableActions(finalized, 0)).toEqual(['CUT', 'FINISH_CUT']);
     const last = finalized.events[finalized.events.length - 1];
     expect(last).toEqual({ type: 'SHUFFLE_FINALIZED', seat: 3, deckVersion: 2, shuffleCount: 2 });
   });
 
-  it('o corte gira o baralho e a distribuição consome a versão final', () => {
+  it('o corte gira o baralho, mas só o FINISH_CUT distribui', () => {
     const finalized = applyAction(shuffleN(createMatch(7), 1), { type: 'FINISH_SHUFFLE', seat: 3 });
     const before = ids(finalized.hand.deck);
-    const dealtHigh = applyAction(finalized, { type: 'CUT', seat: 0, depth: 'high' });
+    const cut = applyAction(finalized, { type: 'CUT', seat: 0, depth: 'high' });
     // Corte alto: as 10 de cima vão para baixo.
-    expect(ids(dealtHigh.hand.deck)).toEqual([...before.slice(10), ...before.slice(0, 10)]);
-    expect(dealtHigh.hand.deckVersion).toBe(2);
+    expect(ids(cut.hand.deck)).toEqual([...before.slice(10), ...before.slice(0, 10)]);
+    expect(cut.hand.deckVersion).toBe(2);
+    expect(cut.hand.cutCount).toBe(1);
+    // O baralho girou, mas a mesa continua no corte: ninguém recebeu carta ainda.
+    expect(cut.hand.phase).toBe('CUTTING');
+    cut.hand.hands.forEach((h) => expect(h).toHaveLength(0));
+
+    const dealtHigh = applyAction(cut, { type: 'FINISH_CUT', seat: 0 });
     expect(dealtHigh.hand.phase).toBe('PLAY');
     expect(dealtHigh.hand.turnSeat).toBe(0);
+    // Fechar não mexe mais no baralho: distribui exatamente o que o último corte deixou.
+    expect(ids(dealtHigh.hand.deck)).toEqual(ids(cut.hand.deck));
+    expect(dealtHigh.hand.deckVersion).toBe(2);
     dealtHigh.hand.hands.forEach((h) => expect(h).toHaveLength(3));
     // As cartas distribuídas são as 12 de cima do baralho cortado, na ordem da mesa.
     const top12 = ids(dealtHigh.hand.deck).slice(0, 12);
@@ -413,7 +422,53 @@ describe('cerimônia: embaralhar → cortar → distribuir', () => {
       [0, 1, 2, 3].map((seat) => cardId(dealtHigh.hand.hands[seat]![round]!)),
     );
     expect(dealtIds).toEqual(top12);
-    expect(dealtHigh.events.slice(-2).map((e) => e.type)).toEqual(['CUT_DONE', 'HAND_DEALT']);
+    expect(dealtHigh.events.slice(-2).map((e) => e.type)).toEqual(['CUT_FINALIZED', 'HAND_DEALT']);
+  });
+
+  it('o corte pode ser repetido dentro do prazo, sempre sobre o baralho já cortado', () => {
+    const finalized = applyAction(shuffleN(createMatch(7), 1), { type: 'FINISH_SHUFFLE', seat: 3 });
+    const before = ids(finalized.hand.deck);
+    const c1 = applyAction(finalized, { type: 'CUT', seat: 0, depth: 'high' });
+    const c2 = applyAction(c1, { type: 'CUT', seat: 0, depth: 'low' });
+    const c3 = applyAction(c2, { type: 'CUT', seat: 0, depth: 'middle' });
+
+    expect([c1, c2, c3].map((m) => m.hand.cutCount)).toEqual([1, 2, 3]);
+    expect([c1, c2, c3].map((m) => m.hand.deckVersion)).toEqual([2, 3, 4]);
+    // Cada corte parte do baralho que o anterior deixou, nunca da ordem original.
+    const rotate = (deck: string[], n: number) => [...deck.slice(n), ...deck.slice(0, n)];
+    expect(ids(c2.hand.deck)).toEqual(rotate(ids(c1.hand.deck), 30));
+    expect(ids(c3.hand.deck)).toEqual(rotate(ids(c2.hand.deck), 20));
+    expect(ids(c3.hand.deck)).not.toEqual(before);
+    // Nenhuma carta se perde nem se repete depois de vários cortes.
+    expect(new Set(ids(c3.hand.deck)).size).toBe(40);
+    // E a mesa segue no corte até o jogador fechar.
+    expect(c3.hand.phase).toBe('CUTTING');
+    expect(applyAction(c3, { type: 'FINISH_CUT', seat: 0 }).hand.phase).toBe('PLAY');
+  });
+
+  it('fechar sem cortar corta no meio: o corte é obrigatório na mesa', () => {
+    const finalized = applyAction(shuffleN(createMatch(7), 1), { type: 'FINISH_SHUFFLE', seat: 3 });
+    const before = ids(finalized.hand.deck);
+    const dealt = applyAction(finalized, { type: 'FINISH_CUT', seat: 0 });
+    expect(dealt.hand.cutCount).toBe(1);
+    expect(ids(dealt.hand.deck)).toEqual([...before.slice(20), ...before.slice(0, 20)]);
+    expect(dealt.hand.phase).toBe('PLAY');
+    expect(dealt.events.slice(-3).map((e) => e.type)).toEqual([
+      'CUT_DONE',
+      'CUT_FINALIZED',
+      'HAND_DEALT',
+    ]);
+  });
+
+  it('só quem corta corta, e só na fase de corte', () => {
+    const finalized = applyAction(shuffleN(createMatch(7), 1), { type: 'FINISH_SHUFFLE', seat: 3 });
+    for (const seat of [1, 2, 3] as const) {
+      expect(getAvailableActions(finalized, seat)).toEqual([]);
+      expect(() => applyAction(finalized, { type: 'CUT', seat, depth: 'high' })).toThrow();
+      expect(() => applyAction(finalized, { type: 'FINISH_CUT', seat })).toThrow();
+    }
+    const dealt = applyAction(finalized, { type: 'FINISH_CUT', seat: 0 });
+    expect(() => applyAction(dealt, { type: 'CUT', seat: 0, depth: 'high' })).toThrow();
   });
 
   it('sem nenhuma mistura o tempo pode fechar e o baralho já vem embaralhado pelo motor', () => {

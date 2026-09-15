@@ -23,11 +23,11 @@ import {
 
 export const TRICK_TIMING = {
   /** Carta saindo da mão/assento até o centro. */
-  flyMs: 280,
+  flyMs: 300,
   /** Quarta carta na mesa, vencedora destacada, antes de recolher. */
-  holdMs: 1_300,
+  holdMs: 1_900,
   /** Cartas juntando e indo para quem levou. */
-  collectMs: 380,
+  collectMs: 420,
 } as const;
 
 /** Quanto os bots (IA local ou servidor) esperam depois de uma vaza fechar antes de jogar de novo. */

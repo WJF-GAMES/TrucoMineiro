@@ -55,11 +55,10 @@ describe('timeoutAction na cerimônia', () => {
     expect(timeoutAction(viewForSeat(m, 3), 3)).toEqual({ type: 'FINISH_SHUFFLE', seat: 3 });
     expect(timeoutAction(viewForSeat(m, 0), 0)).toBeNull();
     const cutting = applyAction(m, { type: 'FINISH_SHUFFLE', seat: 3 });
-    expect(timeoutAction(viewForSeat(cutting, 0), 0)).toEqual({
-      type: 'CUT',
-      seat: 0,
-      depth: 'middle',
-    });
+    // Fechar o corte já corta no meio quando ninguém cortou: uma ação só fecha o estágio.
+    expect(timeoutAction(viewForSeat(cutting, 0), 0)).toEqual({ type: 'FINISH_CUT', seat: 0 });
+    const cutOnce = applyAction(cutting, { type: 'CUT', seat: 0, depth: 'high' });
+    expect(timeoutAction(viewForSeat(cutOnce, 0), 0)).toEqual({ type: 'FINISH_CUT', seat: 0 });
   });
   it('usa o prazo de cada fase', () => {
     expect(turnDurationMs('SHUFFLING')).toBe(TURN_TIMING.shuffleMs);
@@ -81,7 +80,7 @@ describe('chave da decisão', () => {
 
 describe('formatTurnClock', () => {
   it('arredonda para cima e nunca fica negativo', () => {
-    expect(formatTurnClock(TURN_TIMING.turnMs)).toBe('25s');
+    expect(formatTurnClock(25_000)).toBe('25s');
     expect(formatTurnClock(4_100)).toBe('5s');
     expect(formatTurnClock(0)).toBe('0s');
     expect(formatTurnClock(-50)).toBe('0s');
