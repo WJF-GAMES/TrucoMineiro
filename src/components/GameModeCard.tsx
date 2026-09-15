@@ -12,6 +12,13 @@ import { AppText } from './AppText';
  * Arte no topo, título em duas linhas, descrição e uma pílula com ícone.
  * Usado na tela Jogar e na Principal — o mesmo card, só com alturas diferentes.
  */
+/**
+ * O corpo do card é posicionado sobre a arte, dentro de uma altura fixa: se o texto crescer
+ * com a fonte do sistema ele sobe por cima da ilustração e é cortado pelo `overflow: hidden`.
+ * O teto de escala mantém o card legível sem esconder nada (regra 12).
+ */
+const CARD_TEXT = { numberOfLines: 2, maxFontSizeMultiplier: 1.2 } as const;
+
 export function GameModeCard({
   title,
   subtitle,
@@ -52,15 +59,27 @@ export function GameModeCard({
         style={styles.modeFade}
       />
       <View style={styles.modeBody}>
-        <AppText variant="h2" center style={styles.modeTitle}>
+        <AppText variant="h2" center style={styles.modeTitle} {...CARD_TEXT}>
           {title}
         </AppText>
-        <AppText variant="small" center color="rgba(255,255,255,0.9)" style={styles.modeSubtitle}>
+        <AppText
+          variant="small"
+          center
+          color="rgba(255,255,255,0.9)"
+          style={styles.modeSubtitle}
+          numberOfLines={3}
+          maxFontSizeMultiplier={1.2}
+        >
           {subtitle}
         </AppText>
         <View style={styles.modeFooter}>
           <Ionicons name={footerIcon} size={14} color={colors.gold} />
-          <AppText variant="caption" style={styles.modeFooterText}>
+          <AppText
+            variant="caption"
+            style={styles.modeFooterText}
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.2}
+          >
             {footer}
           </AppText>
         </View>

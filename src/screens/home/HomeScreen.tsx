@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, gradients, radius, spacing } from '@/design-system';
+import { colors, gradients, icons, radius, spacing } from '@/design-system';
 import { images, leagueShield } from '@/assets';
 import {
   AppText,
@@ -143,7 +143,7 @@ export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
               {pct(stats?.wins ?? 0, stats?.matches ?? 0)}% vitórias
             </AppText>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+          <Ionicons name={icons.chevronRight} size={20} color={colors.textSecondary} />
         </Surface>
       </Pressable>
 

@@ -49,7 +49,6 @@ export type RootStackParamList = {
   EditProfile: undefined;
   Settings: undefined;
   Notifications: undefined;
-  Ranking: undefined;
   Achievements: undefined;
   MatchHistory: undefined;
   StaticPage: { kind: StaticPageKind };

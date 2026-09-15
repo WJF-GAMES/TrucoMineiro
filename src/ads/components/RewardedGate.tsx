@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, spacing } from '@/design-system';
+import { colors, icons, spacing } from '@/design-system';
 import { AppText, PrimaryButton, SecondaryButton, Sheet } from '@/components';
 import { useAdStore } from '../core/AdState';
 import { SponsoredBadge } from './SponsoredBadge';
@@ -50,7 +50,7 @@ export function RewardedGate({
         <SponsoredBadge label="Conteúdo patrocinado" />
       </View>
       <View style={styles.row}>
-        <Ionicons name="play-circle" size={28} color={colors.primaryBright} />
+        <Ionicons name={icons.playCircle} size={28} color={colors.primaryBright} />
         <AppText variant="body" color={colors.textSecondary} style={styles.description}>
           {description}
         </AppText>

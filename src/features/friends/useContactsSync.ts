@@ -40,7 +40,14 @@ export interface SyncProgress {
 }
 
 export type SyncErrorKind =
-  'permission' | 'read' | 'offline' | 'rate_limit' | 'app_check' | 'unknown';
+  | 'permission'
+  | 'read'
+  | 'offline'
+  | 'rate_limit'
+  | 'app_check'
+  /** O servidor respondeu que a busca por contatos está fora do ar (ex.: diretório sem chave). */
+  | 'unavailable'
+  | 'unknown';
 
 const EMPTY: AgendaMatchResult = { matched: [], unmatched: [] };
 
@@ -294,7 +301,10 @@ function classify(e: unknown): SyncErrorKind {
   if (e instanceof FunctionsError) {
     if (e.code === 'resource-exhausted') return 'rate_limit';
     if (e.code === 'unavailable' || e.code === 'deadline-exceeded') return 'offline';
-    if (e.code === 'unauthenticated' || e.code === 'failed-precondition') return 'app_check';
+    if (e.code === 'unauthenticated') return 'app_check';
+    // `failed-precondition` vem do servidor dizendo que o recurso está indisponível — não é
+    // problema do aparelho. Tratar como App Check mandava o usuário caçar defeito onde não há.
+    if (e.code === 'failed-precondition') return 'unavailable';
   }
   return 'unknown';
 }

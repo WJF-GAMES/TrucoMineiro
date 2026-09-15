@@ -81,7 +81,7 @@ export function BottomNavigation({ state, navigation }: BottomTabBarProps) {
                 navigation.navigate(route.name);
               }
             }}
-            style={styles.tab}
+            style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}
           >
             <View style={[styles.indicator, active && styles.indicatorActive]} />
             <TabIcon route={route.name} active={active} />
@@ -89,6 +89,10 @@ export function BottomNavigation({ state, navigation }: BottomTabBarProps) {
               variant="tab"
               color={active ? colors.primary : colors.tabInactive}
               style={styles.label}
+              numberOfLines={1}
+              // A barra tem altura fixa (ícone + rótulo): sem o teto, a fonte máxima do
+              // sistema corta os rótulos das cinco abas (regras 12 e 50).
+              maxFontSizeMultiplier={1.2}
             >
               {LABELS[route.name] ?? route.name}
             </AppText>
@@ -109,6 +113,8 @@ const styles = StyleSheet.create({
     minHeight: spacing.tabBarHeight,
   },
   tab: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 4 },
+  // Retorno imediato ao toque: sem isso a única resposta é a troca de tela (regra 19).
+  tabPressed: { opacity: 0.6 },
   indicator: {
     width: 32,
     height: 3,

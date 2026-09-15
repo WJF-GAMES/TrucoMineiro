@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
-import { colors, spacing } from '@/design-system';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { colors, icons, spacing } from '@/design-system';
 import { leagueShield } from '@/assets';
 import {
   AppText,
@@ -22,7 +23,6 @@ import { getAchievements, subscribeUserAchievements } from '@/services/firebase/
 import { leagueById } from '@/domain/model/leagues';
 import { formatNumber, pct } from '@/utils/format';
 import { traced } from '@/services/firebase/perf';
-import { toast } from '@/stores/toastStore';
 import { NativeAdCard } from '@/ads';
 import type { RootScreenProps } from '@/navigation/types';
 
@@ -34,6 +34,7 @@ export function ProfileScreen({ navigation }: RootScreenProps<'Profile'>) {
   const [achievements, setAchievements] = useState<{ total: number; unlocked: number } | null>(
     null,
   );
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   useEffect(() => {
     if (!uid) return;
@@ -121,6 +122,45 @@ export function ProfileScreen({ navigation }: RootScreenProps<'Profile'>) {
         />
       </View>
 
+      {/* Os números de truco ficavam escondidos num toast: três dados espremidos numa faixa que
+          some sozinha em segundos e não pode ser relida. Aqui eles são conteúdo da tela, abertos
+          por um toque, e o número fica na mesma leitura visual dos de cima (regras 70 e 87). */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Estatísticas detalhadas"
+        accessibilityState={{ expanded: detailsOpen }}
+        onPress={() => setDetailsOpen((v) => !v)}
+        style={styles.detailsToggle}
+        testID="profile-details-toggle"
+      >
+        <AppText variant="h3" style={styles.detailsTitle}>
+          Estatísticas detalhadas
+        </AppText>
+        <Ionicons
+          name={detailsOpen ? icons.chevronUp : icons.chevronDown}
+          size={20}
+          color={colors.textSecondary}
+        />
+      </Pressable>
+      {detailsOpen ? (
+        <View style={styles.details} testID="profile-details">
+          <StatsRow
+            stats={[
+              { value: String(stats?.trucosCalled ?? 0), label: 'Trucos pedidos' },
+              { value: String(stats?.trucosAccepted ?? 0), label: 'Trucos aceitos' },
+              { value: String(stats?.bestStreak ?? 0), label: 'Melhor sequência' },
+            ]}
+          />
+          <StatsRow
+            stats={[
+              { value: String(stats?.onlineMatches ?? 0), label: 'Online' },
+              { value: String(stats?.aiMatches ?? 0), label: 'Contra a IA' },
+              { value: String(stats?.hardWins ?? 0), label: 'Vitórias no difícil' },
+            ]}
+          />
+        </View>
+      ) : null}
+
       <MenuGroup>
         <MenuItem
           icon="trophy"
@@ -129,16 +169,6 @@ export function ProfileScreen({ navigation }: RootScreenProps<'Profile'>) {
           value={achievements ? `${achievements.unlocked} de ${achievements.total}` : undefined}
           onPress={() => navigation.navigate('Achievements')}
           testID="profile-achievements"
-        />
-        <MenuItem
-          icon="stats-chart"
-          title="Estatísticas Detalhadas"
-          onPress={() =>
-            toast.info(
-              'Estatísticas',
-              `Trucos pedidos: ${stats?.trucosCalled ?? 0}  •  Aceitos: ${stats?.trucosAccepted ?? 0}  •  Melhor sequência: ${stats?.bestStreak ?? 0}`,
-            )
-          }
         />
         <MenuItem
           icon="time"
@@ -172,5 +202,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   shield: { width: 46, height: 54 },
-  stats: { marginTop: spacing.md, marginBottom: spacing.md },
+  stats: { marginTop: spacing.md },
+  detailsToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 48,
+    marginTop: spacing.sm,
+  },
+  detailsTitle: { fontSize: 15.5 },
+  details: { gap: spacing.sm, marginBottom: spacing.sm },
 });

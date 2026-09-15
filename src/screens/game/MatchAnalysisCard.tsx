@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, spacing } from '@/design-system';
+import { colors, icons, spacing } from '@/design-system';
 import { AppText, Surface } from '@/components';
 import type { MatchAnalysis } from '@/features/game/matchAnalysis';
 
@@ -11,7 +11,7 @@ export function MatchAnalysisCard({ analysis }: { analysis: MatchAnalysis }) {
   return (
     <Surface style={styles.card} testID="match-analysis">
       <View style={styles.header}>
-        <Ionicons name="stats-chart" size={18} color={colors.primaryBright} />
+        <Ionicons name={icons.stats} size={18} color={colors.primaryBright} />
         <AppText variant="h3" style={styles.title}>
           Análise da partida
         </AppText>
@@ -39,7 +39,7 @@ export function MatchAnalysisCard({ analysis }: { analysis: MatchAnalysis }) {
 
       {analysis.insights.map((insight, i) => (
         <View key={i} style={styles.insight}>
-          <Ionicons name="bulb-outline" size={14} color={colors.gold} style={styles.insightIcon} />
+          <Ionicons name={icons.tipOutline} size={14} color={colors.gold} style={styles.insightIcon} />
           <AppText variant="small" color={colors.textSecondary} style={styles.insightText}>
             {insight}
           </AppText>

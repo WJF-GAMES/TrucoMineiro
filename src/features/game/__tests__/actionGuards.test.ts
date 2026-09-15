@@ -7,6 +7,7 @@ import {
   viewForSeat,
   type GameEvent,
   type MatchState,
+  type SeatView,
   type Seat,
 } from '@/domain/game';
 import { useAiGame } from '../useAiGame';
@@ -21,6 +22,12 @@ jest.mock('@/utils/haptics', () => ({
   haptic: { light: jest.fn(), medium: jest.fn(), heavy: jest.fn() },
 }));
 
+/** A mesa só existe depois do primeiro snapshot; nos testes ela sempre já está montada. */
+function viewOf(controller: { view: SeatView | null }): SeatView {
+  if (!controller.view) throw new Error('a mesa deveria estar montada neste ponto do teste');
+  return controller.view;
+}
+
 /**
  * Guards contra ações atrasadas (toque entregue depois de a fase mudar, timer velho, closure de
  * um render antigo). Antes, o motor lançava dentro do updater de estado e a mesa inteira caía.
@@ -32,14 +39,14 @@ describe('useAiGame', () => {
   it('ignora ação que a mesa não aceita em vez de derrubar a árvore', async () => {
     const onFinished = jest.fn();
     const { result } = await renderHook(() => useAiGame('normal', 7, onFinished));
-    const before = result.current.view.version;
+    const before = viewOf(result.current).version;
     expect(result.current.availableActions).not.toContain('CUT');
     await expect(
       act(async () => {
         result.current.act({ type: 'CUT', seat: 0, depth: 'middle' });
       }),
     ).resolves.toBeUndefined();
-    expect(result.current.view.version).toBe(before);
+    expect(viewOf(result.current).version).toBe(before);
     expect(result.current.status).toBe('playing');
   });
 
@@ -49,14 +56,14 @@ describe('useAiGame', () => {
     const mine = result.current.availableActions;
     // Com o seed 7 pode ser ou não a vez do humano na cerimônia: só o caso "sou o dealer" testa.
     if (!mine.includes('SHUFFLE')) return;
-    const before = result.current.view.version;
+    const before = viewOf(result.current).version;
     await act(async () => {
       result.current.act({ type: 'SHUFFLE', seat: 0 });
       result.current.act({ type: 'FINISH_SHUFFLE', seat: 0 });
       // Chegou atrasado: a fase já é CUTTING.
       result.current.act({ type: 'FINISH_SHUFFLE', seat: 0 });
     });
-    expect(result.current.view.version).toBe(before + 2);
+    expect(viewOf(result.current).version).toBe(before + 2);
   });
 });
 
@@ -125,7 +132,10 @@ describe('useCeremony.finish', () => {
       cutter,
     );
     const actFn = jest.fn();
-    const { result, rerender } = await renderHook(
+    const { result, rerender } = await renderHook<
+      ReturnType<typeof useCeremony>,
+      { view: SeatView }
+    >(
       ({ view }) =>
         useCeremony({
           view,

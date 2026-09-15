@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, radius, spacing } from '@/design-system';
+import { colors, icons, radius, spacing } from '@/design-system';
 import { leagueShield } from '@/assets';
 import {
   AppText,
@@ -20,7 +20,11 @@ import { logEvent } from '@/services/firebase/analytics';
 import { NativeAdCard } from '@/ads';
 import { toast } from '@/stores/toastStore';
 import {
+  AVATAR_SIZE,
+  FLAG_WIDTH,
   LeagueRankingRow,
+  ME_MARKER_WIDTH,
+  RANK_COLUMN_WIDTH,
   RANKING_ROW_HEIGHT,
   type RankingZone,
 } from './components/LeagueRankingRow';
@@ -47,36 +51,33 @@ export function LeagueScreen({ navigation }: TabScreenProps<'League'>) {
 
   return (
     <Screen withTabBar testID="screen-league" padded={false}>
+      {/* Aba raiz da navegação: não tem "voltar" (não há de onde voltar), igual a Principal,
+          Jogar, Amigos e Mais. O espaçador da esquerda mantém o título centrado. */}
       <View style={styles.header}>
-        <IconButton
-          icon="chevron-back"
-          boxed={false}
-          size={28}
-          color={colors.text}
-          accessibilityLabel="Voltar"
-          onPress={() => navigation.goBack()}
-        />
+        <View style={styles.headerSide} />
         <View style={styles.headerTitle}>
           <AppText variant="h1" center>
-            Ligas
+            Liga
           </AppText>
           <AppText variant="small" center color={colors.textSecondary}>
             Jogue, pontue e suba de liga!
           </AppText>
         </View>
-        <IconButton
-          icon="help-circle-outline"
-          boxed={false}
-          size={26}
-          color={colors.textSecondary}
-          accessibilityLabel="Como funcionam as ligas"
-          onPress={() =>
-            toast.info(
-              'Como funcionam as ligas',
-              'Cada semana você compete num grupo da sua liga. Pontue jogando: os primeiros sobem de liga e os últimos descem.',
-            )
-          }
-        />
+        <View style={styles.headerSide}>
+          <IconButton
+            icon={icons.helpOutline}
+            boxed={false}
+            size={26}
+            color={colors.textSecondary}
+            accessibilityLabel="Como funcionam as ligas"
+            onPress={() =>
+              toast.info(
+                'Como funcionam as ligas',
+                'Cada semana você compete num grupo da sua liga. Pontue jogando: os primeiros sobem de liga e os últimos descem.',
+              )
+            }
+          />
+        </View>
       </View>
 
       <View style={styles.tabs}>
@@ -161,16 +162,33 @@ function MyLeagueTab({ snapshot, members, loading, error, onRetry, onPlay }: MyL
       initialNumToRender={20}
       windowSize={11}
       removeClippedSubviews
-      ListHeaderComponent={<LeagueHero snapshot={snapshot} />}
+      ListHeaderComponent={<LeagueHero snapshot={snapshot} hasMembers={members.length > 0} />}
       renderItem={({ item }) => (
         <LeagueRankingRow member={item} zone={zoneOf(item.rank)} leader={item.rank === 1} />
       )}
+      // Grupo recém-criado: o ranking existe, só não tem ninguém ainda. Sem isto a tela
+      // mostrava o cabeçalho da tabela e um vão em branco até o card de regras (regra 41).
+      ListEmptyComponent={
+        <StateView
+          kind="empty"
+          icon="people"
+          title="O grupo está sendo montado"
+          message="Assim que os jogadores da sua divisão entrarem, o ranking aparece aqui."
+          compact
+        />
+      }
       ListFooterComponent={<LeagueFooter snapshot={snapshot} onPlay={onPlay} />}
     />
   );
 }
 
-function LeagueHero({ snapshot }: { snapshot: LeagueScreenSnapshot }) {
+function LeagueHero({
+  snapshot,
+  hasMembers,
+}: {
+  snapshot: LeagueScreenSnapshot;
+  hasMembers: boolean;
+}) {
   const remaining = useRemaining(snapshot);
   const { currentLeague, previousLeague, nextLeague } = snapshot;
 
@@ -198,7 +216,7 @@ function LeagueHero({ snapshot }: { snapshot: LeagueScreenSnapshot }) {
         </View>
 
         <View style={styles.countdown}>
-          <Ionicons name="time-outline" size={20} color={colors.gold} />
+          <Ionicons name={icons.clockOutline} size={20} color={colors.gold} />
           <View style={styles.countdownText}>
             <AppText variant="caption" color={colors.textSecondary}>
               Final da semana em
@@ -241,17 +259,19 @@ function LeagueHero({ snapshot }: { snapshot: LeagueScreenSnapshot }) {
         </View>
       </Surface>
 
-      <View style={styles.tableHead}>
-        <AppText variant="caption" color={colors.textSecondary} style={styles.headRank}>
-          #
-        </AppText>
-        <AppText variant="caption" color={colors.textSecondary} style={styles.headPlayer}>
-          Jogador
-        </AppText>
-        <AppText variant="caption" color={colors.textSecondary}>
-          Pontos da Semana
-        </AppText>
-      </View>
+      {hasMembers ? (
+        <View style={styles.tableHead}>
+          <AppText variant="caption" color={colors.textSecondary} style={styles.headRank}>
+            #
+          </AppText>
+          <AppText variant="caption" color={colors.textSecondary} style={styles.headPlayer}>
+            Jogador
+          </AppText>
+          <AppText variant="caption" color={colors.textSecondary}>
+            Pontos da Semana
+          </AppText>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -266,7 +286,7 @@ function LeagueFooter({
   return (
     <View style={styles.footer}>
       <Surface style={styles.ruleCard}>
-        <Ionicons name="trophy" size={22} color={colors.gold} />
+        <Ionicons name={icons.trophy} size={22} color={colors.gold} />
         <AppText variant="small" color={colors.textSecondary} style={styles.ruleText}>
           {weeklyRuleText(snapshot)}
         </AppText>
@@ -375,6 +395,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.headerTop,
   },
   headerTitle: { flex: 1 },
+  headerSide: { width: 32, alignItems: 'center' },
   tabs: { paddingHorizontal: spacing.screen, marginTop: spacing.md },
   list: { paddingHorizontal: spacing.screen, paddingTop: spacing.md, paddingBottom: spacing.xl },
 
@@ -418,11 +439,14 @@ const styles = StyleSheet.create({
   tableHead: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.sm,
+    // Mesmo recuo das linhas (faixa de "sou eu" + padding), para as colunas baterem.
+    paddingLeft: spacing.sm + ME_MARKER_WIDTH,
+    paddingRight: spacing.sm,
     paddingBottom: spacing.sm,
   },
-  headRank: { width: 28, textAlign: 'center' },
-  headPlayer: { flex: 1, marginLeft: spacing.sm + 28 + spacing.sm },
+  headRank: { width: RANK_COLUMN_WIDTH, textAlign: 'center' },
+  // "Jogador" começa onde começa o apelido: avatar + bandeira + os respiros entre eles.
+  headPlayer: { flex: 1, marginLeft: AVATAR_SIZE + spacing.sm + FLAG_WIDTH + spacing.sm },
 
   footer: { marginTop: spacing.md },
   ruleCard: { flexDirection: 'row', alignItems: 'center' },

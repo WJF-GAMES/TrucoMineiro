@@ -1,13 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, spacing } from '@/design-system';
+import { colors, icons, spacing } from '@/design-system';
 import { AppText, GameHeader, PlayerAvatar, Screen, StateView, Surface } from '@/components';
 import { useAuthStore } from '@/stores/authStore';
 import { getMatchHistory } from '@/services/firebase/firestore';
 import type { MatchHistoryEntry } from '@/domain/model/types';
+import type { RootScreenProps } from '@/navigation/types';
 
-export function MatchHistoryScreen() {
+export function MatchHistoryScreen({ navigation }: RootScreenProps<'MatchHistory'>) {
   const uid = useAuthStore((s) => s.user?.uid);
   const [items, setItems] = useState<MatchHistoryEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +20,7 @@ export function MatchHistoryScreen() {
         setItems(items);
         setError(null);
       })
-      .catch((e) => setError(e.message));
+      .catch(() => setError('Não foi possível carregar seu histórico.'));
   }, [uid]);
   useEffect(load, [load]);
 
@@ -27,14 +28,23 @@ export function MatchHistoryScreen() {
     <Screen scroll testID="screen-history">
       <GameHeader variant="title" title="Histórico de Partidas" showBack />
       {error ? (
-        <StateView kind="error" message={error} actionLabel="Tentar de novo" onAction={load} />
+        <StateView
+          kind="error"
+          title="Não foi possível carregar"
+          message={error}
+          actionLabel="Tentar novamente"
+          onAction={load}
+        />
       ) : !items ? (
         <StateView kind="loading" />
       ) : items.length === 0 ? (
         <StateView
           kind="empty"
+          icon="albums-outline"
           title="Nenhuma partida ainda"
-          message="Suas partidas concluídas aparecem aqui."
+          message="Jogue uma partida e ela aparece aqui, com placar e adversários."
+          actionLabel="Jogar agora"
+          onAction={() => navigation.navigate('Main', { screen: 'Play' })}
         />
       ) : (
         items.map((m) => {
@@ -50,7 +60,7 @@ export function MatchHistoryScreen() {
                 ]}
               >
                 <Ionicons
-                  name={won ? 'trophy' : 'close'}
+                  name={won ? icons.trophy : icons.close}
                   size={20}
                   color={won ? colors.gold : colors.dangerSoft}
                 />

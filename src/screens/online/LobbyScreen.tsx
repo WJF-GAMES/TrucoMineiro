@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Share, StyleSheet, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, radius, spacing } from '@/design-system';
+import { colors, icons, radius, spacing } from '@/design-system';
 import {
   AppText,
   GameHeader,
@@ -237,7 +237,8 @@ export function LobbyScreen({ navigation, route }: RootScreenProps<'Lobby'>) {
         color={colors.textSecondary}
         style={{ marginTop: spacing.md }}
       >
-        Duplas: assentos 1 e 3 contra 2 e 4. Compartilhe o código para os amigos entrarem.
+        Você joga com o Parceiro, sentado à sua frente. Compartilhe o código para os amigos
+        entrarem.
       </AppText>
 
       <View style={styles.actions}>
@@ -330,7 +331,7 @@ function SeatCard({
             {player.nickname}
           </AppText>
           <View style={styles.seatMeta}>
-            {isHost ? <Ionicons name="star" size={12} color={colors.gold} /> : null}
+            {isHost ? <Ionicons name={icons.star} size={12} color={colors.gold} /> : null}
             <AppText
               variant="caption"
               color={player.ready || player.bot ? colors.primaryBright : colors.textSecondary}
@@ -338,14 +339,14 @@ function SeatCard({
               {player.bot ? 'IA' : player.ready ? 'Pronto' : 'Aguardando'}
             </AppText>
             {player.connected === false ? (
-              <Ionicons name="cloud-offline" size={12} color={colors.dangerSoft} />
+              <Ionicons name={icons.wifiOff} size={12} color={colors.dangerSoft} />
             ) : null}
           </View>
         </>
       ) : (
         <>
           <View style={styles.emptySeat}>
-            <Ionicons name="person-add" size={24} color={colors.textMuted} />
+            <Ionicons name={icons.personAdd} size={24} color={colors.textMuted} />
           </View>
           <AppText variant="bodyBold" color={colors.textMuted} style={{ marginTop: 6 }}>
             Vaga livre

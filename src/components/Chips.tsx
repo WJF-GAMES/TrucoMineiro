@@ -34,6 +34,9 @@ export function Chips<T extends string>({ options, value, onChange, scroll, test
           haptic.selection();
           onChange(o.key);
         }}
+        // A pílula tem 38dp de altura por desenho; o hitSlop leva o alvo real aos 44dp
+        // recomendados sem mudar o visual (regra 14).
+        hitSlop={{ top: 6, bottom: 6 }}
         style={styles.chipWrap}
       >
         {active ? (
@@ -73,7 +76,10 @@ function ChipLabel({ label, badge, active }: { label: string; badge?: number; ac
       <AppText
         variant="smallBold"
         color={active ? colors.text : colors.textSecondary}
-        style={{ fontSize: 13 }}
+        style={styles.label}
+        numberOfLines={1}
+        // A pílula tem altura fixa: sem o teto o rótulo é cortado na fonte máxima do sistema.
+        maxFontSizeMultiplier={1.2}
       >
         {label}
       </AppText>
@@ -101,6 +107,7 @@ const styles = StyleSheet.create({
   },
   active: { borderColor: 'rgba(120,255,190,0.5)' },
   inactive: { backgroundColor: 'rgba(15, 50, 46, 0.9)', borderColor: colors.cardBorder },
+  label: { fontSize: 13, flexShrink: 1 },
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   badge: {
     minWidth: 18,

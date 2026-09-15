@@ -12,7 +12,7 @@ import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { colors, spacing } from '@/design-system';
+import { colors, icons, spacing } from '@/design-system';
 import { images } from '@/assets';
 import { AppText, IconButton, OtpInput, PrimaryButton, Surface } from '@/components';
 import { useAuthStore } from '@/stores/authStore';
@@ -179,7 +179,7 @@ export function OtpScreen({ navigation }: RootScreenProps<'Otp'>) {
 
           {message ? (
             <View style={styles.msgRow}>
-              <Ionicons name="alert-circle" size={16} color={colors.dangerSoft} />
+              <Ionicons name={icons.alert} size={16} color={colors.dangerSoft} />
               <AppText variant="small" color={colors.dangerSoft} style={styles.msgText}>
                 {message}
               </AppText>
@@ -237,7 +237,7 @@ export function OtpScreen({ navigation }: RootScreenProps<'Otp'>) {
             }}
             style={styles.changePhone}
           >
-            <Ionicons name="call" size={16} color={colors.text} />
+            <Ionicons name={icons.phone} size={16} color={colors.text} />
             <AppText variant="bodyBold" style={styles.changePhoneText}>
               Alterar telefone
             </AppText>

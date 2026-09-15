@@ -80,7 +80,7 @@ export function PlayingCard({
   const centreSuitSize = Math.round(width * 0.42);
 
   const corner = (bottom?: boolean) => (
-    <View style={[styles.corner, bottom ? styles.cornerBottom : null]}>
+    <View style={[styles.corner, bottom ? styles.cornerBottom : styles.cornerTop]}>
       <AppText style={[styles.rank, { fontSize: rankSize, lineHeight: rankSize * 1.05, color }]}>
         {card.rank}
       </AppText>
@@ -179,8 +179,16 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
   },
-  corner: { position: 'absolute', top: 3, left: 5, alignItems: 'center' },
-  cornerBottom: { top: undefined, left: undefined, bottom: 3, right: 5 },
+  /**
+   * Quinas da carta. As duas âncoras vivem em estilos separados de propósito: no React Native
+   * um `top: undefined` num estilo posterior NÃO apaga o `top` do anterior — ele é ignorado na
+   * fusão. Com `corner` trazendo top/left, a quina de baixo acabava com as quatro âncoras ao
+   * mesmo tempo e caía em cima da de cima (a carta mostrava "3 3" lado a lado no topo).
+   */
+  corner: { position: 'absolute', alignItems: 'center' },
+  cornerTop: { top: 3, left: 5 },
+  // Baralho de verdade: a quina de baixo é a de cima girada meia-volta.
+  cornerBottom: { bottom: 3, right: 5, transform: [{ rotate: '180deg' }] },
   centre: {
     position: 'absolute',
     top: 0,

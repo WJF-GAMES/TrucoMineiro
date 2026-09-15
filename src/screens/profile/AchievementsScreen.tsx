@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, IoniconName, spacing } from '@/design-system';
+import { colors, icons, IoniconName, spacing } from '@/design-system';
 import { AppText, GameHeader, ProgressBar, Screen, StateView, Surface } from '@/components';
 import { useAuthStore } from '@/stores/authStore';
 import { useProfileStore } from '@/stores/profileStore';
@@ -14,19 +14,36 @@ export function AchievementsScreen() {
   const [list, setList] = useState<Achievement[] | null>(null);
   const [unlocked, setUnlocked] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    let alive = true;
     getAchievements()
-      .then(setList)
-      .catch((e) => setError(e.message));
-    if (uid) return subscribeUserAchievements(uid, (ua) => setUnlocked(ua?.unlocked ?? {}));
-  }, [uid]);
+      .then((a) => alive && setList(a))
+      .catch(() => alive && setError('Não foi possível carregar suas conquistas.'));
+    const stop = uid
+      ? subscribeUserAchievements(uid, (ua) => setUnlocked(ua?.unlocked ?? {}))
+      : undefined;
+    return () => {
+      alive = false;
+      stop?.();
+    };
+  }, [uid, attempt]);
 
   return (
     <Screen scroll testID="screen-achievements">
       <GameHeader variant="title" title="Minhas Conquistas" showBack />
       {error ? (
-        <StateView kind="error" message={error} />
+        <StateView
+          kind="error"
+          title="Não foi possível carregar"
+          message="Verifique sua conexão e tente de novo."
+          actionLabel="Tentar novamente"
+          onAction={() => {
+            setError(null);
+            setAttempt((n) => n + 1);
+          }}
+        />
       ) : !list ? (
         <StateView kind="loading" />
       ) : list.length === 0 ? (
@@ -62,7 +79,7 @@ export function AchievementsScreen() {
                 </View>
               </View>
               {done ? (
-                <Ionicons name="checkmark-circle" size={22} color={colors.primaryBright} />
+                <Ionicons name={icons.checkCircle} size={22} color={colors.primaryBright} />
               ) : null}
             </Surface>
           );

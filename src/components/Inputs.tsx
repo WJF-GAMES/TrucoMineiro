@@ -10,7 +10,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, fontFamily, radius, shadows } from '@/design-system';
+import { colors, fontFamily, icons, radius, shadows } from '@/design-system';
 import { AppText } from './AppText';
 import { CountryFlag } from './CountryFlag';
 import { PHONE_PLACEHOLDER, type Country } from '@/utils/phone';
@@ -60,7 +60,7 @@ export function TextField({
           style={[styles.input, inputFont]}
           {...props}
         />
-        {valid ? <Ionicons name="checkmark" size={22} color={colors.primaryBright} /> : null}
+        {valid ? <Ionicons name={icons.check} size={22} color={colors.primaryBright} /> : null}
       </View>
       {error ? (
         <AppText variant="small" color={colors.dangerSoft} style={styles.hint}>
@@ -79,7 +79,7 @@ export function TextField({
 export function SearchField(props: TextInputProps) {
   return (
     <View style={[styles.field, styles.search]}>
-      <Ionicons name="search" size={20} color={colors.textSecondary} style={{ marginRight: 10 }} />
+      <Ionicons name={icons.search} size={20} color={colors.textSecondary} style={{ marginRight: 10 }} />
       <TextInput
         placeholderTextColor={colors.textMuted}
         style={[styles.input, inputFont, { fontSize: 15 }]}
@@ -123,7 +123,7 @@ export function PhoneInput({
           {country.dial}
         </AppText>
         <Ionicons
-          name="chevron-down"
+          name={icons.chevronDown}
           size={16}
           color={colors.textSecondary}
           style={{ marginLeft: 4 }}

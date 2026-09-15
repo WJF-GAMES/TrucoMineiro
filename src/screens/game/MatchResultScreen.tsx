@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
-import { colors, spacing } from '@/design-system';
+import { colors, icons, spacing } from '@/design-system';
 import { AppText, PrimaryButton, Screen, SecondaryButton, Surface } from '@/components';
 import { logEvent } from '@/services/firebase/analytics';
 import { haptic } from '@/utils/haptics';
@@ -163,7 +163,7 @@ export function MatchResultScreen({ navigation, route }: RootScreenProps<'MatchR
         <Surface style={styles.analysisOffer} testID="result-analysis-offer">
           <View style={styles.analysisHeader}>
             <View style={styles.analysisTitle}>
-              <Ionicons name="stats-chart" size={18} color={colors.primaryBright} />
+              <Ionicons name={icons.stats} size={18} color={colors.primaryBright} />
               <AppText variant="h3" style={styles.analysisTitleText}>
                 Análise da partida
               </AppText>

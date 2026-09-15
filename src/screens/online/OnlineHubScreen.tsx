@@ -57,9 +57,9 @@ export function OnlineHubScreen({ navigation }: RootScreenProps<'OnlineHub'>) {
         </View>
       </View>
 
-      <View style={{ height: spacing.lg }} />
       <ActionRow
         testID="online-quick"
+        style={styles.firstAction}
         icon="flash"
         iconColor={colors.gold}
         title="JOGO RÁPIDO"
@@ -104,4 +104,5 @@ const styles = StyleSheet.create({
   heroImage: { width: '100%', height: '80%', opacity: 0.95 },
   heroFade: { position: 'absolute', left: 0, right: 0, top: '25%', bottom: 0 },
   heroText: { position: 'absolute', left: 14, right: 14, bottom: 12 },
+  firstAction: { marginTop: spacing.lg },
 });

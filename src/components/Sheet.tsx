@@ -1,7 +1,15 @@
 import React, { PropsWithChildren } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radius, spacing } from '@/design-system';
+import { colors, icons, radius, spacing } from '@/design-system';
 import { AppText } from './AppText';
 import { IconButton } from './Buttons';
 
@@ -25,7 +33,12 @@ export function Sheet({
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.root}>
+      {/* Dentro de um Modal o Android não redimensiona a janela e o iOS nunca redimensiona:
+          sem isto o teclado cobria o botão de enviar das folhas com campo de texto (regra 40). */}
+      <KeyboardAvoidingView
+        style={styles.root}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <Pressable
           style={StyleSheet.absoluteFill}
           accessibilityRole="button"
@@ -43,7 +56,12 @@ export function Sheet({
                 </AppText>
               ) : null}
             </View>
-            <IconButton icon="close" accessibilityLabel="Fechar" onPress={onClose} boxed={false} />
+            <IconButton
+            icon={icons.close}
+            accessibilityLabel="Fechar"
+            onPress={onClose}
+            boxed={false}
+          />
           </View>
           <ScrollView
             keyboardShouldPersistTaps="handled"
@@ -53,7 +71,7 @@ export function Sheet({
             {children}
           </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

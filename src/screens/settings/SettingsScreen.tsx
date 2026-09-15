@@ -12,20 +12,11 @@ import { toast } from '@/stores/toastStore';
 import { ConsentManager, useAdStore } from '@/ads';
 import type { RootScreenProps } from '@/navigation/types';
 
-const THEME_LABEL = { auto: 'Automático', dark: 'Escuro', light: 'Claro' } as const;
-
 export function SettingsScreen({ navigation }: RootScreenProps<'Settings'>) {
   const settings = useSettingsStore();
   const uid = useAuthStore((s) => s.user?.uid);
   const [deleting, setDeleting] = useState(false);
   const adPrivacyRequired = useAdStore((s) => s.privacyOptionsRequired);
-
-  const cycleTheme = () => {
-    const order: (typeof settings.theme)[] = ['auto', 'dark', 'light'];
-    const next = order[(order.indexOf(settings.theme) + 1) % order.length]!;
-    settings.set({ theme: next });
-    toast.info(`Tema: ${THEME_LABEL[next]}`, 'O Truco Mineiro usa a identidade escura oficial.');
-  };
 
   /**
    * O app não revoga permissão do sistema — isso é do SO. O que ele controla é o cache local
@@ -110,20 +101,9 @@ export function SettingsScreen({ navigation }: RootScreenProps<'Settings'>) {
           title="Notificações"
           onPress={() => navigation.navigate('Notifications')}
         />
-        <MenuItem
-          icon="language"
-          title="Idioma"
-          value="Português (BR)"
-          onPress={() =>
-            toast.info('Idioma', 'Por enquanto o Truco Mineiro fala só português mesmo, uai.')
-          }
-        />
-        <MenuItem
-          icon="contrast"
-          title="Tema"
-          value={THEME_LABEL[settings.theme]}
-          onPress={cycleTheme}
-        />
+        {/* Sem ação: o app fala só português. Um item clicável que abre um aviso dizendo
+            "não dá" é um controle que promete o que não cumpre (regra 18). */}
+        <MenuItem icon="language" title="Idioma" value="Português (BR)" />
       </MenuGroup>
 
       <MenuGroup style={styles.group}>

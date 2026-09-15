@@ -22,7 +22,6 @@ import { ProfileScreen } from '@/screens/profile/ProfileScreen';
 import { EditProfileScreen } from '@/screens/profile/EditProfileScreen';
 import { SettingsScreen } from '@/screens/settings/SettingsScreen';
 import { NotificationsScreen } from '@/screens/more/NotificationsScreen';
-import { RankingScreen } from '@/screens/league/RankingScreen';
 import { AchievementsScreen } from '@/screens/profile/AchievementsScreen';
 import { MatchHistoryScreen } from '@/screens/profile/MatchHistoryScreen';
 import { StaticPageScreen } from '@/screens/more/StaticPageScreen';
@@ -115,7 +114,6 @@ export function RootNavigator() {
             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} />
-            <Stack.Screen name="Ranking" component={RankingScreen} />
             <Stack.Screen name="Achievements" component={AchievementsScreen} />
             <Stack.Screen name="MatchHistory" component={MatchHistoryScreen} />
             <Stack.Screen name="StaticPage" component={StaticPageScreen} />

@@ -1,12 +1,19 @@
 import React, { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, radius, spacing, typography } from '@/design-system';
+import { colors, icons, radius, spacing, typography } from '@/design-system';
 import { AppText, CountryFlag, PlayerAvatar } from '@/components';
 import { formatNumber } from '@/utils/format';
 import type { LeagueRankingMember } from '@/domain/model/types';
 
 export const RANKING_ROW_HEIGHT = 40;
+
+/** Colunas da tabela — o cabeçalho da tela importa estes valores para alinhar com as linhas. */
+export const RANK_COLUMN_WIDTH = 28;
+export const AVATAR_SIZE = 28;
+export const FLAG_WIDTH = 20;
+/** Faixa marcada à esquerda de "sou eu"; reservada (transparente) em todas as linhas. */
+export const ME_MARKER_WIDTH = 3;
 
 export type RankingZone = 'promotion' | 'relegation' | 'neutral';
 
@@ -52,9 +59,9 @@ function Row({ member, zone, leader }: Props) {
         )}
       </View>
 
-      <PlayerAvatar avatarId={member.avatarId} size={28} ring={false} />
+      <PlayerAvatar avatarId={member.avatarId} size={AVATAR_SIZE} ring={false} />
       <View style={styles.flag}>
-        <CountryFlag code={member.countryCode} width={20} />
+        <CountryFlag code={member.countryCode} width={FLAG_WIDTH} />
       </View>
 
       <AppText
@@ -66,7 +73,7 @@ function Row({ member, zone, leader }: Props) {
         {member.nickname}
       </AppText>
       {leader ? (
-        <Ionicons name="ribbon" size={14} color={colors.gold} style={styles.crown} />
+        <Ionicons name={icons.leader} size={14} color={colors.gold} style={styles.crown} />
       ) : null}
 
       <AppText variant="bodyBold" style={styles.points}>
@@ -86,12 +93,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.divider,
+    // A faixa de "sou eu" existe em TODAS as linhas, transparente nas outras: quando só a
+    // minha linha ganhava a borda, ela empurrava o conteúdo 3px e desalinhava a coluna
+    // inteira do ranking (regra 9).
+    borderLeftWidth: ME_MARKER_WIDTH,
+    borderLeftColor: 'transparent',
   },
   // Zonas de promoção/rebaixamento pintam a linha inteira, como no mockup.
   promotion: { backgroundColor: 'rgba(5, 200, 117, 0.12)' },
   relegation: { backgroundColor: 'rgba(160, 20, 35, 0.22)' },
-  me: { borderLeftWidth: 3, borderLeftColor: colors.primaryBright },
-  rankCell: { width: 28, alignItems: 'center' },
+  me: { borderLeftColor: colors.primaryBright },
+  rankCell: { width: RANK_COLUMN_WIDTH, alignItems: 'center' },
   rankText: { ...typography.smallBold, textAlign: 'center' },
   medal: {
     width: 22,

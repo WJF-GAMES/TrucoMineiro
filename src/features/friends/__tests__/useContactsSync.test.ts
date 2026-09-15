@@ -239,7 +239,8 @@ describe('useContactsSync — erros', () => {
   it.each([
     ['unavailable', 'offline'],
     ['resource-exhausted', 'rate_limit'],
-    ['failed-precondition', 'app_check'],
+    ['unauthenticated', 'app_check'],
+    ['failed-precondition', 'unavailable'],
     ['internal', 'unknown'],
   ])('traduz o erro "%s" do servidor em "%s"', async (code, expected) => {
     contactsService.readDeviceContacts.mockResolvedValue(agendaOf(2));

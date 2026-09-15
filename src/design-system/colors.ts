@@ -16,6 +16,7 @@ export const colors = {
   cardBorder: 'rgba(120, 200, 170, 0.22)',
   cardBorderStrong: 'rgba(120, 220, 180, 0.38)',
   input: 'rgba(4, 21, 23, 0.85)',
+  switchTrack: '#3a4d4a', // trilho do Switch desligado (MenuItem)
   inputBorder: 'rgba(120, 200, 170, 0.30)',
   overlay: 'rgba(0, 20, 14, 0.55)',
   divider: 'rgba(120, 200, 170, 0.14)',

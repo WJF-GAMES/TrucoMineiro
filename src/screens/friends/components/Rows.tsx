@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, spacing } from '@/design-system';
+import { colors, icons, spacing } from '@/design-system';
 import { AppText, PillButton, PlayerAvatar } from '@/components';
 import { initialsOf } from '@/utils/phone';
 import type { FriendRequest, PresenceState, RoomInvite } from '@/domain/model/types';
@@ -32,6 +32,31 @@ function Row({
   return (
     <View style={[styles.row, divider && styles.divider]} testID={testID}>
       {children}
+    </View>
+  );
+}
+
+/**
+ * Linha com duas ações (aceitar/recusar). Os dois pills somam ~180dp; com o avatar e os
+ * respiros, sobravam menos de 70dp para o nome num aparelho de 360dp — todo apelido virava
+ * reticências. Aqui identidade e ações ficam em linhas próprias: o nome usa a largura inteira
+ * e os botões continuam com o rótulo escrito (regras 12 e 13).
+ */
+function StackedRow({
+  children,
+  actions,
+  divider = true,
+  testID,
+}: {
+  children: React.ReactNode;
+  actions: React.ReactNode;
+  divider?: boolean;
+  testID?: string;
+}) {
+  return (
+    <View style={[styles.stacked, divider && styles.divider]} testID={testID}>
+      <View style={styles.stackedIdentity}>{children}</View>
+      <View style={styles.stackedActions}>{actions}</View>
     </View>
   );
 }
@@ -106,7 +131,7 @@ export const FriendRow = memo(function FriendRow({
         style={styles.more}
         testID={`friend-more-${profile.id}`}
       >
-        <Ionicons name="ellipsis-vertical" size={20} color={colors.textSecondary} />
+        <Ionicons name={icons.more} size={20} color={colors.textSecondary} />
       </Pressable>
     </Row>
   );
@@ -128,34 +153,42 @@ export const RoomInviteRow = memo(function RoomInviteRow({
   onDecline: (invite: RoomInvite) => void;
 }) {
   return (
-    <Row divider={divider} testID={`room-invite-${invite.code}`}>
+    <StackedRow
+      divider={divider}
+      testID={`room-invite-${invite.code}`}
+      actions={
+        <>
+          <PillButton
+            label="Recusar"
+            variant="muted"
+            disabled={busy}
+            onPress={() => onDecline(invite)}
+            style={styles.stackedPill}
+            testID={`room-invite-decline-${invite.code}`}
+          />
+          <PillButton
+            label="Entrar"
+            variant="gold"
+            disabled={busy}
+            onPress={() => onAccept(invite)}
+            style={styles.stackedPill}
+            testID={`room-invite-accept-${invite.code}`}
+          />
+        </>
+      }
+    >
       <View style={styles.inviteIcon}>
-        <Ionicons name="game-controller" size={22} color={colors.gold} />
+        <Ionicons name={icons.gameController} size={22} color={colors.gold} />
       </View>
       <View style={styles.texts}>
         <AppText variant="h3" numberOfLines={1} style={styles.name}>
           {invite.fromNickname}
         </AppText>
-        <AppText variant="small" color={colors.textSecondary}>
+        <AppText variant="small" color={colors.textSecondary} numberOfLines={1}>
           te chamou para a sala {invite.code}
         </AppText>
       </View>
-      <PillButton
-        label="Entrar"
-        variant="gold"
-        disabled={busy}
-        onPress={() => onAccept(invite)}
-        testID={`room-invite-accept-${invite.code}`}
-      />
-      <PillButton
-        label="Recusar"
-        variant="muted"
-        disabled={busy}
-        onPress={() => onDecline(invite)}
-        style={styles.secondPill}
-        testID={`room-invite-decline-${invite.code}`}
-      />
-    </Row>
+    </StackedRow>
   );
 });
 
@@ -179,8 +212,8 @@ export const FriendRequestRow = memo(function FriendRequestRow({
   onCancel: (r: FriendRequest) => void;
 }) {
   const incoming = direction === 'incoming';
-  return (
-    <Row divider={divider} testID={`request-${request.id}`}>
+  const identity = (
+    <>
       <PlayerAvatar
         avatarId={incoming ? request.fromAvatarId : (request.toAvatarId ?? 'joao')}
         size={46}
@@ -189,27 +222,18 @@ export const FriendRequestRow = memo(function FriendRequestRow({
         <AppText variant="h3" numberOfLines={1} style={styles.name}>
           {incoming ? request.fromNickname : (request.toNickname ?? 'Jogador')}
         </AppText>
-        <AppText variant="small" color={colors.textSecondary}>
+        <AppText variant="small" color={colors.textSecondary} numberOfLines={1}>
           {incoming ? 'quer ser seu amigo' : 'aguardando resposta'}
         </AppText>
       </View>
-      {incoming ? (
-        <>
-          <PillButton
-            label="Aceitar"
-            onPress={() => onAccept(request)}
-            disabled={busy}
-            testID={`request-accept-${request.id}`}
-          />
-          <PillButton
-            label="Recusar"
-            variant="muted"
-            onPress={() => onReject(request)}
-            disabled={busy}
-            style={styles.secondPill}
-          />
-        </>
-      ) : (
+    </>
+  );
+
+  // Enviada: uma ação só, cabe na mesma linha do nome.
+  if (!incoming) {
+    return (
+      <Row divider={divider} testID={`request-${request.id}`}>
+        {identity}
         <PillButton
           label="Cancelar"
           variant="muted"
@@ -217,8 +241,36 @@ export const FriendRequestRow = memo(function FriendRequestRow({
           disabled={busy}
           testID={`request-cancel-${request.id}`}
         />
-      )}
-    </Row>
+      </Row>
+    );
+  }
+
+  return (
+    <StackedRow
+      divider={divider}
+      testID={`request-${request.id}`}
+      actions={
+        <>
+          <PillButton
+            label="Recusar"
+            variant="muted"
+            onPress={() => onReject(request)}
+            disabled={busy}
+            style={styles.stackedPill}
+            testID={`request-reject-${request.id}`}
+          />
+          <PillButton
+            label="Aceitar"
+            onPress={() => onAccept(request)}
+            disabled={busy}
+            style={styles.stackedPill}
+            testID={`request-accept-${request.id}`}
+          />
+        </>
+      }
+    >
+      {identity}
+    </StackedRow>
   );
 });
 
@@ -328,7 +380,17 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   more: { paddingLeft: 8, paddingVertical: 6 },
-  secondPill: { marginLeft: 6 },
+  stacked: { paddingHorizontal: 10, paddingVertical: 10 },
+  stackedIdentity: { flexDirection: 'row', alignItems: 'center' },
+  // Ações alinhadas à direita, a secundária primeiro: aceitar fica na quina do polegar.
+  stackedActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  stackedPill: { flexShrink: 1 },
   initials: {
     alignItems: 'center',
     justifyContent: 'center',

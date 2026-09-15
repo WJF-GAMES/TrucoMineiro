@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeIn, FadeOut, LinearTransition, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, gradients, radius, spacing } from '@/design-system';
+import { colors, gradients, icons, radius, spacing } from '@/design-system';
 import {
   AppText,
   CountdownRing,
@@ -127,6 +127,13 @@ export function GameTable({ controller, onExit }: Props) {
   const bodyRef = useRef<View>(null);
   const crossRef = useRef<View>(null);
   const handRef = useRef<View>(null);
+  /**
+   * Altura real da mesa. A cruz de cartas tem tamanho fixo e ficava ancorada em 22% do topo:
+   * num aparelho baixo (320x640 e afins) a carta de baixo caía em cima do meu próprio avatar e
+   * do rótulo "Ganhando". Medindo a mesa dá para centrar a cruz na faixa que sobra entre o
+   * assento de cima e o meu, e encolhê-la quando essa faixa é menor que ela (regras 21 e 78).
+   */
+  const [tableHeight, setTableHeight] = useState(0);
   const backsRefs = useRef<Record<'top' | 'left' | 'right', View | null>>({
     top: null,
     left: null,
@@ -177,6 +184,15 @@ export function GameTable({ controller, onExit }: Props) {
     setBotsPaused(botsHold);
     return () => setBotsPaused(false);
   }, [botsHold, setBotsPaused]);
+
+  const crossLayout = useMemo(() => {
+    if (!tableHeight) return { top: '22%' as const, scale: 1 };
+    const free = Math.max(0, tableHeight - SEAT_TOP_SPACE - SEAT_ME_SPACE);
+    // Nunca menor que 70%: abaixo disso as cartas da mesa ficam pequenas demais para ler.
+    const scale = Math.max(0.7, Math.min(1, free / CROSS));
+    const centre = SEAT_TOP_SPACE + free / 2;
+    return { top: centre - CROSS / 2, scale };
+  }, [tableHeight]);
 
   if (status === 'loading' || !view)
     return (
@@ -312,7 +328,10 @@ export function GameTable({ controller, onExit }: Props) {
       <View style={styles.body} ref={bodyRef}>
         <View style={styles.tableBody} pointerEvents={tableHold ? 'none' : 'auto'}>
           {/* Table: three opponents around the felt and the played cards in a cross */}
-          <View style={styles.table}>
+          <View
+            style={styles.table}
+            onLayout={(e) => setTableHeight(e.nativeEvent.layout.height)}
+          >
             <View style={styles.seatTop}>
               <SeatInfo
                 player={top}
@@ -340,7 +359,14 @@ export function GameTable({ controller, onExit }: Props) {
               />
             </View>
 
-            <View style={styles.cross} pointerEvents="none" ref={crossRef}>
+            <View
+              style={[
+                styles.cross,
+                { top: crossLayout.top, transform: [{ scale: crossLayout.scale }] },
+              ]}
+              pointerEvents="none"
+              ref={crossRef}
+            >
               <PlayedSlot
                 seat={top?.seat}
                 pos="top"
@@ -419,7 +445,7 @@ export function GameTable({ controller, onExit }: Props) {
           <View style={styles.statusLine}>
             {status === 'reconnecting' ? (
               <View style={styles.statusPill}>
-                <Ionicons name="cloud-offline" size={14} color={colors.gold} />
+                <Ionicons name={icons.wifiOff} size={14} color={colors.gold} />
                 <AppText variant="smallBold" style={{ marginLeft: 6 }}>
                   Reconectando...
                 </AppText>
@@ -639,7 +665,7 @@ function SeatInfo({
         />
         {!player.connected ? (
           <View style={styles.disconnected}>
-            <Ionicons name="cloud-offline" size={11} color={colors.text} />
+            <Ionicons name={icons.wifiOff} size={11} color={colors.text} />
           </View>
         ) : null}
       </View>
@@ -753,6 +779,10 @@ function describeEvent(
 }
 
 const CROSS = 200;
+/** Espaço vertical ocupado pelo assento do parceiro (avatar + nome + montinho). */
+const SEAT_TOP_SPACE = 96;
+/** Espaço do meu assento na base da mesa (anel do relógio + "Você"). */
+const SEAT_ME_SPACE = 88;
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bgTop },
@@ -783,7 +813,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   scoreSide: { alignItems: 'center', minWidth: 44 },
-  scoreMid: { alignItems: 'center' },
+  // A coluna do meio carrega tanto "MÃO n / VALE n" quanto a pílula da cerimônia. Sem um
+  // limite ela empurrava os dois placares para fora do card durante o embaralho (regra 60).
+  scoreMid: { flex: 1, minWidth: 0, alignItems: 'center', paddingHorizontal: 4 },
   valuePill: {
     backgroundColor: colors.gold,
     paddingHorizontal: 10,
@@ -836,7 +868,6 @@ const styles = StyleSheet.create({
     width: CROSS,
     height: CROSS,
     alignSelf: 'center',
-    top: '22%',
   },
   crossTop: { position: 'absolute', top: 0, left: CROSS / 2 - 27 },
   crossLeft: { position: 'absolute', left: 0, top: CROSS / 2 - 39 },
@@ -901,9 +932,14 @@ const styles = StyleSheet.create({
   raised: { zIndex: 5 },
   hand: { flexDirection: 'row', justifyContent: 'center', gap: 10, minHeight: 122 },
   actions: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 10, minHeight: 48 },
-  actionBtn: { minWidth: 104 },
+  // "Aceitar | SEIS! | Correr" são três botões na mesma linha: com largura mínima fixa eles
+  // somavam mais que a tela em aparelhos de 360dp e o "Correr" saía pela borda. Dividindo a
+  // faixa disponível o conjunto cabe em qualquer largura, sem esconder nenhuma ação.
+  actionBtn: { flex: 1, minWidth: 0, maxWidth: 160 },
   trucoBtn: {
-    minWidth: 150,
+    flex: 1,
+    minWidth: 0,
+    maxWidth: 220,
     borderColor: colors.gold,
     backgroundColor: 'rgba(120, 70, 0, 0.55)',
   },

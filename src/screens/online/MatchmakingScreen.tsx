@@ -8,7 +8,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, spacing } from '@/design-system';
+import { colors, icons, spacing } from '@/design-system';
 import {
   AppText,
   PlayerAvatar,
@@ -180,7 +180,7 @@ export function MatchmakingScreen({ navigation }: RootScreenProps<'Matchmaking'>
           kind="error"
           title={copy.title}
           message={message ?? copy.message}
-          actionLabel="Tentar de novo"
+          actionLabel="Tentar novamente"
           onAction={retry}
         />
       ) : (
@@ -210,7 +210,7 @@ export function MatchmakingScreen({ navigation }: RootScreenProps<'Matchmaking'>
           </AppText>
           {active ? (
             <Surface style={styles.timer}>
-              <Ionicons name="time" size={18} color={colors.gold} />
+              <Ionicons name={icons.clock} size={18} color={colors.gold} />
               <AppText variant="bodyBold" style={{ marginLeft: 8 }}>
                 {String(Math.floor(seconds / 60)).padStart(2, '0')}:
                 {String(seconds % 60).padStart(2, '0')}
@@ -231,7 +231,15 @@ export function MatchmakingScreen({ navigation }: RootScreenProps<'Matchmaking'>
             icon="close"
             testID="matchmaking-cancel"
           />
-        ) : ui === 'error' ? null : (
+        ) : ui === 'error' ? (
+          // Sem isto a tela de erro era um beco sem saída no iOS: o gesto de voltar está
+          // desligado nesta rota e a única ação visível era tentar de novo (regra 43).
+          <SecondaryButton
+            label="Voltar"
+            onPress={() => navigation.replace('Main', { screen: 'Play' })}
+            testID="matchmaking-back"
+          />
+        ) : (
           <>
             <PrimaryButton label="Buscar novamente" onPress={retry} testID="matchmaking-retry" />
             <SecondaryButton

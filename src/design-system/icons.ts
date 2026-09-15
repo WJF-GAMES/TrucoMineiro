@@ -25,6 +25,7 @@ export const icons = {
   // Generic
   chevronRight: 'chevron-forward' as IoniconName,
   chevronDown: 'chevron-down' as IoniconName,
+  chevronUp: 'chevron-up' as IoniconName,
   chevronLeft: 'chevron-back' as IoniconName,
   back: 'chevron-back' as IoniconName,
   close: 'close' as IoniconName,
@@ -52,6 +53,25 @@ export const icons = {
   wifiOff: 'cloud-offline' as IoniconName,
   refresh: 'refresh' as IoniconName,
   warning: 'warning' as IoniconName,
+  alert: 'alert-circle' as IoniconName,
+  helpOutline: 'help-circle-outline' as IoniconName,
+  clockOutline: 'time-outline' as IoniconName,
+  arrowUp: 'arrow-up' as IoniconName,
+  arrowDown: 'arrow-down' as IoniconName,
+  leader: 'ribbon' as IoniconName, // faixa do líder do ranking
+  gameController: 'game-controller' as IoniconName,
+  playCircle: 'play-circle' as IoniconName,
+  tipOutline: 'bulb-outline' as IoniconName,
+  sad: 'sad' as IoniconName,
+  qrCode: 'qr-code' as IoniconName,
+  ban: 'ban' as IoniconName,
+  megaphone: 'megaphone' as IoniconName,
+  mailOpen: 'mail-open' as IoniconName,
+  bellOff: 'notifications-off' as IoniconName,
+  hourglass: 'hourglass' as IoniconName,
+  leaf: 'leaf' as IoniconName,
+  flame: 'flame' as IoniconName,
+  skull: 'skull' as IoniconName,
 
   // More / settings
   store: 'cart' as IoniconName,

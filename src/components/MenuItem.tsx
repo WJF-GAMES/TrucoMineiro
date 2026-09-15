@@ -1,7 +1,7 @@
 import React, { PropsWithChildren } from 'react';
 import { Pressable, StyleSheet, Switch, View, ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, IoniconName, radius, spacing } from '@/design-system';
+import { colors, icons, IoniconName, radius, spacing } from '@/design-system';
 import { AppText } from './AppText';
 import { Surface } from './Surface';
 import { haptic } from '@/utils/haptics';
@@ -69,25 +69,37 @@ export function MenuItem({
             haptic.selection();
             onToggle?.(v);
           }}
-          trackColor={{ false: '#3a4d4a', true: colors.primary }}
+          trackColor={{ false: colors.switchTrack, true: colors.primary }}
           thumbColor={colors.text}
-          ios_backgroundColor="#3a4d4a"
+          ios_backgroundColor={colors.switchTrack}
           accessibilityLabel={title}
+          // A linha inteira já é o alvo de toque; o switch só reflete o estado (sem isto o
+          // toque no próprio switch dispararia a troca duas vezes e ela se anularia).
+          style={styles.switchDisplay}
         />
-      ) : (
-        <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-      )}
+      ) : onPress ? (
+        <Ionicons name={icons.chevronRight} size={20} color={colors.textSecondary} />
+      ) : null}
     </View>
   );
-  if (toggle !== undefined && !onPress) return <View testID={testID}>{content}</View>;
+
+  // Linha informativa (sem ação e sem switch): não pode virar um botão que não faz nada.
+  if (!onPress && toggle === undefined) return <View testID={testID}>{content}</View>;
+
+  const isToggle = toggle !== undefined && !onPress;
   return (
     <Pressable
       testID={testID}
-      accessibilityRole="button"
+      accessibilityRole={isToggle ? 'switch' : 'button'}
       accessibilityLabel={title}
+      accessibilityHint={subtitle}
+      accessibilityState={isToggle ? { checked: toggle } : undefined}
       onPress={() => {
         haptic.selection();
-        onPress?.();
+        // Tocar em qualquer ponto da linha vale como tocar no switch: o alvo passa de 51x31
+        // (só o switch) para a linha inteira, de 64dp de altura (regra 14).
+        if (isToggle) onToggle?.(!toggle);
+        else onPress?.();
       }}
       style={({ pressed }) => pressed && styles.pressed}
     >
@@ -132,6 +144,7 @@ const styles = StyleSheet.create({
   texts: { flex: 1 },
   value: { marginRight: 6 },
   pressed: { opacity: 0.75 },
+  switchDisplay: { pointerEvents: 'none' },
   group: { overflow: 'hidden', marginBottom: spacing.md },
   single: { marginBottom: spacing.sm, borderRadius: radius.card },
 });

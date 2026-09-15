@@ -13,7 +13,7 @@ import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { colors, radius, spacing } from '@/design-system';
+import { colors, icons, radius, spacing } from '@/design-system';
 import { images } from '@/assets';
 import { AppText, CountryFlag, PhoneInput, PrimaryButton } from '@/components';
 import { COUNTRIES, PHONE_PLACEHOLDER } from '@/utils/phone';
@@ -92,7 +92,7 @@ export function LoginScreen({ navigation }: RootScreenProps<'Login'>) {
             />
             {error ? (
               <View style={styles.errorRow}>
-                <Ionicons name="alert-circle" size={15} color={colors.dangerSoft} />
+                <Ionicons name={icons.alert} size={15} color={colors.dangerSoft} />
                 <AppText variant="small" color={colors.dangerSoft} style={styles.errorText}>
                   {error}
                 </AppText>
@@ -109,7 +109,7 @@ export function LoginScreen({ navigation }: RootScreenProps<'Login'>) {
           </View>
 
           <View style={styles.secure} accessible accessibilityRole="text">
-            <Ionicons name="shield-checkmark" size={22} color={colors.cream} />
+            <Ionicons name={icons.shield} size={22} color={colors.cream} />
             <View style={styles.secureDivider} />
             <AppText variant="small" color={colors.textSecondary} style={styles.secureText}>
               Seus dados estão protegidos
@@ -132,39 +132,41 @@ export function LoginScreen({ navigation }: RootScreenProps<'Login'>) {
         onRequestClose={() => setPickerOpen(false)}
       >
         <Pressable style={styles.modalBackdrop} onPress={() => setPickerOpen(false)}>
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, { maxHeight: height * 0.7 }]}>
             <AppText variant="h3" style={styles.modalTitle}>
               Escolha o país
             </AppText>
-            {COUNTRIES.map((c) => (
-              <Pressable
-                key={c.code}
-                accessibilityRole="button"
-                accessibilityLabel={`${c.name}, ${c.dial}`}
-                accessibilityState={{ selected: c.code === country.code }}
-                onPress={() => {
-                  changeCountry(c);
-                  setPickerOpen(false);
-                }}
-                style={styles.countryRow}
-              >
-                <CountryFlag country={c} width={26} />
-                <AppText variant="body" style={styles.countryName}>
-                  {c.name}
-                </AppText>
-                <AppText variant="bodyBold" color={colors.textSecondary}>
-                  {c.dial}
-                </AppText>
-                {c.code === country.code ? (
-                  <Ionicons
-                    name="checkmark"
-                    size={20}
-                    color={colors.primaryBright}
-                    style={styles.check}
-                  />
-                ) : null}
-              </Pressable>
-            ))}
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {COUNTRIES.map((c) => (
+                <Pressable
+                  key={c.code}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${c.name}, ${c.dial}`}
+                  accessibilityState={{ selected: c.code === country.code }}
+                  onPress={() => {
+                    changeCountry(c);
+                    setPickerOpen(false);
+                  }}
+                  style={styles.countryRow}
+                >
+                  <CountryFlag country={c} width={26} />
+                  <AppText variant="body" style={styles.countryName}>
+                    {c.name}
+                  </AppText>
+                  <AppText variant="bodyBold" color={colors.textSecondary}>
+                    {c.dial}
+                  </AppText>
+                  {c.code === country.code ? (
+                    <Ionicons
+                      name={icons.check}
+                      size={20}
+                      color={colors.primaryBright}
+                      style={styles.check}
+                    />
+                  ) : null}
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
         </Pressable>
       </Modal>

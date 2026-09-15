@@ -1,5 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { colors } from '@/design-system';
 import type { MainTabParamList } from './types';
 import { BottomNavigation } from './BottomNavigation';
 import { HomeScreen } from '@/screens/home/HomeScreen';
@@ -14,7 +15,7 @@ export function MainTabs() {
   return (
     <Tab.Navigator
       tabBar={(props) => <BottomNavigation {...props} />}
-      screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: '#00221a' } }}
+      screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.bgTop } }}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Play" component={PlayScreen} />

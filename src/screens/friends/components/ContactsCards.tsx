@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors } from '@/design-system';
+import { colors, icons } from '@/design-system';
 import { AppText } from '@/components';
 
 /**
@@ -11,7 +11,7 @@ import { AppText } from '@/components';
 export function ContactsPrivacyNote({ style }: { style?: object }) {
   return (
     <View style={[styles.privacy, style]}>
-      <Ionicons name="shield-checkmark" size={15} color={colors.primaryBright} />
+      <Ionicons name={icons.shield} size={15} color={colors.primaryBright} />
       <AppText variant="small" color={colors.textSecondary} style={styles.privacyText}>
         Seus contatos são usados apenas para encontrar amigos e nunca são compartilhados.
       </AppText>

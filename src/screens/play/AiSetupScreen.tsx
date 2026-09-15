@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, gradients, IoniconName, radius, spacing } from '@/design-system';
+import { colors, gradients, icons, IoniconName, radius, spacing } from '@/design-system';
 import { images } from '@/assets';
 import { AppText, GameHeader, PrimaryButton, Screen, Surface } from '@/components';
 import type { AIDifficultyId } from '@/domain/model/types';
@@ -43,12 +43,19 @@ const LEVELS: {
 ];
 
 export function AiSetupScreen({ navigation }: RootScreenProps<'AiSetup'>) {
-  const [difficulty, setDifficulty] = useState<AIDifficultyId>('normal');
   const enabled: Record<AIDifficultyId, boolean> = {
     easy: flag('ai_easy_enabled'),
     normal: flag('ai_normal_enabled'),
     hard: flag('ai_hard_enabled'),
   };
+  // A seleção inicial tem de ser um nível que existe: quando "Normal" está desligado por
+  // remote config, deixá-lo marcado dava um card apagado com o check verde em cima e um
+  // "Iniciar partida" que abria uma mesa desativada.
+  const firstEnabled = LEVELS.find((l) => enabled[l.id])?.id ?? null;
+  const [difficulty, setDifficulty] = useState<AIDifficultyId | null>(
+    enabled.normal ? 'normal' : firstEnabled,
+  );
+  const selectable = difficulty !== null && enabled[difficulty] ? difficulty : firstEnabled;
 
   return (
     <Screen scroll testID="screen-ai-setup">
@@ -74,7 +81,7 @@ export function AiSetupScreen({ navigation }: RootScreenProps<'AiSetup'>) {
         Escolha a dificuldade
       </AppText>
       {LEVELS.map((l) => {
-        const selected = l.id === difficulty;
+        const selected = l.id === selectable;
         const off = !enabled[l.id];
         return (
           <Pressable
@@ -123,7 +130,7 @@ export function AiSetupScreen({ navigation }: RootScreenProps<'AiSetup'>) {
               </View>
               {selected ? (
                 <Ionicons
-                  name="checkmark-circle"
+                  name={icons.checkCircle}
                   size={22}
                   color={colors.primaryBright}
                   style={{ marginLeft: 8 }}
@@ -134,13 +141,24 @@ export function AiSetupScreen({ navigation }: RootScreenProps<'AiSetup'>) {
         );
       })}
 
+      {selectable === null ? (
+        <AppText variant="small" center color={colors.textSecondary} style={styles.unavailable}>
+          Nenhum nível está disponível agora. Tente de novo em instantes.
+        </AppText>
+      ) : null}
       <PrimaryButton
         label="Iniciar partida"
         testID="ai-start"
         style={styles.cta}
+        disabled={selectable === null}
         onPress={() => {
-          logEvent('ai_selected', { difficulty });
-          navigation.replace('Game', { mode: 'ai', difficulty, seed: Date.now() % 2147483647 });
+          if (selectable === null) return;
+          logEvent('ai_selected', { difficulty: selectable });
+          navigation.replace('Game', {
+            mode: 'ai',
+            difficulty: selectable,
+            seed: Date.now() % 2147483647,
+          });
         }}
       />
     </Screen>
@@ -181,5 +199,6 @@ const styles = StyleSheet.create({
   bar: { width: 6, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)' },
   barDim: { backgroundColor: colors.textSecondary },
   barOn: { backgroundColor: colors.primaryBright },
+  unavailable: { marginTop: spacing.md },
   cta: { marginTop: spacing.lg },
 });

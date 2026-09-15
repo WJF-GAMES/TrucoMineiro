@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, gradients, IoniconName, radius, spacing } from '@/design-system';
+import { colors, gradients, icons, IoniconName, radius, spacing } from '@/design-system';
 import { images } from '@/assets';
 import { AppText, GameHeader, GameModeCard, Screen, Surface } from '@/components';
 import { logEvent } from '@/services/firebase/analytics';
@@ -22,6 +22,7 @@ export function ActionRow({
   onPress,
   highlight,
   chevron,
+  style,
   testID,
 }: {
   icon: IoniconName;
@@ -31,6 +32,7 @@ export function ActionRow({
   onPress: () => void;
   highlight?: boolean;
   chevron?: boolean;
+  style?: ViewStyle;
   testID?: string;
 }) {
   return (
@@ -38,8 +40,9 @@ export function ActionRow({
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={title}
+      accessibilityHint={subtitle}
       onPress={onPress}
-      style={({ pressed }) => [pressed && styles.pressed]}
+      style={({ pressed }) => [style, pressed && styles.pressed]}
     >
       <Surface style={[styles.action, highlight ? styles.actionHighlight : {}]} padding={0}>
         {highlight ? (
@@ -58,7 +61,7 @@ export function ActionRow({
         </View>
         {chevron ? (
           <Ionicons
-            name="chevron-forward"
+            name={icons.chevronRight}
             size={20}
             color={colors.textSecondary}
             style={{ marginRight: 6 }}
@@ -113,7 +116,9 @@ export function PlayScreen({ navigation }: TabScreenProps<'Play'>) {
           gradient={gradients.modeOnline}
           fadeColor="#6b2f0f"
           footerIcon="people"
-          footer={`${formatNumber(online)} online`}
+          // Antes da primeira leitura de presença o contador é 0: "0 online" no card de
+          // entrar numa partida online desanima sem motivo. Igual à Principal (regra 59).
+          footer={online > 0 ? `${formatNumber(online)} online` : 'Jogadores reais'}
           onPress={() =>
             guardOnline(() => {
               haptic.light();

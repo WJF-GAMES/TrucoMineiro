@@ -110,7 +110,8 @@ describe('LeagueScreen', () => {
 
     expect(await view.findByText('OURO')).toBeTruthy();
     expect(view.getByText('Divisão I')).toBeTruthy();
-    expect(view.getByText('Ligas')).toBeTruthy();
+    // Título no singular, igual ao rótulo da aba na Bottom Navigation (vocabulário único).
+    expect(view.getByText('Liga')).toBeTruthy();
     expect(view.getByText('Jogue, pontue e suba de liga!')).toBeTruthy();
     // Faltam 2d 14h 32min para 14/09 00:00 a partir de 11/09 09:28.
     expect(view.getByText('2d 14h 32min')).toBeTruthy();

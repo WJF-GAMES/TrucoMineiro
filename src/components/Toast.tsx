@@ -3,7 +3,7 @@ import { Pressable, StyleSheet } from 'react-native';
 import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radius, spacing } from '@/design-system';
+import { colors, icons, radius, spacing } from '@/design-system';
 import { useToastStore } from '@/stores/toastStore';
 import { AppText } from './AppText';
 import { useNetworkStore } from '@/stores/networkStore';
@@ -38,7 +38,7 @@ export function ToastHost() {
           style={[styles.banner, { top: insets.top + 4 }]}
           testID="reconnecting-banner"
         >
-          <Ionicons name="cloud-offline" size={18} color={colors.gold} />
+          <Ionicons name={icons.wifiOff} size={18} color={colors.gold} />
           <AppText variant="smallBold" style={{ marginLeft: 8 }}>
             Reconectando...
           </AppText>
@@ -51,7 +51,13 @@ export function ToastHost() {
           exiting={FadeOutUp}
           style={[styles.toast, { top: insets.top + (offline ? 48 : 8) }]}
         >
-          <Pressable onPress={hide} style={styles.toastInner} accessibilityRole="alert">
+          <Pressable
+            onPress={hide}
+            style={styles.toastInner}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
+            accessibilityLabel={`${current.title}${current.message ? `. ${current.message}` : ''}. Toque para fechar.`}
+          >
             <Ionicons
               name={
                 current.kind === 'success'

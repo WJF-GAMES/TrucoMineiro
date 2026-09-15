@@ -29,7 +29,21 @@ interface BaseProps {
   tone?: 'primary' | 'gold';
 }
 
+/**
+ * Rótulo de botão: uma linha só, encolhendo um pouco quando vários botões dividem a mesma
+ * faixa (as três respostas ao truco, por exemplo), e com a escala de fonte do sistema limitada
+ * — a altura do botão é fixa, então um texto a 200% seria cortado no meio.
+ */
+const LABEL_FIT = {
+  numberOfLines: 1,
+  adjustsFontSizeToFit: true,
+  minimumFontScale: 0.75,
+  maxFontSizeMultiplier: 1.3,
+} as const;
+
 const HEIGHTS = { lg: 56, md: 48, sm: 40 } as const;
+/** Respiro lateral por tamanho: botões `md`/`sm` costumam dividir uma linha com outros. */
+const PADDING = { lg: 18, md: 12, sm: 10 } as const;
 
 /** Big green gradient CTA ("COMEÇAR", "CONTINUAR", "CRIAR CONTA"). */
 export function PrimaryButton({
@@ -73,7 +87,7 @@ export function PrimaryButton({
         locations={[0, 0.55, 1]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
-        style={[styles.gradient, { height: HEIGHTS[size] }]}
+        style={[styles.gradient, { height: HEIGHTS[size], paddingHorizontal: PADDING[size] }]}
       >
         <View style={styles.shine} />
         {loading ? (
@@ -92,6 +106,7 @@ export function PrimaryButton({
               variant={size === 'sm' ? 'buttonSmall' : 'button'}
               color={textColor}
               style={styles.label}
+              {...LABEL_FIT}
             >
               {label}
             </AppText>
@@ -128,7 +143,7 @@ export function SecondaryButton({
       }}
       style={({ pressed }) => [
         styles.secondary,
-        { height: HEIGHTS[size] },
+        { height: HEIGHTS[size], paddingHorizontal: PADDING[size] },
         pressed && { transform: [{ scale: motion.pressScale }] },
         inactive && styles.disabled,
         style,
@@ -139,7 +154,9 @@ export function SecondaryButton({
       ) : (
         <View style={styles.row}>
           {icon ? <Ionicons name={icon} size={18} color={colors.text} style={styles.icon} /> : null}
-          <AppText variant={size === 'sm' ? 'buttonSmall' : 'bodyBold'}>{label}</AppText>
+          <AppText variant={size === 'sm' ? 'buttonSmall' : 'bodyBold'} {...LABEL_FIT}>
+            {label}
+          </AppText>
         </View>
       )}
     </Pressable>
@@ -173,7 +190,7 @@ export function DangerButton({
       ) : (
         <View style={styles.row}>
           <Ionicons name={icon} size={20} color={colors.dangerSoft} style={styles.icon} />
-          <AppText variant="bodyBold" color={colors.dangerSoft}>
+          <AppText variant="bodyBold" color={colors.dangerSoft} {...LABEL_FIT}>
             {label}
           </AppText>
         </View>
@@ -224,7 +241,8 @@ export function PillButton({
         <AppText
           variant="smallBold"
           color={variant === 'gold' ? colors.textDark : colors.text}
-          style={{ fontSize: 13 }}
+          style={styles.pillLabel}
+          {...LABEL_FIT}
         >
           {label}
         </AppText>
@@ -276,9 +294,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.button,
     alignItems: 'center',
     justifyContent: 'center',
-    // Respiro igual ao do SecondaryButton: sem isso o texto encosta na borda sempre que o botão
-    // é dimensionado pelo conteúdo, em vez de ocupar a largura toda.
-    paddingHorizontal: 18,
     borderWidth: 1,
     borderColor: 'rgba(120,255,190,0.45)',
   },
@@ -290,9 +305,10 @@ const styles = StyleSheet.create({
     height: '48%',
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexShrink: 1 },
   icon: { marginRight: 8 },
-  label: { textTransform: 'uppercase' },
+  label: { textTransform: 'uppercase', flexShrink: 1 },
+  pillLabel: { fontSize: 13, flexShrink: 1 },
   disabled: { opacity: 0.55 },
   secondary: {
     borderRadius: radius.button,
@@ -301,7 +317,6 @@ const styles = StyleSheet.create({
     borderColor: colors.cardBorderStrong,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 18,
   },
   danger: {
     height: 52,

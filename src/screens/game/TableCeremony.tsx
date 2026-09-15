@@ -268,13 +268,18 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
         {shuffleChooser ? (
           <>
             <View style={styles.shuffleActions}>
+              {/* "EMBARALHAR NOVAMENTE" não cabia: são dois botões `lg` com ícone dividindo
+                  a largura da tela, e o rótulo por extenso passava da borda em qualquer
+                  aparelho. O ícone de repetição já diz "de novo"; o texto abaixo dos botões
+                  também. */}
               <SecondaryButton
-                label="EMBARALHAR NOVAMENTE"
+                label="EMBARALHAR"
                 icon={icons.refresh}
                 size="lg"
                 style={styles.shuffleAgain}
                 onPress={ceremony.bump}
                 disabled={ceremony.shuffleBusy}
+                accessibilityLabel="Embaralhar novamente"
                 testID="ceremony-shuffle"
               />
               <PrimaryButton
@@ -550,11 +555,16 @@ export function CeremonyStagePill({ stage }: { stage: CeremonyStage }) {
   const index = Math.max(0, order.indexOf(stage));
   return (
     <View style={styles.stagePillWrap}>
-      <AppText variant="caption" color={colors.textSecondary}>
-        PREPARANDO RODADA
+      <AppText variant="caption" color={colors.textSecondary} numberOfLines={1}>
+        PREPARANDO
       </AppText>
       <View style={styles.stagePill}>
-        <AppText variant="smallBold" color={colors.textDark}>
+        <AppText
+          variant="smallBold"
+          color={colors.textDark}
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.1}
+        >
           {STAGE_TITLE[stage]}
         </AppText>
       </View>
@@ -578,10 +588,15 @@ export function CeremonyStagePill({ stage }: { stage: CeremonyStage }) {
 // Microcopy
 // ---------------------------------------------------------------------------
 
+/**
+ * Rótulos curtos de propósito: a pílula vive dentro do placar, entre "NÓS" e "ELES", e sobram
+ * pouco mais de 100dp ali. Com os nomes por extenso ela cobria os dois placares em qualquer
+ * aparelho. O nome completo do estágio continua no título grande da cerimônia, logo abaixo.
+ */
 const STAGE_TITLE: Record<CeremonyStage, string> = {
-  shuffle: 'EMBARALHAR O BARALHO',
-  cut: 'CORTAR O BARALHO',
-  deal: 'DISTRIBUINDO CARTAS...',
+  shuffle: 'EMBARALHAR',
+  cut: 'CORTAR',
+  deal: 'DISTRIBUINDO...',
   done: '',
 };
 
@@ -714,7 +729,7 @@ function ceremonyCopy(c: ShuffleCeremony, actorName: string): Copy {
         ctaEnabled: c.canFinish,
         ctaNote: c.canFinish
           ? 'Continue embaralhando ou toque em ESTÁ BOM.'
-          : 'Toque em EMBARALHAR NOVAMENTE para misturar o baralho.',
+          : 'Toque em EMBARALHAR para misturar o baralho.',
         waiting: '',
       }
     : {
@@ -872,9 +887,10 @@ const styles = StyleSheet.create({
     borderColor: colors.cardBorder,
   },
 
-  stagePillWrap: { alignItems: 'center' },
+  stagePillWrap: { alignItems: 'center', maxWidth: '100%' },
   stagePill: {
     backgroundColor: colors.gold,
+    maxWidth: '100%',
     paddingHorizontal: 12,
     paddingVertical: 3,
     borderRadius: radius.pill,

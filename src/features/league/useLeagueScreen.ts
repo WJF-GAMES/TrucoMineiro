@@ -5,6 +5,18 @@ import { subscribeGroupMembers } from '@/services/firebase/firestore';
 import { rankMembers } from '@/domain/model/leagueRanking';
 import type { LeagueRankingMember, LeagueScreenSnapshot } from '@/domain/model/types';
 
+/**
+ * O snapshot chega de uma Cloud Function. Se a resposta vier incompleta (deploy antigo, payload
+ * truncado, stub da build web), a tela lia `snapshot.currentLeague.id` e caía inteira — tela
+ * branca, sem mensagem e sem saída. Aqui a resposta é conferida antes de virar estado: o que não
+ * tiver liga atual vale como falha de carregamento e cai no estado de erro, com "tentar novamente".
+ */
+function isUsableSnapshot(s: unknown): s is LeagueScreenSnapshot {
+  if (!s || typeof s !== 'object') return false;
+  const league = (s as LeagueScreenSnapshot).currentLeague;
+  return Boolean(league && typeof league.id === 'string');
+}
+
 export interface LeagueScreenState {
   snapshot: LeagueScreenSnapshot | null;
   members: LeagueRankingMember[];
@@ -48,6 +60,11 @@ export function useLeagueScreen(): LeagueScreenState {
     getLeagueScreenSnapshot()
       .then((s) => {
         if (!mounted.current) return;
+        if (!isUsableSnapshot(s)) {
+          setError('Não foi possível carregar sua liga.');
+          setLoading(false);
+          return;
+        }
         setSnapshot(s);
         setLive(null);
         setLoading(false);
@@ -85,7 +102,16 @@ export function useLeagueScreen(): LeagueScreenState {
     );
   }, [groupId, uid]);
 
-  const members = useMemo(() => live ?? snapshot?.members ?? [], [live, snapshot]);
+  /**
+   * A assinatura ao vivo só substitui a lista do snapshot quando realmente traz gente.
+   * Um `onSnapshot` bem-sucedido porém vazio (grupo ainda não replicado, cache frio, regra de
+   * segurança negando a subcoleção) apagava o ranking que o servidor já tinha entregue: a aba
+   * ficava com o cabeçalho da tabela e nenhuma linha embaixo, sem erro e sem explicação.
+   */
+  const members = useMemo(
+    () => (live && live.length > 0 ? live : (snapshot?.members ?? [])),
+    [live, snapshot],
+  );
 
   return { snapshot, members, loading, error, reload };
 }

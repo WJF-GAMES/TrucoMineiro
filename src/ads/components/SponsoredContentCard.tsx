@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, spacing } from '@/design-system';
+import { colors, icons, spacing } from '@/design-system';
 import { AppText, SecondaryButton, Surface } from '@/components';
 import { useRewardedAd } from '../hooks/useRewardedAd';
 import { nextTip, type TrucoTip } from '../content/trucoTips';
@@ -38,7 +38,7 @@ export function SponsoredContentCard() {
       <Surface style={styles.card} testID="home-tip-rewarded">
         <View style={styles.header}>
           <View style={styles.titleRow}>
-            <Ionicons name="bulb" size={18} color={colors.gold} />
+            <Ionicons name={icons.tip} size={18} color={colors.gold} />
             <AppText variant="h3" style={styles.title}>
               Dica de Truco
             </AppText>

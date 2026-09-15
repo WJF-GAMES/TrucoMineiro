@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, spacing } from '@/design-system';
+import { colors, icons, spacing } from '@/design-system';
 import { AppText, PrimaryButton, SecondaryButton, Sheet } from '@/components';
 import type { ContactsPermission } from '@/services/contacts';
 import type { SyncErrorKind, SyncProgress } from '@/features/friends/useContactsSync';
@@ -35,6 +35,7 @@ const ERROR_MESSAGE: Record<SyncErrorKind, string> = {
   offline: 'Sem conexão com o servidor. Verifique sua internet e tente de novo.',
   rate_limit: 'Você já sincronizou muitos contatos hoje. Tente de novo amanhã.',
   app_check: 'Não foi possível validar o app neste aparelho. Tente de novo mais tarde.',
+  unavailable: 'A busca por contatos está fora do ar no momento. Tente de novo mais tarde.',
   unknown: 'Algo deu errado por aqui. Tente de novo.',
 };
 
@@ -113,7 +114,7 @@ export function ContactsSyncSheet({
         </View>
       ) : done ? (
         <View style={styles.doneRow}>
-          <Ionicons name="checkmark-circle" size={44} color={colors.primaryBright} />
+          <Ionicons name={icons.checkCircle} size={44} color={colors.primaryBright} />
         </View>
       ) : (
         <>
@@ -128,7 +129,7 @@ export function ContactsSyncSheet({
             />
           ) : (
             <PrimaryButton
-              label={error ? 'Tentar de novo' : 'Sincronizar contatos'}
+              label={error ? 'Tentar novamente' : 'Sincronizar contatos'}
               icon={error ? 'refresh' : 'sync'}
               size="md"
               onPress={onSync}
