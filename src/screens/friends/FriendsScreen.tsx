@@ -1,5 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, RefreshControl, Share, StyleSheet, View } from 'react-native';
+import {
+  AppState,
+  FlatList,
+  Platform,
+  RefreshControl,
+  Share,
+  StyleSheet,
+  View,
+} from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { colors, radius, spacing } from '@/design-system';
 import { images } from '@/assets';
@@ -30,19 +39,17 @@ import {
   sendFriendRequest,
 } from '@/services/firebase/functions';
 import { flag } from '@/services/firebase/remoteConfig';
-import { openAppSettings } from '@/services/contacts';
+import { openAppSettings, readContactPhones } from '@/services/contacts';
 import { logEvent } from '@/services/firebase/analytics';
 import { NativeAdCard } from '@/ads';
 import { toast } from '@/stores/toastStore';
-import { countryOf } from '@/utils/phone';
-import { useFriendRequests, useFriends, type FriendEntry } from '@/features/friends/useFriends';
+import { countryOf, normalizePhoneNumber } from '@/utils/phone';
+import { useFriendRequests, useFriends } from '@/features/friends/useFriends';
 import { useContactsSync } from '@/features/friends/useContactsSync';
 import { useRoomInvites } from '@/features/friends/useRoomInvites';
-import {
-  filterAgenda,
-  type MatchedContact,
-  type UnmatchedContact,
-} from '@/features/friends/contactsMatch';
+import type { MatchedContact } from '@/features/friends/contactsMatch';
+import { buildFriendsDirectory, type DirectoryEntry } from '@/features/friends/friendsDirectory';
+import { usePresenceMap } from '@/features/friends/usePresenceMap';
 import type { FriendRequest, Profile, RoomInvite } from '@/domain/model/types';
 import type { TabScreenProps } from '@/navigation/types';
 import { FriendsQuickActions } from './components/FriendsQuickActions';
@@ -66,7 +73,8 @@ type Tab = 'friends' | 'requests' | 'search';
 type Item =
   | { kind: 'section'; key: string; title: string; trailing?: string }
   | { kind: 'node'; key: string; node: React.ReactNode }
-  | { kind: 'friend'; key: string; entry: FriendEntry; first: boolean; last: boolean }
+  /** Uma pessoa da lista única: amigo, contato que já joga ou contato para convidar. */
+  | { kind: 'person'; key: string; person: DirectoryEntry; first: boolean; last: boolean }
   | { kind: 'room-invite'; key: string; invite: RoomInvite; first: boolean; last: boolean }
   | {
       kind: 'request';
@@ -76,8 +84,6 @@ type Item =
       first: boolean;
       last: boolean;
     }
-  | { kind: 'match'; key: string; contact: MatchedContact; first: boolean; last: boolean }
-  | { kind: 'invite'; key: string; contact: UnmatchedContact; first: boolean; last: boolean }
   | { kind: 'result'; key: string; profile: Profile; first: boolean; last: boolean };
 
 /** Quantos contatos "ainda não jogam" a lista mostra antes do botão "ver mais". */
@@ -102,14 +108,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
   const inviteLink = useRef<string | null>(null);
   const friendsEnabled = flag('friends_enabled');
 
-  const {
-    friends,
-    friendIds,
-    friendIdSet,
-    blockedIds,
-    loading: friendsLoading,
-    error,
-  } = useFriends(uid);
+  const { friends, friendIdSet, blockedIds, loading: friendsLoading, error } = useFriends(uid);
   const { incoming, outgoing, pendingToUids, loading: requestsLoading } = useFriendRequests(uid);
   const contacts = useContactsSync(uid, countryOf(user?.phoneNumber), user?.phoneNumber);
   // Desestruturado de propósito: `accept`/`decline` são estáveis e `busy` é primitivo, então o
@@ -135,9 +134,37 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
     logEvent('friends_screen_viewed');
   }, []);
 
-  const agenda = useMemo(
-    () => (tab === 'friends' ? filterAgenda(contacts.result, query) : contacts.result),
-    [contacts.result, query, tab],
+  const directory = useMemo(
+    () => buildFriendsDirectory(friends, contacts.result, tab === 'friends' ? query : ''),
+    [friends, contacts.result, query, tab],
+  );
+
+  /** Presença dos contatos que já jogam (os amigos já vêm com a deles). */
+  const contactPresence = usePresenceMap(
+    useMemo(
+      () => directory.people.flatMap((p) => (p.kind === 'match' ? [p.contact.uid] : [])),
+      [directory.people],
+    ),
+  );
+
+  /**
+   * Agenda sempre em dia: toda vez que a tela ganha foco (e quando o app volta ao primeiro plano
+   * com ela aberta) a sincronização roda sozinha. Sem permissão, ela mesma pede o diálogo do
+   * sistema; se a agenda não mudou, não vai ao servidor. Só no aparelho — a web não tem agenda.
+   */
+  const syncContacts = useRef(contacts.sync);
+  useEffect(() => {
+    syncContacts.current = contacts.sync;
+  }, [contacts.sync]);
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS === 'web' || !friendsEnabled || !uid) return;
+      void syncContacts.current();
+      const sub = AppState.addEventListener('change', (state) => {
+        if (state === 'active') void syncContacts.current();
+      });
+      return () => sub.remove();
+    }, [friendsEnabled, uid]),
   );
 
   const openFriendEntry = useMemo(
@@ -275,15 +302,32 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
     [contacts],
   );
 
+  const country = countryOf(user?.phoneNumber);
+  /**
+   * Cria a sala, chama o jogador e vai para o lobby. `contactId` vem quando é um contato da agenda
+   * que ainda não é amigo: os números dele são lidos da agenda agora (nada fica guardado) e o
+   * servidor confere com eles o vínculo.
+   */
   const playWith = useCallback(
-    async (friendUid: string) => {
+    async (friendUid: string, contactId?: string) => {
       setBusy(friendUid);
       try {
+        let phones: string[] | undefined;
+        if (contactId) {
+          const raw = await readContactPhones(contactId);
+          phones = [
+            ...new Set(
+              raw
+                .map((n) => normalizePhoneNumber(n, country))
+                .filter((n): n is string => Boolean(n)),
+            ),
+          ].slice(0, 5);
+        }
         const { code } = await createRoom();
-        await inviteFriendToRoom(friendUid, code);
-        logEvent('room_invite_sent');
+        await inviteFriendToRoom(friendUid, code, phones);
+        logEvent('room_invite_sent', { source: contactId ? 'contact' : 'friend' });
         setOpenFriendUid(null);
-        toast.success('Convite enviado', 'Seu amigo receberá o código da sala.');
+        toast.success('Chamado para jogar', 'Ele recebe o convite para a sua sala.');
         navigation.navigate('Lobby', { code });
       } catch (e) {
         toast.error(
@@ -294,7 +338,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
         setBusy(null);
       }
     },
-    [navigation],
+    [navigation, country],
   );
 
   const unfriend = useCallback(
@@ -479,29 +523,57 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
       }));
     }
 
-    const filteredFriends = query
-      ? friends.filter((f) => f.profile.nickname.toLowerCase().includes(query.toLowerCase()))
-      : friends;
+    // --- Lista única: amigos + contatos da agenda ---
+    // Cada pessoa aparece uma vez (o contato que já é amigo vira a linha do amigo). Permissão,
+    // progresso e erro da agenda vivem no diálogo de "Sincronizar contatos" (atalho no topo).
+    const contactsShown = contacts.permission === 'granted' && synced;
+    const invites = contactsShown ? directory.invites : [];
+    const visibleInvites = invites.slice(0, inviteLimit);
+    const rows = [...directory.people, ...visibleInvites];
 
     items.push({
       kind: 'section',
-      key: 's-friends',
-      title: 'Meus amigos',
-      trailing: friendIds ? `${friendIds.length}` : undefined,
+      key: 's-people',
+      title: contactsShown ? 'Amigos e contatos' : 'Meus amigos',
+      trailing: `${directory.people.length + invites.length}`,
     });
+    if (contactsShown) {
+      items.push({
+        kind: 'node',
+        key: 'contacts-privacy',
+        node: <ContactsPrivacyNote style={styles.privacy} />,
+      });
+    }
+    if (contacts.syncing && contacts.permission === 'granted') {
+      items.push({
+        kind: 'node',
+        key: 'contacts-syncing',
+        node: (
+          <AppText
+            variant="small"
+            color={colors.textSecondary}
+            style={styles.syncing}
+            testID="contacts-syncing"
+          >
+            Atualizando sua agenda...
+          </AppText>
+        ),
+      });
+    }
+
     if (error) {
       items.push({
         kind: 'node',
         key: 'friends-error',
         node: <StateView kind="error" message={error} compact />,
       });
-    } else if (friendsLoading) {
+    } else if (friendsLoading && rows.length === 0) {
       items.push({
         kind: 'node',
         key: 'friends-loading',
         node: <StateView kind="loading" compact />,
       });
-    } else if (filteredFriends.length === 0) {
+    } else if (rows.length === 0) {
       items.push({
         kind: 'node',
         key: 'friends-empty',
@@ -509,115 +581,54 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
           <StateView
             kind="empty"
             icon="people"
-            title={query ? 'Nada com esse nome' : 'Nenhum amigo ainda'}
+            title={
+              query
+                ? 'Nada com esse nome'
+                : contactsShown
+                  ? 'Ninguém por aqui ainda'
+                  : 'Nenhum amigo ainda'
+            }
             message={
               query
                 ? 'Tente outro nome ou apelido.'
-                : 'Busque jogadores pelo apelido ou encontre sua turma na agenda.'
+                : contactsShown
+                  ? 'Chame sua turma: o truco fica melhor com gente conhecida.'
+                  : 'Busque jogadores pelo apelido ou encontre sua turma na agenda.'
             }
-            // Sempre "Buscar amigos": o CTA de sincronizar já está nos atalhos e, quando a
-            // agenda ainda não foi lida, também no card logo abaixo. Repetir os três seria
-            // o mesmo botão três vezes na mesma tela (regra 73).
-            actionLabel={query ? undefined : 'Buscar amigos'}
-            onAction={query ? undefined : () => setTab('search')}
+            actionLabel={query ? undefined : contactsShown ? 'Convidar amigos' : 'Buscar amigos'}
+            onAction={
+              query
+                ? undefined
+                : contactsShown
+                  ? () => void shareInvite('shortcut')
+                  : () => setTab('search')
+            }
             compact
           />
         ),
       });
     } else {
-      pushRows(filteredFriends, (entry, first, last) => ({
-        kind: 'friend',
-        key: `f-${entry.profile.id}`,
-        entry,
+      pushRows(rows, (person, first, last) => ({
+        kind: 'person',
+        key: person.key,
+        person,
         first,
         last,
       }));
-    }
-
-    // --- Contatos da agenda ---
-    // Enquanto não houver uma sincronização, a lista não mostra nada sobre a agenda: permissão,
-    // progresso e erro vivem todos no diálogo de "Sincronizar contatos" (atalho no topo).
-    const contactsShown = contacts.permission === 'granted' && synced;
-
-    if (contactsShown) {
-      items.push({
-        kind: 'section',
-        key: 's-contacts',
-        title: 'Contatos da sua agenda',
-        trailing: `${contacts.contactCount} contato${contacts.contactCount === 1 ? '' : 's'}`,
-      });
-      items.push({
-        kind: 'node',
-        key: 'contacts-privacy',
-        node: <ContactsPrivacyNote style={styles.privacy} />,
-      });
-
-      if (agenda.matched.length === 0 && agenda.unmatched.length === 0) {
+      if (invites.length > visibleInvites.length) {
         items.push({
           kind: 'node',
-          key: 'contacts-none',
+          key: 'invite-more',
           node: (
-            <StateView
-              kind="empty"
-              icon="person-add"
-              title={query ? 'Nada com esse nome' : 'Ninguém da sua agenda joga ainda'}
-              message={
-                query
-                  ? 'Tente outro nome.'
-                  : 'Chame sua turma: o truco fica melhor com gente conhecida.'
-              }
-              actionLabel={query ? undefined : 'Convidar amigos'}
-              onAction={query ? undefined : () => void shareInvite('shortcut')}
-              compact
+            <PrimaryButton
+              label={`Ver mais ${Math.min(INVITE_PAGE, invites.length - visibleInvites.length)} contatos`}
+              size="sm"
+              onPress={() => setInviteLimit((n) => n + INVITE_PAGE)}
+              style={styles.more}
+              testID="contacts-more"
             />
           ),
         });
-      } else {
-        if (agenda.matched.length > 0) {
-          pushRows(agenda.matched, (contact, first, last) => ({
-            kind: 'match',
-            key: `m-${contact.contactId}-${contact.uid}`,
-            contact,
-            first,
-            last,
-          }));
-        }
-
-        if (agenda.unmatched.length > 0) {
-          // Quem não joga vem DEPOIS dos matches, para não esconder quem já está no app (regra 75).
-          items.push({
-            kind: 'section',
-            key: 's-invite',
-            title: 'Convide para jogar',
-            trailing: `${agenda.unmatched.length}`,
-          });
-          const visible = agenda.unmatched.slice(0, inviteLimit);
-          pushRows(visible, (contact, first, last) => ({
-            kind: 'invite',
-            key: `i-${contact.contactId}`,
-            contact,
-            first,
-            last,
-          }));
-          if (agenda.unmatched.length > visible.length) {
-            items.push({
-              kind: 'node',
-              key: 'invite-more',
-              node: (
-                <PrimaryButton
-                  label={`Ver mais ${Math.min(
-                    INVITE_PAGE,
-                    agenda.unmatched.length - visible.length,
-                  )} contatos`}
-                  size="sm"
-                  onPress={() => setInviteLimit((n) => n + INVITE_PAGE)}
-                  style={styles.more}
-                  testID="contacts-more"
-                />
-              ),
-            });
-          }
-        }
       }
     }
 
@@ -650,13 +661,11 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
     results,
     doSearch,
     query,
-    friends,
-    friendIds,
     friendsLoading,
     error,
     synced,
     contacts,
-    agenda,
+    directory,
     inviteLimit,
     shareInvite,
     roomInvites,
@@ -681,18 +690,38 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
           );
         case 'node':
           return <View>{item.node}</View>;
-        case 'friend':
+        case 'person': {
+          const person = item.person;
           return (
             <Group first={item.first} last={item.last}>
-              <FriendRow
-                entry={item.entry}
-                busy={busy === item.entry.profile.id}
-                divider={!item.last}
-                onPlay={playWith}
-                onOpen={openFriend}
-              />
+              {person.kind === 'friend' ? (
+                <FriendRow
+                  entry={person.entry}
+                  contactName={person.contactName}
+                  busy={busy === person.entry.profile.id}
+                  divider={!item.last}
+                  onPlay={playWith}
+                  onOpen={openFriend}
+                />
+              ) : person.kind === 'match' ? (
+                <ContactMatchRow
+                  contact={person.contact}
+                  busy={busy === person.contact.uid}
+                  divider={!item.last}
+                  onAdd={(c) => void onContactAdd(c)}
+                  presence={contactPresence[person.contact.uid]}
+                  onPlay={(c) => void playWith(c.uid, c.contactId)}
+                />
+              ) : (
+                <InviteContactRow
+                  contact={person.contact}
+                  divider={!item.last}
+                  onInvite={(c) => void shareInvite('contact', c.contactName)}
+                />
+              )}
             </Group>
           );
+        }
         case 'room-invite':
           return (
             <Group first={item.first} last={item.last}>
@@ -716,27 +745,6 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
                 onAccept={(r) => void respond(r, true)}
                 onReject={(r) => void respond(r, false)}
                 onCancel={(r) => void cancel(r)}
-              />
-            </Group>
-          );
-        case 'match':
-          return (
-            <Group first={item.first} last={item.last}>
-              <ContactMatchRow
-                contact={item.contact}
-                busy={busy === item.contact.uid}
-                divider={!item.last}
-                onAdd={(c) => void onContactAdd(c)}
-              />
-            </Group>
-          );
-        case 'invite':
-          return (
-            <Group first={item.first} last={item.last}>
-              <InviteContactRow
-                contact={item.contact}
-                divider={!item.last}
-                onInvite={(c) => void shareInvite('contact', c.contactName)}
               />
             </Group>
           );
@@ -792,6 +800,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
       roomInviteBusy,
       acceptRoomInvite,
       declineRoomInvite,
+      contactPresence,
     ],
   );
 
@@ -868,7 +877,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
           />
           {/* Banner só quando a agenda ainda não trouxe ninguém: com a lista cheia ele só empurra
               o conteúdo para baixo e repete um CTA que já existe nos atalhos (regra 73). */}
-          {agenda.matched.length === 0 ? (
+          {contacts.result.matched.length === 0 ? (
             <Surface style={styles.banner} padding={0}>
               <View style={styles.bannerText}>
                 <AppText variant="h3">Jogue com seus amigos</AppText>
@@ -1018,6 +1027,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 17 },
   privacy: { marginBottom: spacing.sm },
+  syncing: { marginBottom: spacing.sm },
   more: { marginTop: spacing.md, alignSelf: 'center', minWidth: 220 },
   blocked: { marginTop: spacing.lg },
   group: {

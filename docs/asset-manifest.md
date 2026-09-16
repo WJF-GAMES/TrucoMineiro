@@ -21,13 +21,15 @@ Nenhum foi gerado pelo ChatGPT nesta rodada (acesso à conversa exige login huma
 | gem | assets/images/icons/gem.png | PNG (alpha circular) | Header | Ícone de gema | recorte referência (Jogar) | não | sim | não | 60×60 |
 | shield_bronze | assets/images/icons/shield_bronze.png | PNG (alpha) | Liga, Perfil, Principal | Escudo Liga Bronze | recorte referência (Liga) | não | sim | não | 183×216 |
 | shield_silver | assets/images/icons/shield_silver.png | PNG (alpha) | Liga (próxima liga) | Escudo Liga Prata | recorte referência (Liga) | não | sim | não | 150×138 |
-| avatar joao | assets/images/avatars/joao.png | PNG (circular) | Cadastro, Perfil, Header, Loja, Mesa | Personagem principal (João da Serra) | recorte referência (Perfil) | não | sim | não | 228×228 |
-| avatar maria | assets/images/avatars/maria.png | PNG (circular) | Cadastro, Amigos, Loja, Mesa | Maria Souza | recorte referência (Cadastro) | não | sim | não | 162×162 |
-| avatar cachorro | assets/images/avatars/cachorro.png | PNG (circular) | Cadastro, Loja, Mesa | Caramelo | recorte referência (Cadastro) | não | sim | não | 162×162 |
-| avatar galo | assets/images/avatars/galo.png | PNG (circular) | Cadastro, Mesa | Galo Carijó | recorte referência (Cadastro) | não | sim | não | 162×162 |
-| avatar seu_ze | assets/images/avatars/seu_ze.png | PNG (circular) | Cadastro, Mesa | Seu Zé | recorte referência (Cadastro) | não | sim | não | 162×162 |
-| avatar seu_antonio | assets/images/avatars/seu_antonio.png | PNG (circular) | Cadastro, Mesa | Seu Antônio | recorte referência (Cadastro) | não | sim | não | 162×162 |
-| avatar tiao | assets/images/avatars/tiao.png | PNG (circular) | Loja, Mesa | Tião (óculos escuros) | recorte referência (Loja) | não | sim | não | 156×156 |
+<!-- Avatares: 360×360 (3× o maior uso, 112 dp). `python scripts/optimize-avatars.py` reduz os PNGs
+     quando chegam maiores; os originais de 1254 px ficam no histórico do git. -->
+| avatar joao | assets/images/avatars/joao.png | PNG (circular) | Cadastro, Perfil, Header, Loja, Mesa | Personagem principal (João da Serra) | recorte referência (Perfil) | não | sim | não | 360×360 |
+| avatar maria | assets/images/avatars/maria.png | PNG (circular) | Cadastro, Amigos, Loja, Mesa | Maria Souza | recorte referência (Cadastro) | não | sim | não | 360×360 |
+| avatar cachorro | assets/images/avatars/cachorro.png | PNG (circular) | Cadastro, Loja, Mesa | Caramelo | recorte referência (Cadastro) | não | sim | não | 360×360 |
+| avatar galo | assets/images/avatars/galo.png | PNG (circular) | Cadastro, Mesa | Galo Carijó | recorte referência (Cadastro) | não | sim | não | 360×360 |
+| avatar seu_ze | assets/images/avatars/seu_ze.png | PNG (circular) | Cadastro, Mesa | Seu Zé | recorte referência (Cadastro) | não | sim | não | 360×360 |
+| avatar seu_antonio | assets/images/avatars/seu_antonio.png | PNG (circular) | Cadastro, Mesa | Seu Antônio | recorte referência (Cadastro) | não | sim | não | 360×360 |
+| avatar tiao | assets/images/avatars/tiao.png | PNG (circular) | Loja, Mesa | Tião (óculos escuros) | recorte referência (Loja) | não | sim | não | 360×360 |
 | intro hero | assets/images/hero/intro_hero.png | PNG | Introdução | Logo + personagem + mesa (a faixa de benefícios é UI) | recorte de `references/introducao.png` via `scripts/extract-screen-assets.py` | sim | sim | não | 1419×1683 |
 | login header | assets/images/hero/login_header.png | PNG | Login | Paisagem mineira + logo + slogan | recorte de `references/login.png` (idem) | sim | sim | não | 1396×948 |
 | login footer | assets/images/hero/login_footer.png | PNG | Login | Vegetação do rodapé (a frase é UI, apagada do recorte) | recorte de `references/login.png` (idem) | não | sim | não | 1396×464 |

@@ -143,6 +143,7 @@ export const AdService = {
     const guards = currentGuards();
     if (!AdService.canShowAds()) return false;
     if (guards.isGameActive) return false;
+    if (guards.isAdFreeScreen) return false;
     if (guards.isMatchmakingActive) return false;
     if (guards.isFullScreenAdShowing) return false;
     if (!guards.isAppActive) return false;

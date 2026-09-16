@@ -21,6 +21,15 @@ export const colors = {
   overlay: 'rgba(0, 20, 14, 0.55)',
   divider: 'rgba(120, 200, 170, 0.14)',
 
+  // Mesa de jogo: o pano, a borda em volta dele e os lugares das cartas.
+  /** Anel escuro em volta do pano — dá a impressão de mesa, não de mancha na tela. */
+  feltRail: 'rgba(2, 24, 18, 0.55)',
+  /** Fio de luz na beirada do pano. */
+  feltEdge: 'rgba(140, 230, 185, 0.18)',
+  /** Lugar vazio de uma carta na mesa. */
+  slotFill: 'rgba(0, 30, 23, 0.28)',
+  slotEdge: 'rgba(150, 225, 190, 0.13)',
+
   // Brand greens
   primary: '#05c875',
   primaryBright: '#1ee38c',
@@ -71,4 +80,9 @@ export const gradients = {
   card: ['rgba(26, 74, 70, 0.85)', 'rgba(9, 40, 38, 0.85)'] as const,
   fadeToBottom: ['rgba(0,34,26,0)', 'rgba(0,34,26,0.85)', '#00221a'] as const,
   table: ['#0d4a3a', '#063326', '#02201a'] as const,
+  /**
+   * Luz sobre o pano: mais claro em cima, fechando embaixo. É o que separa o feltro do fundo
+   * da tela — antes o pano era uma cor chapada só e a mesa parecia uma elipse desbotada.
+   */
+  felt: ['rgba(56, 168, 118, 0.26)', 'rgba(20, 110, 70, 0.17)', 'rgba(2, 30, 23, 0.20)'] as const,
 } as const;

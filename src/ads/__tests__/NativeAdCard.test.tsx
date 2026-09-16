@@ -25,7 +25,7 @@ describe('NativeAdCard', () => {
   beforeEach(() => {
     setAdConfigSource(null);
     createForAdRequest.mockReset();
-    useAdStore.setState({ adsEnabled: true, canRequestAds: true });
+    useAdStore.setState({ adsEnabled: true, canRequestAds: true, currentScreen: 'Main' });
   });
 
   it('mostra o anúncio identificado quando ele carrega', async () => {
@@ -35,6 +35,18 @@ describe('NativeAdCard', () => {
     await waitFor(() => expect(view.getByTestId('native-ad-home_native_primary')).toBeTruthy());
     expect(view.getByText('Patrocinado')).toBeTruthy();
     expect(view.getByText('Título do anúncio')).toBeTruthy();
+  });
+
+  it('não pede anúncio numa tela sem anúncio (login, código, cadastro, partida)', async () => {
+    createForAdRequest.mockClear();
+    for (const screen of ['Login', 'Otp', 'Register', 'Game']) {
+      useAdStore.setState({ currentScreen: screen });
+      const view = await render(<NativeAdCard placement="home_native_primary" />);
+      expect(view.queryByTestId('native-ad-home_native_primary')).toBeNull();
+      await view.unmount();
+    }
+    expect(createForAdRequest).not.toHaveBeenCalled();
+    useAdStore.setState({ currentScreen: 'Main' });
   });
 
   it('não renderiza nada quando o anúncio falha', async () => {

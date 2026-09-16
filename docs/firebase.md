@@ -77,15 +77,17 @@ Para o login por telefone funcionar em produção (inclusive com o número de te
    região é avaliada **antes** da lista de números de teste, então nem o `+55 61 99628-9726 / 123456` passa.
 2. **Project settings → Your apps → Android (`com.mooby.trucomineiro`) → adicionar impressões digitais SHA**
    (sem elas o Play Integrity/reCAPTCHA não valida o app; o `google-services.json` atual está com `oauth_client: []`):
-   - **O keystore que assina os builds é `android/app/debug.keystore`** (o do template Expo), e **não**
-     `~/.android/debug.keystore` — `android/app/build.gradle` usa `file('debug.keystore')`, caminho
-     relativo ao módulo `app`. Conferir sempre pelo APK, nunca pelo keystore presumido:
+   - **O keystore de release é `F:/WJF_GAMES/KeyAndroid/key_android`, alias `wjf_games`**, declarado em
+     `android/keystore.properties` (não versionado — ver `docs/security.md`). Conferir sempre pelo APK,
+     nunca pelo keystore presumido:
      ```
-     "$ANDROID_HOME/build-tools/36.1.0/apksigner.bat" verify --print-certs dist/truco-mineiro-1.0.0.apk
+     "$ANDROID_HOME/build-tools/37.0.0/apksigner.bat" verify --print-certs dist/truco-mineiro-1.1.0.apk
      ```
-     - SHA-1: `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`
-     - SHA-256: `FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C`
-   - o SHA-1/256 do keystore de release, quando existir.
+     - SHA-1: `38:AC:65:55:E1:2F:76:05:1E:57:53:76:DF:5A:23:28:A3:0B:DE:9D`
+     - SHA-256: `A2:F3:B2:31:3B:74:4F:FB:20:C9:10:77:18:2A:C2:61:6C:96:77:8C:54:0F:31:83:4A:2D:9D:15:E9:F9:FD:72`
+   - se o AAB for publicado com **Play App Signing**, esse par acima é o da *upload key*; o SHA-1 da chave
+     de assinatura gerada pelo Google (Play Console → Configuração → Integridade do app) também precisa
+     ser cadastrado aqui, senão o Phone Auth quebra nas instalações vindas da loja.
 3. Baixar de novo o `google-services.json` depois de adicionar os SHA e substituir o da raiz.
 4. **Authentication → Sign-in method → Phone numbers for testing**: confirmar `+55 61 99628-9726 → 123456`.
 5. (Opcional agora) Habilitar a **Firebase App Check API** e registrar o debug token impresso no logcat.

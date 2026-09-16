@@ -1,4 +1,4 @@
-import type { GameEvent, PlayedCard, SeatView, Team } from '@/domain/game';
+import { cardId, type GameEvent, type SeatView, type TablePlay, type Team } from '@/domain/game';
 import type { SessionMeta, SessionPlayer } from '@/domain/model/types';
 
 export interface RemoteSeatView extends SeatView {
@@ -15,11 +15,18 @@ export function normalizeSeatView(raw: unknown): RemoteSeatView | null {
   const v = raw as Partial<RemoteSeatView> & Record<string, unknown>;
   if (typeof v.seat !== 'number' || typeof v.phase !== 'string') return null;
 
-  const plays = (list: unknown): PlayedCard[] =>
+  // Carta virada de outro assento chega sem `card` (o RTDB apaga o null): ela continua na mesa.
+  const plays = (list: unknown): TablePlay[] =>
     Array.isArray(list)
-      ? list.filter((p): p is PlayedCard => Boolean(p && (p as PlayedCard).card))
+      ? list
+          .filter((p): p is TablePlay => {
+            const play = p as Partial<TablePlay> | null;
+            return Boolean(play && typeof play.seat === 'number' && (play.card || play.covered));
+          })
+          .map((p) => ({ seat: p.seat, card: p.card ?? null, covered: Boolean(p.covered) }))
       : [];
 
+  const myCards = Array.isArray(v.myCards) ? v.myCards.filter(Boolean) : [];
   return {
     seat: v.seat,
     team: (v.team ?? ((v.seat % 2) as Team)) as Team,
@@ -38,7 +45,15 @@ export function normalizeSeatView(raw: unknown): RemoteSeatView | null {
     phase: v.phase as SeatView['phase'],
     turnSeat: v.turnSeat ?? 0,
     roundLeader: v.roundLeader ?? 0,
-    myCards: Array.isArray(v.myCards) ? v.myCards.filter(Boolean) : [],
+    myCards,
+    // Servidor antigo não manda `playableCardIds`: sem desempate, todas as cartas valem.
+    playableCardIds: Array.isArray(v.playableCardIds)
+      ? v.playableCardIds.filter(Boolean)
+      : myCards.map(cardId),
+    tieBreak:
+      v.tieBreak && typeof v.tieBreak.causedBySeat === 'number'
+        ? { causedBySeat: v.tieBreak.causedBySeat, round: v.tieBreak.round ?? 0 }
+        : null,
     cardCounts: Array.isArray(v.cardCounts)
       ? [0, 1, 2, 3].map((i) => v.cardCounts?.[i] ?? 0)
       : [0, 0, 0, 0],

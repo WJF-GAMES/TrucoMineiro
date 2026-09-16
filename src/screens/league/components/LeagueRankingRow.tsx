@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, icons, radius, spacing, typography } from '@/design-system';
 import { AppText, CountryFlag, PlayerAvatar } from '@/components';
@@ -29,17 +29,25 @@ interface Props {
   zone: RankingZone;
   /** Coroa do líder, como na referência. */
   leader: boolean;
+  /** Tocar na linha abre a ficha do jogador. */
+  onOpen?: (member: LeagueRankingMember) => void;
 }
 
-function Row({ member, zone, leader }: Props) {
+function Row({ member, zone, leader, onOpen }: Props) {
   const medal = MEDAL[member.rank];
   return (
-    <View
-      style={[
+    <Pressable
+      onPress={onOpen ? () => onOpen(member) : undefined}
+      disabled={!onOpen}
+      accessibilityRole={onOpen ? 'button' : undefined}
+      accessibilityHint={onOpen ? 'Abre o perfil do jogador' : undefined}
+      testID={`ranking-row-${member.uid}`}
+      style={({ pressed }) => [
         styles.row,
         zone === 'promotion' && styles.promotion,
         zone === 'relegation' && styles.relegation,
         member.isMe && styles.me,
+        pressed && styles.pressed,
       ]}
       accessibilityLabel={`${member.rank}º lugar, ${member.nickname}, ${formatNumber(
         member.weeklyPoints,
@@ -79,7 +87,7 @@ function Row({ member, zone, leader }: Props) {
       <AppText variant="bodyBold" style={styles.points}>
         {formatNumber(member.weeklyPoints)}
       </AppText>
-    </View>
+    </Pressable>
   );
 }
 
@@ -103,6 +111,7 @@ const styles = StyleSheet.create({
   promotion: { backgroundColor: 'rgba(5, 200, 117, 0.12)' },
   relegation: { backgroundColor: 'rgba(160, 20, 35, 0.22)' },
   me: { borderLeftColor: colors.primaryBright },
+  pressed: { backgroundColor: colors.card },
   rankCell: { width: RANK_COLUMN_WIDTH, alignItems: 'center' },
   rankText: { ...typography.smallBold, textAlign: 'center' },
   medal: {

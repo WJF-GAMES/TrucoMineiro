@@ -19,7 +19,10 @@ import { PlayingCard } from './PlayingCard';
 export type TrickCardStatus = 'plain' | 'leading' | 'winner' | 'loser';
 
 interface Props {
-  card: Card;
+  /** `null` quando a carta foi jogada virada por outro assento (a identidade não chega aqui). */
+  card: Card | null;
+  /** Jogada virada: a mesa mostra só o verso, do voo até o recolhimento. */
+  covered?: boolean;
   width: number;
   /** De onde a carta vem (o assento de quem jogou) — ela voa dali até o slot. */
   from: TablePosition;
@@ -50,9 +53,11 @@ const COLLECT: Record<TablePosition, { x: number; y: number }> = {
  * (verde, discreto) enquanto a vaza está aberta e de "Vencedora" (dourado, coroa) quando fecha, e
  * sai junto com as outras na direção de quem levou.
  */
-export function TrickCard({ card, width, from, status, collectTo, style, testID }: Props) {
-  const x = useSharedValue(ORIGIN[from].x);
-  const y = useSharedValue(ORIGIN[from].y);
+export function TrickCard({ card, covered, width, from, status, collectTo, style, testID }: Props) {
+  // A trajetória é sempre da mesa: sai do assento de quem jogou e pousa no slot dele.
+  const start = ORIGIN[from];
+  const x = useSharedValue(start.x);
+  const y = useSharedValue(start.y);
   const scale = useSharedValue(0.86);
   const opacity = useSharedValue(0);
   const pop = useSharedValue(0);
@@ -105,7 +110,11 @@ export function TrickCard({ card, width, from, status, collectTo, style, testID 
   return (
     <Animated.View style={[style, animated]} testID={testID}>
       <View style={[styles.frame, ring, dimmed && styles.dimmed]}>
-        <PlayingCard card={card} width={width} />
+        {covered || !card ? (
+          <PlayingCard faceDown width={width} />
+        ) : (
+          <PlayingCard card={card} width={width} />
+        )}
       </View>
       {status === 'winner' ? (
         <View style={styles.crown} pointerEvents="none">

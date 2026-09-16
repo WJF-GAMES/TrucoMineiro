@@ -82,6 +82,12 @@ export function TableCeremony({ ceremony, players, mySeat, reconnecting }: Props
   const cutterName = cutter?.isYou ? 'Você' : (cutter?.nickname ?? 'O jogador');
 
   const copy = ceremonyCopy(ceremony, actorName);
+  /**
+   * O corte é o estágio mais cheio: cartão do prazo, baralho, as três opções e dois botões.
+   * Esse empilhamento empurrava o bloco central para cima e o título subia por cima do parceiro
+   * no topo da mesa. A folga veio de tirar as descrições das três opções de corte (o desenho já
+   * diz o que cada uma faz) — o título continua no tamanho de sempre.
+   */
   const showDeal = ceremony.stage === 'deal';
   const showCut = ceremony.stage === 'cut';
   // Onde cortar: escolha do jogador local — vai no `CUT` para o motor. Quem não corta vê o meio.
@@ -487,16 +493,17 @@ function CutOptions({
             testID={'cut-' + d.id}
           >
             {!compact ? <MiniSplit top={split.top} bottom={split.bottom} /> : null}
+            {/* Só o rótulo curto: o desenho acima já mostra onde o baralho parte, e a frase
+                explicativa em cada uma das três opções enchia a tela de texto repetido. A
+                descrição continua inteira no `accessibilityLabel`, para quem não vê o desenho. */}
             <AppText
               variant="smallBold"
               center
               color={selected ? colors.gold : colors.text}
               style={styles.cutOptionLabel}
+              numberOfLines={1}
             >
-              {d.label}
-            </AppText>
-            <AppText variant="caption" center color={colors.textMuted}>
-              {d.description}
+              {d.short}
             </AppText>
           </Pressable>
         );

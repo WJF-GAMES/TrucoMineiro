@@ -1,4 +1,13 @@
-import { Card, HandState, MatchState, PlayedCard, RoundResult, Seat, Team } from '../domain/game';
+import {
+  Card,
+  HandState,
+  MatchState,
+  PlayedCard,
+  RoundResult,
+  Seat,
+  Team,
+  TieBreakState,
+} from '../domain/game';
 
 /** Match state as persisted under `gameSessions/{id}/state`. */
 export interface StoredState extends MatchState {
@@ -6,6 +15,13 @@ export interface StoredState extends MatchState {
   appliedActionIds: Record<string, number>;
   aiRngState: number;
   trucos: Record<string, { called: number; accepted: number }>;
+}
+
+function normalizeTieBreak(raw: unknown): TieBreakState | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const t = raw as Partial<TieBreakState>;
+  if (typeof t.causedBySeat !== 'number' || typeof t.round !== 'number') return null;
+  return { causedBySeat: t.causedBySeat as Seat, round: t.round };
 }
 
 /**
@@ -21,9 +37,16 @@ export function normalizeStoredState(raw: unknown): StoredState | null {
 
   const cards = (list: unknown): Card[] =>
     Array.isArray(list) ? list.filter((c): c is Card => Boolean(c && (c as Card).rank)) : [];
+  // A carta real está sempre no estado; `covered` só existe (como `true`) na jogada virada.
   const plays = (list: unknown): PlayedCard[] =>
     Array.isArray(list)
-      ? list.filter((p): p is PlayedCard => Boolean(p && (p as PlayedCard).card))
+      ? list
+          .filter((p): p is PlayedCard => Boolean(p && (p as PlayedCard).card))
+          .map((p) =>
+            p.covered
+              ? { seat: p.seat, card: p.card, covered: true }
+              : { seat: p.seat, card: p.card },
+          )
       : [];
 
   const hand: HandState = {
@@ -36,6 +59,9 @@ export function normalizeStoredState(raw: unknown): StoredState | null {
     deck: cards(rawHand.deck),
     deckVersion: rawHand.deckVersion ?? 0,
     shuffleCount: rawHand.shuffleCount ?? 0,
+    // O RTDB apaga o zero? Não — apaga null/vazio; mas uma sessão gravada antes de o corte virar
+    // repetível simplesmente não tem a chave, e ela precisa voltar como 0.
+    cutCount: rawHand.cutCount ?? 0,
     hands: [0, 1, 2, 3].map((i) => cards((rawHand.hands as unknown[] | undefined)?.[i])),
     currentRound: plays(rawHand.currentRound),
     roundLeader: (rawHand.roundLeader ?? 0) as Seat,
@@ -48,6 +74,8 @@ export function normalizeStoredState(raw: unknown): StoredState | null {
       : [],
     turnSeat: (rawHand.turnSeat ?? 0) as Seat,
     truco: rawHand.truco ?? null,
+    // Desempate por cango: `null` some no RTDB (e sessões antigas nem têm a chave).
+    tieBreak: normalizeTieBreak(rawHand.tieBreak),
     maoDeOnzeTeam: (rawHand.maoDeOnzeTeam ?? null) as Team | null,
     result: rawHand.result ?? null,
   };

@@ -30,6 +30,7 @@ import {
 } from './components/LeagueRankingRow';
 import { LeagueHistoryTab } from './components/LeagueHistoryTab';
 import { GlobalRankingTab } from './components/GlobalRankingTab';
+import { PlayerProfileSheet, type RankingPlayer } from './components/PlayerProfileSheet';
 import type { LeagueScreenSnapshot } from '@/domain/model/types';
 import type { TabScreenProps } from '@/navigation/types';
 
@@ -43,6 +44,8 @@ const TABS: { key: Tab; label: string }[] = [
 
 export function LeagueScreen({ navigation }: TabScreenProps<'League'>) {
   const [tab, setTab] = useState<Tab>('mine');
+  /** Jogador com a ficha aberta (de "Minha Liga" ou da "Classificação Geral"). */
+  const [player, setPlayer] = useState<RankingPlayer | null>(null);
   const { snapshot, members, loading, error, reload } = useLeagueScreen();
 
   useEffect(() => {
@@ -95,12 +98,14 @@ export function LeagueScreen({ navigation }: TabScreenProps<'League'>) {
             logEvent('league_play_now_clicked');
             navigation.navigate('Play');
           }}
+          onOpenPlayer={setPlayer}
         />
       ) : tab === 'global' ? (
-        <GlobalRankingTab />
+        <GlobalRankingTab onOpenPlayer={setPlayer} />
       ) : (
         <LeagueHistoryTab />
       )}
+      {player ? <PlayerProfileSheet player={player} onClose={() => setPlayer(null)} /> : null}
     </Screen>
   );
 }
@@ -112,9 +117,33 @@ interface MyLeagueProps {
   error: string | null;
   onRetry: () => void;
   onPlay: () => void;
+  onOpenPlayer: (player: RankingPlayer) => void;
 }
 
-function MyLeagueTab({ snapshot, members, loading, error, onRetry, onPlay }: MyLeagueProps) {
+function MyLeagueTab({
+  snapshot,
+  members,
+  loading,
+  error,
+  onRetry,
+  onPlay,
+  onOpenPlayer,
+}: MyLeagueProps) {
+  const openMember = useCallback(
+    (m: {
+      uid: string;
+      nickname: string;
+      avatarId: RankingPlayer['avatarId'];
+      countryCode: string;
+    }) =>
+      onOpenPlayer({
+        id: m.uid,
+        nickname: m.nickname,
+        avatarId: m.avatarId,
+        countryCode: m.countryCode,
+      }),
+    [onOpenPlayer],
+  );
   const zoneOf = useCallback(
     (rank: number): RankingZone => {
       if (!snapshot) return 'neutral';
@@ -164,7 +193,12 @@ function MyLeagueTab({ snapshot, members, loading, error, onRetry, onPlay }: MyL
       removeClippedSubviews
       ListHeaderComponent={<LeagueHero snapshot={snapshot} hasMembers={members.length > 0} />}
       renderItem={({ item }) => (
-        <LeagueRankingRow member={item} zone={zoneOf(item.rank)} leader={item.rank === 1} />
+        <LeagueRankingRow
+          member={item}
+          zone={zoneOf(item.rank)}
+          leader={item.rank === 1}
+          onOpen={openMember}
+        />
       )}
       // Grupo recém-criado: o ranking existe, só não tem ninguém ainda. Sem isto a tela
       // mostrava o cabeçalho da tabela e um vão em branco até o card de regras (regra 41).

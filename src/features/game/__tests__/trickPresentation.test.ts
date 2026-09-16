@@ -1,8 +1,10 @@
 import { applyAction, createMatch, parseCardId, viewForSeat, skipCeremony } from '@/domain/game';
-import type { GameEvent, MatchState, PlayedCard, Seat } from '@/domain/game';
+import type { GameEvent, MatchState, Seat, TablePlay } from '@/domain/game';
 import {
+  CANGO_COPY,
   EMPTY_TRICK,
   TRICK_TIMING,
+  cangoNote,
   advance,
   isHolding,
   nextWakeAt,
@@ -36,7 +38,7 @@ function step(prev: TrickPresentation, before: MatchState, after: MatchState, no
   return presentTrick(prev, viewForSeat(after, 0), batch, true, now);
 }
 
-const seatsOf = (plays: PlayedCard[]) => plays.map((p) => p.seat).sort();
+const seatsOf = (plays: TablePlay[]) => plays.map((p) => p.seat).sort();
 
 describe('presentTrick', () => {
   it('mostra a carta que está ganhando enquanto a vaza está aberta', () => {
@@ -68,7 +70,7 @@ describe('presentTrick', () => {
     expect(t.phase).toBe('resolved');
     expect(seatsOf(t.plays)).toEqual([0, 1, 2, 3]);
     expect(t.plays.find((p) => p.seat === 3)?.card).toEqual(parseCardId('4P'));
-    expect(t.resolved).toEqual({ winnerSeat: 3, winner: 1 });
+    expect(t.resolved).toEqual({ winnerSeat: 3, winner: 1, cango: null });
     expect(t.leadingSeat).toBeNull();
     expect(t.handEnded).toBe(false);
     expect(isHolding(t)).toBe(true);
@@ -192,8 +194,128 @@ describe('presentTrick', () => {
       s = n;
     }
     expect(t.phase).toBe('resolved');
-    expect(t.resolved).toEqual({ winnerSeat: 0, winner: null });
+    // Cangou: nenhuma carta vencedora; as cartas vão para quem cangou (assento 1), que abre.
+    expect(t.resolved).toEqual({ winnerSeat: 1, winner: null, cango: 'TIE_BREAK_STARTED' });
     expect(t.plays).toHaveLength(4);
+  });
+});
+
+describe('cango na mesa', () => {
+  type P = [Seat, string];
+  /** Joga as vazas (mãos montadas a partir delas) e devolve a apresentação da última. */
+  function trickAfter(tricks: P[][]) {
+    const m = dealt(1, 99);
+    const hands: string[][] = [[], [], [], []];
+    for (const t of tricks) for (const [seat, c] of t) hands[seat]!.push(c);
+    let s: MatchState = {
+      ...m,
+      hand: { ...m.hand, hands: hands.map((h) => h.map(parseCardId)) },
+    };
+    let t = EMPTY_TRICK;
+    for (const trick of tricks)
+      for (const [seat, c] of trick) {
+        const n = applyAction(s, { type: 'PLAY_CARD', seat, cardId: c });
+        t = step(t, s, n);
+        s = n;
+      }
+    return { t, s };
+  }
+  const T1_TIE: P[] = [
+    [0, 'KO'],
+    [1, 'KP'],
+    [2, '4O'],
+    [3, '4C'],
+  ];
+
+  it('1ª cangada: aviso de desempate, sem vencedora, e a mesa segura as quatro cartas', () => {
+    const { t, s } = trickAfter([T1_TIE]);
+    expect(t.resolved?.cango).toBe('TIE_BREAK_STARTED');
+    expect(CANGO_COPY[t.resolved!.cango!]).toBe('Cangou! Agora todos jogam a maior carta.');
+    expect(t.plays).toHaveLength(4);
+    expect(t.handEnded).toBe(false);
+    // A mesa só libera depois do aviso; a view já traz o desempate para a próxima vaza.
+    expect(isHolding(t)).toBe(true);
+    expect(viewForSeat(s, 0).tieBreak).toEqual({ causedBySeat: 1, round: 1 });
+  });
+
+  it('cangou de novo no desempate: "a terceira decide"', () => {
+    const { t } = trickAfter([
+      T1_TIE,
+      [
+        [1, '2P'],
+        [2, '2O'],
+        [3, '6C'],
+        [0, '5O'],
+      ],
+    ]);
+    expect(t.resolved?.cango).toBe('TIE_BREAK_AGAIN');
+    expect(CANGO_COPY.TIE_BREAK_AGAIN).toBe('Cangou de novo! A terceira decide.');
+  });
+
+  it('cangou depois de a 1ª ter vencedor: "vale a primeira", e a mão acaba', () => {
+    const { t } = trickAfter([
+      [
+        [0, '3O'],
+        [1, '2P'],
+        [2, '4O'],
+        [3, '4C'],
+      ],
+      [
+        [0, 'KO'],
+        [1, 'KP'],
+        [2, '5E'],
+        [3, '6C'],
+      ],
+    ]);
+    expect(t.resolved).toMatchObject({ winner: null, cango: 'FIRST_TRICK_PREVAILS' });
+    expect(t.handEnded).toBe(true);
+    expect(t.plays).toHaveLength(4);
+    expect(CANGO_COPY.FIRST_TRICK_PREVAILS).toBe('Cangou! Vale a primeira.');
+  });
+
+  it('três cangadas: ninguém pontua', () => {
+    const { t } = trickAfter([
+      T1_TIE,
+      [
+        [1, '2P'],
+        [2, '2O'],
+        [3, 'KE'],
+        [0, '5O'],
+      ],
+      [
+        [2, 'JO'],
+        [3, 'JC'],
+        [0, '4E'],
+        [1, 'QP'],
+      ],
+    ]);
+    expect(t.resolved?.cango).toBe('ALL_TIED');
+    expect(t.handEnded).toBe(true);
+  });
+
+  it('vaza com vencedora não tem aviso de cango, nem a vaza que decide o desempate', () => {
+    const { t } = trickAfter([
+      T1_TIE,
+      [
+        [1, '2P'],
+        [2, '3O'],
+        [3, '6C'],
+        [0, '5O'],
+      ],
+    ]);
+    expect(t.resolved).toMatchObject({ winner: 0, winnerSeat: 2, cango: null });
+    expect(t.handEnded).toBe(true);
+  });
+
+  it('cangoNote só lê o que o motor anunciou', () => {
+    expect(cangoNote([], 0)).toBeNull();
+    expect(
+      cangoNote([{ type: 'TIE_BREAK_STARTED', round: 1, leadSeat: 3, continued: false }], 0),
+    ).toBe('TIE_BREAK_STARTED');
+    // Evento de outra vaza não conta.
+    expect(
+      cangoNote([{ type: 'TIE_BREAK_STARTED', round: 2, leadSeat: 3, continued: true }], 0),
+    ).toBeNull();
   });
 });
 

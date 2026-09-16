@@ -3,7 +3,6 @@ import { leadingPlay } from '../rules/strength';
 import {
   applyAction,
   createMatch,
-  decideHand,
   getAvailableActions,
   InvalidActionError,
   viewForSeat,
@@ -55,7 +54,7 @@ describe('createMatch', () => {
 describe('turn order and validation', () => {
   it('only the seat in turn can play, and only its own cards', () => {
     const m = dealt(1);
-    expect(getAvailableActions(m, 0)).toEqual(['PLAY_CARD', 'REQUEST_TRUCO']);
+    expect(getAvailableActions(m, 0)).toEqual(['PLAY_CARD', 'PLAY_CARD_COVERED', 'REQUEST_TRUCO']);
     expect(getAvailableActions(m, 1)).toEqual([]);
     const foreign = cardId(m.hand.hands[1]![0]!);
     expect(() => applyAction(m, { type: 'PLAY_CARD', seat: 1, cardId: foreign })).toThrow(
@@ -120,7 +119,9 @@ describe('rounds and hand resolution', () => {
     ]);
     const s = playAll(m, ['3O', '3P', '4E', 'QP']);
     expect(s.hand.rounds[0]!.winner).toBeNull();
-    expect(s.hand.turnSeat).toBe(0); // leader leads again
+    // Cangou: quem igualou a carta (assento 1) abre o desempate.
+    expect(s.hand.turnSeat).toBe(1);
+    expect(s.hand.tieBreak).toEqual({ causedBySeat: 1, round: 1 });
   });
 
   it('does not tie when the two strongest equal cards belong to the same team', () => {
@@ -134,18 +135,7 @@ describe('rounds and hand resolution', () => {
     expect(s.hand.rounds[0]!.winner).toBe(0);
   });
 
-  it('first round tied: second round decides', () => {
-    const m = withHands(dealt(3), [
-      ['3O', '5O', '6O'],
-      ['3P', 'KC', '6C'],
-      ['4E', '5E', '6E'],
-      ['QP', '5P', '6P'],
-    ]);
-    let s = playAll(m, ['3O', '3P', '4E', 'QP']);
-    s = playAll(s, ['5O', 'KC', '5E', '5P']);
-    expect(s.scores).toEqual([0, 1]);
-  });
-
+  // Cango na 1ª (desempate) e as três cangadas: ver cango.test.ts.
   it('first round won and second tied: first winner takes the hand', () => {
     const m = withHands(dealt(3), [
       ['3O', '5O', '6O'],
@@ -156,37 +146,6 @@ describe('rounds and hand resolution', () => {
     let s = playAll(m, ['3O', '2P', '4E', 'QP']); // team 0 wins
     s = playAll(s, ['5O', '5C', '5E', '5P']); // tie
     expect(s.scores).toEqual([1, 0]);
-  });
-
-  it('decideHand covers every combination', () => {
-    expect(decideHand([])).toBeUndefined();
-    expect(decideHand([0])).toBeUndefined();
-    expect(decideHand([0, 1])).toBeUndefined();
-    expect(decideHand([null, null])).toBeUndefined();
-    expect(decideHand([0, 0])).toBe(0);
-    expect(decideHand([0, null])).toBe(0);
-    expect(decideHand([null, 1])).toBe(1);
-    expect(decideHand([0, 1, 1])).toBe(1);
-    expect(decideHand([0, 1, null])).toBe(0);
-    expect(decideHand([null, null, 1])).toBe(1);
-    expect(decideHand([null, null, null])).toBeNull();
-  });
-
-  it('all three rounds tied gives no points and moves to the next hand', () => {
-    const m = withHands(dealt(3), [
-      ['3O', '2O', 'KO'],
-      ['3P', '2P', 'KP'],
-      ['4E', '5E', '6E'],
-      ['4C', '5C', '6C'],
-    ]);
-    let s = playAll(m, ['3O', '3P', '4E', '4C']);
-    s = playAll(s, ['2O', '2P', '5E', '5C']);
-    s = playAll(s, ['KO', 'KP', '6E', '6C']);
-    expect(s.scores).toEqual([0, 0]);
-    expect(s.handsPlayed).toBe(1);
-    expect(s.events.some((e) => e.type === 'HAND_ENDED' && e.result.reason === 'ALL_TIED')).toBe(
-      true,
-    );
   });
 });
 
@@ -204,9 +163,9 @@ describe('truco', () => {
     expect(s.hand.phase).toBe('PLAY');
     expect(s.hand.turnSeat).toBe(0);
     // Same team cannot raise again while the other team has not raised
-    expect(getAvailableActions(s, 0)).toEqual(['PLAY_CARD']);
+    expect(getAvailableActions(s, 0)).toEqual(['PLAY_CARD', 'PLAY_CARD_COVERED']);
     const s2 = applyAction(s, { type: 'PLAY_CARD', seat: 0, cardId: cardId(s.hand.hands[0]![0]!) });
-    expect(getAvailableActions(s2, 1)).toEqual(['PLAY_CARD', 'REQUEST_TRUCO']);
+    expect(getAvailableActions(s2, 1)).toEqual(['PLAY_CARD', 'PLAY_CARD_COVERED', 'REQUEST_TRUCO']);
   });
 
   it('running concedes the current value to the requester', () => {
@@ -291,7 +250,7 @@ describe('mão de onze', () => {
     expect(accepted.hand.phase).toBe('PLAY');
     // Nobody can call truco in a mão de onze hand
     const seat = accepted.hand.turnSeat as Seat;
-    expect(getAvailableActions(accepted, seat)).toEqual(['PLAY_CARD']);
+    expect(getAvailableActions(accepted, seat)).toEqual(['PLAY_CARD', 'PLAY_CARD_COVERED']);
   });
 });
 
@@ -308,7 +267,13 @@ describe('seat view hides information', () => {
 describe('leadingPlay', () => {
   const p = (seat: 0 | 1 | 2 | 3, id: string) => ({ seat, card: parseCardId(id) });
   it('a primeira carta lidera sozinha', () => {
-    expect(leadingPlay([p(0, '5O')])).toEqual({ seat: 0, card: parseCardId('5O'), tied: false });
+    expect(leadingPlay([p(0, '5O')])).toEqual({
+      seat: 0,
+      card: parseCardId('5O'),
+      covered: false,
+      tied: false,
+      tieCausedBySeat: null,
+    });
   });
   it('a segunda assume, a terceira assume, a quarta assume', () => {
     expect(leadingPlay([p(0, '5O'), p(1, 'KE')])?.seat).toBe(1);

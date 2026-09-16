@@ -17,8 +17,11 @@
 | matchmaking_started / matchmaking_cancelled | fila | seconds |
 | room_created / room_joined | salas | source / via |
 | match_started | mesa aberta | mode, difficulty, source |
-| card_played | carta jogada | mode |
+| card_played | carta jogada | mode, covered |
 | truco_requested / truco_accepted / truco_rejected | apostas | mode |
+| trick_tied | uma vaza cangou | round |
+| cango_tiebreak_started | vaza de desempate vai começar (1ª cangou, ou cangou de novo) | round, continued |
+| cango_tiebreak_resolved | mão decidida na vaza de desempate | round |
 | match_completed / match_won / match_lost | resultado | mode, difficulty, won |
 | rematch_clicked | "Jogar novamente" | mode |
 | store_viewed | Loja | tab |

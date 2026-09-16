@@ -96,6 +96,8 @@ export function useContactsSync(
   const fingerprint = useRef<string | null>(null);
   const running = useRef(false);
   const mounted = useRef(true);
+  /** Leitura do cache: a sincronização espera por ela para comparar com a última agenda. */
+  const cacheLoaded = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     mounted.current = true;
@@ -108,7 +110,7 @@ export function useContactsSync(
   useEffect(() => {
     if (!uid) return;
     let active = true;
-    (async () => {
+    cacheLoaded.current = (async () => {
       const [cached, perm] = await Promise.all([loadContactsSync(uid), getContactsPermission()]);
       if (!active) return;
       setPermission(perm);
@@ -122,7 +124,7 @@ export function useContactsSync(
         // Permissão revogada nas configurações: o resultado antigo não vale mais.
         await clearContactsSync(uid);
       }
-    })();
+    })().catch(() => undefined);
     return () => {
       active = false;
     };
@@ -164,6 +166,7 @@ export function useContactsSync(
       setProgress({ phase: 'permission', ratio: null });
       logEvent('contacts_sync_started');
       try {
+        await cacheLoaded.current;
         let perm = await getContactsPermission();
         // Só pede o diálogo do sistema quando ainda dá: com 'blocked' a tela manda às configurações.
         if (perm !== 'granted' && perm !== 'blocked' && perm !== 'restricted')
@@ -188,7 +191,8 @@ export function useContactsSync(
 
         const agenda = normalizeAgenda(device, defaultCountry, ownPhone ? [ownPhone] : []);
         const print = agendaFingerprint(agenda.phones);
-        if (!options?.force && print === fingerprint.current && syncedAt) {
+        // `fingerprint` só existe depois de uma sincronização (desta sessão ou do cache).
+        if (!options?.force && print === fingerprint.current) {
           // Nada mudou na agenda: não gasta cota nem rede à toa.
           setStale(false);
           setProgress({ phase: 'done', ratio: 1 });
@@ -242,7 +246,7 @@ export function useContactsSync(
         if (mounted.current) setSyncing(false);
       }
     },
-    [uid, defaultCountry, ownPhone, syncedAt],
+    [uid, defaultCountry, ownPhone],
   );
 
   const setRelation = useCallback(

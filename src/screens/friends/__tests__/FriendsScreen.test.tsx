@@ -99,15 +99,24 @@ jest.mock('@/services/firebase/rtdb', () => ({
 }));
 
 // O GameHeader chama `useNavigation`; a tela recebe a navegação por prop, então basta o mínimo.
-jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ navigate: jest.fn(), goBack: jest.fn() }),
-}));
+// `useFocusEffect` roda como um efeito de montagem: a tela "ganha foco" ao aparecer.
+jest.mock('@react-navigation/native', () => {
+  const { useEffect } = jest.requireActual<typeof import('react')>('react');
+  return {
+    useNavigation: () => ({ navigate: jest.fn(), goBack: jest.fn() }),
+    useFocusEffect: (cb: () => void | (() => void)) => useEffect(cb, [cb]),
+  };
+});
 
 // O card de anúncio do rodapé puxa o SDK nativo do AdMob: fora do escopo desta tela.
 jest.mock('@/ads', () => ({ NativeAdCard: () => null }));
 
 // expo-contacts é módulo nativo; a tela só usa "abrir configurações" dele.
-jest.mock('@/services/contacts', () => ({ openAppSettings: jest.fn() }));
+const mockContactPhones = jest.fn((..._args: unknown[]) => Promise.resolve(['(31) 98877-6655']));
+jest.mock('@/services/contacts', () => ({
+  openAppSettings: jest.fn(),
+  readContactPhones: (...args: unknown[]) => mockContactPhones(...args),
+}));
 
 const mockFlag = jest.fn(() => true);
 jest.mock('@/services/firebase/remoteConfig', () => ({ flag: () => mockFlag() }));
@@ -128,17 +137,22 @@ jest.mock('@/stores/profileStore', () => ({
 // A agenda tem o seu próprio conjunto de testes; aqui ela fica parada para não competir
 // com o que está sendo verificado.
 const mockSetRelation = jest.fn();
+const mockSync = jest.fn(() => Promise.resolve());
+/** Estado da agenda que cada teste pode trocar (por padrão: nunca sincronizada). */
+const mockAgenda = {
+  permission: 'undetermined' as string,
+  result: { matched: [] as unknown[], unmatched: [] as unknown[] },
+  syncedAt: null as number | null,
+  contactCount: 0,
+};
 jest.mock('@/features/friends/useContactsSync', () => ({
   useContactsSync: () => ({
-    permission: 'undetermined',
-    result: { matched: [], unmatched: [] },
-    syncedAt: null,
-    contactCount: 0,
+    ...mockAgenda,
     stale: false,
     syncing: false,
     progress: { phase: 'idle', ratio: null },
     error: null,
-    sync: jest.fn(),
+    sync: (...args: unknown[]) => mockSync(...(args as [])),
     refreshPermission: jest.fn(),
     setRelation: (...args: unknown[]) => mockSetRelation(...args),
     forget: jest.fn(),
@@ -238,6 +252,10 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockFlag.mockReturnValue(true);
   mockEmit.presence = {};
+  mockAgenda.permission = 'undetermined';
+  mockAgenda.result = { matched: [], unmatched: [] };
+  mockAgenda.syncedAt = null;
+  mockAgenda.contactCount = 0;
 });
 
 afterEach(() => jest.restoreAllMocks());
@@ -264,7 +282,8 @@ describe('FriendsScreen — amigos', () => {
     });
 
     expect(fns.createRoom).toHaveBeenCalled();
-    expect(fns.inviteFriendToRoom).toHaveBeenCalledWith('zeh', 'ZZZ999');
+    // Amigo: sem prova de agenda.
+    expect(fns.inviteFriendToRoom).toHaveBeenCalledWith('zeh', 'ZZZ999', undefined);
     expect(navigate).toHaveBeenCalledWith('Lobby', { code: 'ZZZ999' });
   });
 
@@ -455,5 +474,138 @@ describe('FriendsScreen — flag desligada', () => {
     expect(view.getByTestId('friends-disabled')).toBeTruthy();
     expect(view.queryByTestId('friends-search')).toBeNull();
     expect(view.queryByTestId('quick-sync')).toBeNull();
+  });
+});
+
+describe('FriendsScreen — lista única de amigos e contatos', () => {
+  const syncedAgenda = () => {
+    mockAgenda.permission = 'granted';
+    mockAgenda.syncedAt = 1;
+    mockAgenda.contactCount = 4;
+    mockAgenda.result = {
+      matched: [
+        // Contato que já é amigo: vira a linha do amigo, com o nome da agenda.
+        {
+          contactId: 'c1',
+          contactName: 'Zé da Padaria',
+          uid: 'ze',
+          nickname: 'ze',
+          avatarId: 'joao',
+          level: 3,
+          relation: 'friend',
+        },
+        {
+          contactId: 'c2',
+          contactName: 'Prima Ana',
+          uid: 'ana',
+          nickname: 'ana',
+          avatarId: 'maria',
+          level: 2,
+          relation: 'none',
+        },
+        // O mesmo jogador salvo em dois contatos: uma linha só.
+        {
+          contactId: 'c3',
+          contactName: 'Ana (trabalho)',
+          uid: 'ana',
+          nickname: 'ana',
+          avatarId: 'maria',
+          level: 2,
+          relation: 'none',
+        },
+      ],
+      unmatched: [{ contactId: 'c4', contactName: 'Tio Beto' }],
+    };
+  };
+
+  it('mostra amigos, contatos que jogam e contatos para convidar numa listagem só', async () => {
+    syncedAgenda();
+    const view = await seed({ friends: ['ze'] });
+    expect(view.getByText('Amigos e contatos')).toBeTruthy();
+    expect(view.queryByText('Contatos da sua agenda')).toBeNull();
+    expect(view.queryByText('Convide para jogar')).toBeNull();
+    // Três pessoas: o amigo (uma vez), a Ana (uma vez) e o Tio Beto.
+    expect(view.getByText('3')).toBeTruthy();
+    expect(view.getAllByTestId(/^friend-ze$/)).toHaveLength(1);
+    expect(view.getByText('· Zé da Padaria')).toBeTruthy();
+    expect(view.queryByTestId('contact-match-c1')).toBeNull();
+    expect(view.getAllByTestId(/^contact-match-c[23]$/)).toHaveLength(1);
+    expect(view.getByTestId('contact-invite-c4')).toBeTruthy();
+  });
+
+  it('o campo de busca filtra pelo apelido e pelo nome da agenda', async () => {
+    syncedAgenda();
+    const view = await seed({ friends: ['ze'] });
+    await act(async () => {
+      fireEvent.changeText(view.getByTestId('friends-search'), 'padaria');
+    });
+    expect(view.getByTestId('friend-ze')).toBeTruthy();
+    expect(view.queryByTestId('contact-invite-c4')).toBeNull();
+    expect(view.queryByTestId('contact-match-c2')).toBeNull();
+  });
+
+  it('sem agenda sincronizada a lista mostra só os amigos', async () => {
+    const view = await seed({ friends: ['ze'] });
+    expect(view.getByText('Meus amigos')).toBeTruthy();
+    expect(view.getByTestId('friend-ze')).toBeTruthy();
+  });
+
+  it('sincroniza a agenda sozinho toda vez que a tela abre (e ela pede a permissão)', async () => {
+    await seed();
+    expect(mockSync).toHaveBeenCalledTimes(1);
+    // Sem `force`: se a agenda não mudou, a sincronização não vai ao servidor.
+    expect(mockSync).toHaveBeenCalledWith();
+  });
+});
+
+describe('FriendsScreen — jogar com contato da agenda', () => {
+  const agendaWithPlayer = () => {
+    mockAgenda.permission = 'granted';
+    mockAgenda.syncedAt = 1;
+    mockAgenda.contactCount = 1;
+    mockAgenda.result = {
+      matched: [
+        {
+          contactId: 'c9',
+          contactName: 'Primo Rafa',
+          uid: 'rafa',
+          nickname: 'rafa',
+          avatarId: 'galo',
+          level: 2,
+          relation: 'none',
+        },
+      ],
+      unmatched: [],
+    };
+  };
+
+  it('contato que joga e está online: "Jogar" lê os números da agenda, chama e vai ao lobby', async () => {
+    agendaWithPlayer();
+    const view = await seed({ presence: { rafa: 'online' } });
+    expect(view.getByText('Online · @rafa')).toBeTruthy();
+    expect(view.queryByTestId('contact-add-c9')).toBeNull();
+    await act(async () => {
+      fireEvent.press(view.getByTestId('contact-play-c9'));
+    });
+    expect(mockContactPhones).toHaveBeenCalledWith('c9');
+    expect(fns.createRoom).toHaveBeenCalled();
+    // Número normalizado (E.164) como prova do vínculo; nada é guardado.
+    expect(fns.inviteFriendToRoom).toHaveBeenCalledWith('rafa', 'ZZZ999', ['+5531988776655']);
+    expect(navigate).toHaveBeenCalledWith('Lobby', { code: 'ZZZ999' });
+  });
+
+  it('contato que joga e está offline: sem "Jogar" e sem "Convidar" — oferece adicionar', async () => {
+    agendaWithPlayer();
+    const view = await seed({ presence: { rafa: 'offline' } });
+    expect(view.queryByTestId('contact-play-c9')).toBeNull();
+    expect(view.getByTestId('contact-add-c9')).toBeTruthy();
+    expect(view.getByText('Já joga · @rafa')).toBeTruthy();
+    expect(view.queryByTestId('contact-invite-c9')).toBeNull();
+  });
+
+  it('amigo offline não mostra botão de convidar', async () => {
+    const view = await seed({ friends: ['zeh'], presence: { zeh: 'offline' } });
+    expect(view.getByTestId('friend-zeh')).toBeTruthy();
+    expect(view.queryByTestId('friend-play-zeh')).toBeNull();
   });
 });

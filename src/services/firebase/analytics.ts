@@ -30,6 +30,10 @@ export type AnalyticsEvent =
   | 'truco_requested'
   | 'truco_accepted'
   | 'truco_rejected'
+  // Cango (empate de vaza). Só telemetria: a regra vive no motor.
+  | 'trick_tied'
+  | 'cango_tiebreak_started'
+  | 'cango_tiebreak_resolved'
   | 'match_completed'
   | 'match_won'
   | 'match_lost'

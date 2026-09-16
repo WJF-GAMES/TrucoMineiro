@@ -1,5 +1,5 @@
 import { Card, Rank, cardId } from '../cards/card';
-import type { PlayedCard, Seat } from '../state/types';
+import type { Seat, TablePlay } from '../state/types';
 
 /**
  * Truco Mineiro uses fixed manilhas ("manilhas velhas"):
@@ -35,6 +35,18 @@ export const MANILHA_NAMES: Record<string, string> = {
 
 export const MAX_STRENGTH = 14;
 
+/**
+ * Força de uma carta jogada virada ("no escuro"): abaixo de qualquer carta aberta, inclusive do 4
+ * comum. A identidade real da carta nunca entra na comparação.
+ */
+export const COVERED_CARD_STRENGTH = 0;
+
+/** Força efetiva de uma jogada na vaza: carta virada vale `COVERED_CARD_STRENGTH`. */
+export function playStrength(play: Pick<TablePlay, 'card' | 'covered'>): number {
+  if (play.covered || !play.card) return COVERED_CARD_STRENGTH;
+  return cardStrength(play.card);
+}
+
 export function isManilha(card: Card): boolean {
   return cardId(card) in MANILHA_STRENGTH;
 }
@@ -48,26 +60,41 @@ export function compareCards(a: Card, b: Card): number {
   return cardStrength(a) - cardStrength(b);
 }
 
-/** Carta que está ganhando numa vaza (parcial ou completa) — a mesma regra de `resolveRound`. */
+/**
+ * Carta que está ganhando numa vaza (parcial ou completa). É a comparação única da vaza: o motor
+ * (`resolveTrick`) e a mesa ("Ganhando") usam esta mesma função.
+ */
 export interface LeadingPlay {
   seat: Seat;
-  card: Card;
-  /** A melhor carta está empatada com uma do time adversário: ninguém "ganha" por enquanto. */
+  card: Card | null;
+  covered: boolean;
+  /** A melhor carta está empatada com uma do time adversário (cango): ninguém "ganha". */
   tied: boolean;
+  /** Quem igualou a maior carta do time adversário e deixou a vaza cangada; `null` sem cango. */
+  tieCausedBySeat: Seat | null;
 }
 
-export function leadingPlay(plays: readonly PlayedCard[]): LeadingPlay | null {
+export function leadingPlay(plays: readonly TablePlay[]): LeadingPlay | null {
   if (plays.length === 0) return null;
-  let best: PlayedCard = plays[0]!;
-  let tied = false;
+  let best: TablePlay = plays[0]!;
+  let tieCausedBySeat: Seat | null = null;
   for (const p of plays.slice(1)) {
-    const cmp = compareCards(p.card, best.card);
+    // Força efetiva: carta virada vale o mínimo, antes de rank ou manilha.
+    const cmp = playStrength(p) - playStrength(best);
     if (cmp > 0) {
+      // Carta maior desfaz qualquer cango anterior.
       best = p;
-      tied = false;
-    } else if (cmp === 0 && p.seat % 2 !== best.seat % 2) {
-      tied = true;
+      tieCausedBySeat = null;
+    } else if (cmp === 0 && p.seat % 2 !== best.seat % 2 && tieCausedBySeat === null) {
+      // Igualou a maior carta do adversário: cangou. Um igual depois não troca o autor.
+      tieCausedBySeat = p.seat;
     }
   }
-  return { seat: best.seat, card: best.card, tied };
+  return {
+    seat: best.seat,
+    card: best.card,
+    covered: Boolean(best.covered),
+    tied: tieCausedBySeat !== null,
+    tieCausedBySeat,
+  };
 }

@@ -2,6 +2,7 @@ export * from './cards/card';
 export * from './cards/deck';
 export * from './rules/strength';
 export * from './rules/stakes';
+export * from './rules/hand';
 export * from './state/types';
 export * from './engine/engine';
 export * from './engine/rng';

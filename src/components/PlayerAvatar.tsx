@@ -1,7 +1,8 @@
 import React from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
-import { colors } from '@/design-system';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { colors, icons } from '@/design-system';
 import { avatarImages } from '@/assets';
 import type { AvatarId, PresenceState } from '@/domain/model/types';
 
@@ -83,14 +84,14 @@ export function PlayerAvatar({
           style={[
             styles.badge,
             {
-              width: size * 0.24,
-              height: size * 0.24,
-              borderRadius: size * 0.12,
+              width: size * 0.3,
+              height: size * 0.3,
+              borderRadius: size * 0.15,
               backgroundColor: colors.primary,
             },
           ]}
         >
-          <View style={[styles.badgeInner, { borderRadius: size * 0.1 }]} />
+          <Ionicons name={icons.check} size={Math.round(size * 0.2)} color={colors.text} />
         </View>
       ) : null}
     </View>
@@ -120,5 +121,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeInner: { width: '55%', height: '55%', backgroundColor: 'rgba(255,255,255,0.55)' },
 });

@@ -140,13 +140,33 @@ export type CutDepth = 'high' | 'middle' | 'low';
 export const CUT_DEPTHS: readonly {
   id: CutDepth;
   label: string;
+  /** Rótulo curto do botão: o desenho ao lado já diz o resto. */
+  short: string;
   description: string;
   /** Cartas desenhadas no monte de cima (de um total de `CUT_STACK_CARDS`). */
   topCards: number;
 }[] = [
-  { id: 'high', label: 'Corte alto', description: 'Tira poucas cartas de cima', topCards: 1 },
-  { id: 'middle', label: 'Corte no meio', description: 'Divide o baralho ao meio', topCards: 2 },
-  { id: 'low', label: 'Corte baixo', description: 'Tira a maior parte de cima', topCards: 3 },
+  {
+    id: 'high',
+    label: 'Corte alto',
+    short: 'Alto',
+    description: 'Tira poucas cartas de cima',
+    topCards: 1,
+  },
+  {
+    id: 'middle',
+    label: 'Corte no meio',
+    short: 'No meio',
+    description: 'Divide o baralho ao meio',
+    topCards: 2,
+  },
+  {
+    id: 'low',
+    label: 'Corte baixo',
+    short: 'Baixo',
+    description: 'Tira a maior parte de cima',
+    topCards: 3,
+  },
 ];
 
 export const CUT_STACK_CARDS = 4;

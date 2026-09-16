@@ -137,7 +137,11 @@ export function useOnlineGame(sessionId: string): TableController {
       try {
         await submitGameAction(sessionId, action, clientActionId);
         setAckedVersion(version);
-        if (action.type === 'PLAY_CARD') logEvent('card_played', { mode: 'online' });
+        if (action.type === 'PLAY_CARD' || action.type === 'PLAY_CARD_COVERED')
+          logEvent('card_played', {
+            mode: 'online',
+            covered: action.type === 'PLAY_CARD_COVERED',
+          });
         if (action.type === 'REQUEST_TRUCO' || action.type === 'RAISE')
           logEvent('truco_requested', { mode: 'online' });
         if (action.type === 'ACCEPT_TRUCO') logEvent('truco_accepted', { mode: 'online' });

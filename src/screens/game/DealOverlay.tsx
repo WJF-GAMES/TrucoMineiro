@@ -30,7 +30,7 @@ export interface DealTargets {
   hand: Point[];
 }
 
-/** Largura das cartas na mão (a mesma de `DraggableCard` na mesa) e dos versos nos assentos. */
+/** Largura das cartas na mão (a mesma de `HandCard` na mesa) e dos versos nos assentos. */
 const HAND_CARD_W = 82;
 const BACK_CARD_W = 20;
 const DECK_CARD_W = 66;

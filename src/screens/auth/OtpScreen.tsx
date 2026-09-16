@@ -14,7 +14,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { colors, icons, spacing } from '@/design-system';
 import { images } from '@/assets';
-import { AppText, IconButton, OtpInput, PrimaryButton, Surface } from '@/components';
+import {
+  AppText,
+  IconButton,
+  LoadingOverlay,
+  OtpInput,
+  PrimaryButton,
+  Surface,
+} from '@/components';
 import { useAuthStore } from '@/stores/authStore';
 import { AuthError, confirmCode, signInWithPhoneNumber } from '@/services/firebase/auth';
 import { logEvent } from '@/services/firebase/analytics';
@@ -25,7 +32,11 @@ import { USE_EMULATORS } from '@/services/firebase/app';
 import { haptic } from '@/utils/haptics';
 import type { RootScreenProps } from '@/navigation/types';
 
-type Status = 'idle' | 'verifying' | 'invalid' | 'expired' | 'resending';
+/**
+ * `verifying`: validando o código. `entering`: código aceito, o app busca/cria o perfil e decide
+ * entre cadastro e Home — a tela fica travada até a navegação trocar.
+ */
+type Status = 'idle' | 'verifying' | 'entering' | 'invalid' | 'expired' | 'resending';
 const RESEND_SECONDS = 45;
 
 /** Proporções naturais das artes recortadas de references/otp.png. */
@@ -39,6 +50,7 @@ export function OtpScreen({ navigation }: RootScreenProps<'Otp'>) {
   const confirmation = useAuthStore((s) => s.confirmation);
   const setPending = useAuthStore((s) => s.setPending);
   const clearPending = useAuthStore((s) => s.clearPending);
+  const authStatus = useAuthStore((s) => s.status);
   const [code, setCode] = useState('');
   const [status, setStatus] = useState<Status>('idle');
   const [message, setMessage] = useState<string | null>(null);
@@ -46,9 +58,12 @@ export function OtpScreen({ navigation }: RootScreenProps<'Otp'>) {
   const [resends, setResends] = useState(0);
   const submitting = useRef(false);
 
+  // Sem telefone pendente não há o que confirmar — exceto logo depois de acertar o código, quando
+  // o pendente é limpo porque o usuário já está entrando (a navegação troca sozinha).
   useEffect(() => {
+    if (status === 'entering' || authStatus !== 'signed_out') return;
     if (!pendingPhone || !confirmation) navigation.replace('Login');
-  }, [pendingPhone, confirmation, navigation]);
+  }, [pendingPhone, confirmation, navigation, status, authStatus]);
 
   useEffect(() => {
     if (seconds <= 0) return;
@@ -61,12 +76,14 @@ export function OtpScreen({ navigation }: RootScreenProps<'Otp'>) {
     submitting.current = true;
     setStatus('verifying');
     setMessage(null);
+    let ok = false;
     try {
       await confirmCode(confirmation, value);
+      ok = true;
       haptic.success();
       logEvent('login_completed');
-      clearPending();
-      // Auth listener switches the navigator to onboarding/main.
+      // O listener de auth decide cadastro/Home e troca a navegação; até lá a tela fica travada.
+      setStatus('entering');
     } catch (e) {
       const err = e instanceof AuthError ? e : null;
       const expired = err?.code === 'code-expired';
@@ -76,12 +93,15 @@ export function OtpScreen({ navigation }: RootScreenProps<'Otp'>) {
       if (expired) setCode('');
       haptic.error();
     } finally {
-      submitting.current = false;
+      // Depois do acerto o envio continua travado: a tela só sai quando a navegação trocar.
+      if (!ok) submitting.current = false;
     }
   };
 
+  const busy = status === 'verifying' || status === 'entering';
+
   const resend = async () => {
-    if (!pendingPhone || seconds > 0) return;
+    if (!pendingPhone || seconds > 0 || busy) return;
     if (resends >= 3) {
       setMessage('Limite de reenvios atingido. Aguarde alguns minutos.');
       return;
@@ -145,7 +165,9 @@ export function OtpScreen({ navigation }: RootScreenProps<'Otp'>) {
               size={28}
               color={colors.text}
               accessibilityLabel="Voltar"
-              onPress={() => navigation.goBack()}
+              onPress={() => {
+                if (!busy) navigation.goBack();
+              }}
             />
             <Image source={images.logo} style={styles.logo} contentFit="contain" />
             <View style={styles.topRowSpacer} />
@@ -193,8 +215,8 @@ export function OtpScreen({ navigation }: RootScreenProps<'Otp'>) {
           <PrimaryButton
             label="Confirmar"
             onPress={() => verify(code)}
-            loading={status === 'verifying'}
-            disabled={code.length < OTP_LENGTH}
+            loading={busy}
+            disabled={code.length < OTP_LENGTH || busy}
             style={styles.cta}
             testID="otp-confirm"
           />
@@ -210,8 +232,8 @@ export function OtpScreen({ navigation }: RootScreenProps<'Otp'>) {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Reenviar código"
-              accessibilityState={{ disabled: waiting || status === 'resending' }}
-              disabled={waiting || status === 'resending'}
+              accessibilityState={{ disabled: waiting || busy || status === 'resending' }}
+              disabled={waiting || busy || status === 'resending'}
               onPress={resend}
               hitSlop={8}
               style={styles.resendRight}
@@ -235,6 +257,7 @@ export function OtpScreen({ navigation }: RootScreenProps<'Otp'>) {
             // entra no meio do anúncio. Todas as outras ações desta tela já são rotuladas.
             accessibilityLabel="Alterar telefone"
             accessibilityHint="Volta para informar outro número."
+            disabled={busy}
             onPress={() => {
               clearPending();
               navigation.navigate('Login');
@@ -258,6 +281,11 @@ export function OtpScreen({ navigation }: RootScreenProps<'Otp'>) {
           <View style={styles.spacerBottom} />
         </ScrollView>
       </KeyboardAvoidingView>
+      <LoadingOverlay
+        visible={busy}
+        message={status === 'entering' ? 'Entrando...' : 'Validando seu acesso...'}
+        testID="otp-loading"
+      />
     </View>
   );
 }

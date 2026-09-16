@@ -80,8 +80,11 @@ export const FriendRow = memo(function FriendRow({
   divider,
   onPlay,
   onOpen,
+  contactName,
 }: {
   entry: FriendEntry;
+  /** Nome salvo na agenda, quando o amigo também é um contato (como o usuário o reconhece). */
+  contactName?: string | null;
   busy: boolean;
   divider: boolean;
   onPlay: (uid: string) => void;
@@ -112,17 +115,30 @@ export const FriendRow = memo(function FriendRow({
             >
               {STATUS_LABEL[state]}
             </AppText>
+            {contactName && contactName !== profile.nickname ? (
+              <AppText
+                variant="small"
+                color={colors.textSecondary}
+                numberOfLines={1}
+                style={styles.contactName}
+              >
+                {`· ${contactName}`}
+              </AppText>
+            ) : null}
           </View>
         </View>
       </Pressable>
-      {/* Em partida também vale convidar: o convite espera o amigo terminar (não existe assistir). */}
-      <PillButton
-        label={state === 'online' ? 'Jogar' : 'Convidar'}
-        variant={state === 'online' ? 'primary' : 'muted'}
-        onPress={() => onPlay(profile.id)}
-        disabled={busy}
-        testID={`friend-play-${profile.id}`}
-      />
+      {/* Amigo já tem conta: nada de "convidar". Online (ou em partida — o convite espera ele
+          terminar) dá para chamar para jogar; offline, a ficha (⋮) guarda as outras ações. */}
+      {state !== 'offline' ? (
+        <PillButton
+          label="Jogar"
+          variant={state === 'online' ? 'primary' : 'muted'}
+          onPress={() => onPlay(profile.id)}
+          disabled={busy}
+          testID={`friend-play-${profile.id}`}
+        />
+      ) : null}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Mais opções de ${profile.nickname}`}
@@ -289,13 +305,25 @@ export const ContactMatchRow = memo(function ContactMatchRow({
   busy,
   divider,
   onAdd,
+  presence,
+  onPlay,
 }: {
   contact: MatchedContact;
   busy: boolean;
   divider: boolean;
   onAdd: (contact: MatchedContact) => void;
+  /** Presença do jogador; com ela, um contato online pode ser chamado para jogar na hora. */
+  presence?: PresenceState;
+  onPlay?: (contact: MatchedContact) => void;
 }) {
+  // Já tem conta: nunca "convidar para o app". Pedido dele pendente vem primeiro (aceitar);
+  // depois, estando online, chamar para jogar; senão, a ação de amizade.
+  const canPlay =
+    Boolean(onPlay) &&
+    contact.relation !== 'request_received' &&
+    (presence === 'online' || presence === 'in_match');
   const pill = RELATION_PILL[contact.relation];
+  const online = presence === 'online' || presence === 'in_match';
   return (
     <Row divider={divider} testID={`contact-match-${contact.contactId}`}>
       <PlayerAvatar avatarId={contact.avatarId} size={46} />
@@ -305,19 +333,34 @@ export const ContactMatchRow = memo(function ContactMatchRow({
           {contact.contactName}
         </AppText>
         <View style={styles.statusRow}>
-          <View style={[styles.dot, { backgroundColor: colors.online }]} />
+          <View
+            style={[
+              styles.dot,
+              { backgroundColor: online ? STATUS_COLOR[presence!] : colors.offline },
+            ]}
+          />
           <AppText variant="small" color={colors.textSecondary} numberOfLines={1}>
-            Já joga · @{contact.nickname}
+            {online ? STATUS_LABEL[presence!] : 'Já joga'} · @{contact.nickname}
           </AppText>
         </View>
       </View>
-      <PillButton
-        label={pill.label}
-        variant={pill.variant}
-        disabled={pill.disabled || busy}
-        onPress={() => onAdd(contact)}
-        testID={`contact-add-${contact.contactId}`}
-      />
+      {canPlay ? (
+        <PillButton
+          label="Jogar"
+          variant={presence === 'online' ? 'primary' : 'muted'}
+          disabled={busy}
+          onPress={() => onPlay?.(contact)}
+          testID={`contact-play-${contact.contactId}`}
+        />
+      ) : (
+        <PillButton
+          label={pill.label}
+          variant={pill.variant}
+          disabled={pill.disabled || busy}
+          onPress={() => onAdd(contact)}
+          testID={`contact-add-${contact.contactId}`}
+        />
+      )}
     </Row>
   );
 });
@@ -356,6 +399,7 @@ export const InviteContactRow = memo(function InviteContactRow({
 });
 
 const styles = StyleSheet.create({
+  contactName: { flexShrink: 1 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -18,8 +18,21 @@ import { AvatarId, ProgressionResult } from './domain/model/types';
 import { processProgression } from './progression';
 
 const DIFFICULTIES = ['easy', 'normal', 'hard'] as const;
+/**
+ * Tudo o que um cliente pode mandar. Precisa cobrir a **cerimônia** também: a mão começa em
+ * `SHUFFLING`, então `SHUFFLE`/`FINISH_SHUFFLE`/`CUT`/`FINISH_CUT` são as primeiras ações de toda
+ * partida. Sem elas aqui, o portão recusava antes de o motor ver qualquer coisa — a partida online
+ * travava no embaralhamento quando quem dava as cartas era humano, e a gravação de toda partida
+ * contra a IA era rejeitada no `finalizeMatch` (ou seja: nenhum XP, ponto de liga ou vitória era
+ * registrado, e o app mostrava só "Resultado não sincronizado").
+ */
 const ACTION_TYPES = [
+  'SHUFFLE',
+  'FINISH_SHUFFLE',
+  'CUT',
+  'FINISH_CUT',
   'PLAY_CARD',
+  'PLAY_CARD_COVERED',
   'REQUEST_TRUCO',
   'ACCEPT_TRUCO',
   'RAISE',
@@ -28,13 +41,23 @@ const ACTION_TYPES = [
   'DECLINE_MAO_DE_ONZE',
 ] as const;
 
+const CUT_DEPTHS = ['high', 'middle', 'low'] as const;
+
 export function parseAction(v: unknown): GameAction {
   const o = obj(v, 'action');
   const type = oneOf(o.type, ACTION_TYPES, 'action.type');
   const seat = num(o.seat, 'action.seat');
   if (![0, 1, 2, 3].includes(seat)) throw new Error('action.seat inválido.');
-  if (type === 'PLAY_CARD')
+  if (type === 'PLAY_CARD' || type === 'PLAY_CARD_COVERED')
     return { type, seat: seat as Seat, cardId: str(o.cardId, 'cardId', 2, 3) };
+  // A profundidade precisa sobreviver: o replay compara a ação gravada com a que a IA
+  // determinística produziria, e um `CUT` sem `depth` nunca bateria.
+  if (type === 'CUT')
+    return {
+      type,
+      seat: seat as Seat,
+      ...(o.depth === undefined ? {} : { depth: oneOf(o.depth, CUT_DEPTHS, 'action.depth') }),
+    };
   return { type, seat: seat as Seat } as GameAction;
 }
 

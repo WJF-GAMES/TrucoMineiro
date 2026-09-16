@@ -43,6 +43,29 @@ describe('timeoutAction', () => {
     });
   });
 
+  it('no desempate por cango joga a maior carta (a única liberada), nunca a mais fraca', () => {
+    const m = withHands(dealt(1), [
+      ['KO', '5O'],
+      ['KP', '2P', 'QP'],
+      ['4O', '3O'],
+      ['4C', '6C'],
+    ]);
+    let s = m;
+    for (const [seat, c] of [
+      [0, 'KO'],
+      [1, 'KP'],
+      [2, '4O'],
+      [3, '4C'],
+    ] as const)
+      s = applyAction(s, { type: 'PLAY_CARD', seat, cardId: c });
+    // Cangou: o assento 1 abre e só pode jogar o 2.
+    const view = viewForSeat(s, 1);
+    expect(view.tieBreak).not.toBeNull();
+    expect(timeoutAction(view, 1)).toEqual({ type: 'PLAY_CARD', seat: 1, cardId: '2P' });
+    // E a jogada automática é aceita pelo motor.
+    expect(() => applyAction(s, timeoutAction(view, 1)!)).not.toThrow();
+  });
+
   it('não faz nada fora da vez', () => {
     const m = dealt(1);
     expect(timeoutAction(viewForSeat(m, 1), 1)).toBeNull();

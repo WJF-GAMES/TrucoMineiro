@@ -1,12 +1,19 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { colors, spacing } from '@/design-system';
-import { avatarNames } from '@/assets';
-import { AppText, GameHeader, PlayerAvatar, PrimaryButton, Screen, TextField } from '@/components';
+import { View } from 'react-native';
+import { spacing } from '@/design-system';
+import {
+  AppText,
+  AvatarPicker,
+  GameHeader,
+  PlayerAvatar,
+  PrimaryButton,
+  Screen,
+  TextField,
+} from '@/components';
 import { useProfileStore } from '@/stores/profileStore';
-import { AVATAR_IDS, AvatarId } from '@/domain/model/types';
+import type { AvatarId } from '@/domain/model/types';
 import { updateProfile, FunctionsError } from '@/services/firebase/functions';
-import { nicknameSchema } from '@/screens/auth/RegisterScreen';
+import { NICKNAME_HINT, nicknameSchema } from '@/screens/auth/RegisterScreen';
 import { toast } from '@/stores/toastStore';
 import { haptic } from '@/utils/haptics';
 import type { RootScreenProps } from '@/navigation/types';
@@ -50,33 +57,13 @@ export function EditProfileScreen({ navigation }: RootScreenProps<'EditProfile'>
         error={error}
         maxLength={16}
         autoCapitalize="words"
-        hint="3 a 16 caracteres."
+        hint={NICKNAME_HINT}
         valid={nicknameSchema.safeParse(nickname).success}
       />
       <AppText variant="h3" style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>
         Escolha seu avatar
       </AppText>
-      <View style={styles.avatars}>
-        {AVATAR_IDS.map((id) => (
-          <Pressable
-            key={id}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: id === avatarId }}
-            accessibilityLabel={avatarNames[id]}
-            onPress={() => {
-              haptic.selection();
-              setAvatarId(id);
-            }}
-          >
-            <PlayerAvatar
-              avatarId={id}
-              size={78}
-              ringColor={id === avatarId ? colors.primaryBright : 'rgba(120,200,170,0.35)'}
-              badge={id === avatarId ? 'check' : null}
-            />
-          </Pressable>
-        ))}
-      </View>
+      <AvatarPicker value={avatarId} onChange={setAvatarId} disabled={loading} />
       <PrimaryButton
         label="Salvar"
         onPress={save}
@@ -87,5 +74,3 @@ export function EditProfileScreen({ navigation }: RootScreenProps<'EditProfile'>
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({ avatars: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 } });

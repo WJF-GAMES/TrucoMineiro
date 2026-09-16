@@ -1,6 +1,12 @@
 import { Card, cardId, parseCardId, sameCard } from '../cards/card';
 import { createDeck, deal, shuffle } from '../cards/deck';
-import { compareCards } from '../rules/strength';
+import {
+  ALL_THREE_TRICKS_TIED_POLICY,
+  highestCards,
+  resolveHand,
+  resolveTrick,
+  trickOutcome,
+} from '../rules/hand';
 import { MAO_DE_ONZE_SCORE, STAKE_LADDER, TARGET_SCORE, nextStake } from '../rules/stakes';
 import {
   ActionType,
@@ -12,7 +18,9 @@ import {
   MatchState,
   PlayedCard,
   Seat,
+  TablePlay,
   Team,
+  TieBreakState,
   nextSeat,
   otherTeam,
   teamOf,
@@ -79,6 +87,8 @@ function startHand(state: MatchState, dealerSeat: Seat): MatchState {
     // Who must act now: the dealer shuffles, then the next seat cuts, then `firstSeat` leads.
     turnSeat: dealerSeat,
     truco: null,
+    // Mão nova sempre começa no jogo normal: nenhum desempate herdado da anterior.
+    tieBreak: null,
     maoDeOnzeTeam: teamAtEleven(state),
     result: null,
   };
@@ -214,6 +224,7 @@ export function getAvailableActions(state: MatchState, seat: Seat): ActionType[]
     case 'PLAY': {
       if (hand.turnSeat !== seat) return [];
       const actions: ActionType[] = ['PLAY_CARD'];
+      if (canPlayCovered(state)) actions.push('PLAY_CARD_COVERED');
       const canRaise =
         !bothAtEleven &&
         hand.maoDeOnzeTeam === null &&
@@ -261,7 +272,10 @@ export function applyAction(state: MatchState, action: GameAction): MatchState {
       next = finishCut(state, action.seat);
       break;
     case 'PLAY_CARD':
-      next = playCard(state, action.seat, parseCardId(action.cardId));
+      next = playCard(state, action.seat, parseCardId(action.cardId), false);
+      break;
+    case 'PLAY_CARD_COVERED':
+      next = playCard(state, action.seat, parseCardId(action.cardId), true);
       break;
     case 'REQUEST_TRUCO':
       next = requestTruco(state, action.seat);
@@ -295,16 +309,40 @@ function withHand(state: MatchState, hand: Partial<HandState>): MatchState {
 
 // --- Playing cards ---------------------------------------------------------
 
-function playCard(state: MatchState, seat: Seat, card: Card): MatchState {
+/**
+ * Carta virada ("no escuro") pode ser jogada em qualquer vaza normal. No desempate por cango é
+ * proibida: ali todos jogam a maior carta, aberta.
+ */
+export function canPlayCovered(state: MatchState): boolean {
+  return state.hand.phase === 'PLAY' && state.hand.tieBreak === null;
+}
+
+function playCard(state: MatchState, seat: Seat, card: Card, covered: boolean): MatchState {
   const hand = state.hand;
   const owned = hand.hands[seat]!;
   if (!owned.some((c) => sameCard(c, card))) {
     throw new InvalidActionError(`Seat ${seat} does not hold ${cardId(card)}`);
   }
+  if (!playableCards(state, seat).some((c) => sameCard(c, card))) {
+    // Desempate por cango: só a maior carta vale. A UI já esconde as outras; aqui é a autoridade.
+    throw new InvalidActionError(
+      `MUST_PLAY_HIGHEST_CARD: seat ${seat} must play its highest card in the tie-break, not ${cardId(card)}`,
+    );
+  }
+  if (covered && !canPlayCovered(state)) {
+    throw new InvalidActionError(`COVERED_NOT_ALLOWED: seat ${seat} cannot play covered now`);
+  }
   const hands = hand.hands.map((h, i) => (i === seat ? h.filter((c) => !sameCard(c, card)) : h));
-  const currentRound: PlayedCard[] = [...hand.currentRound, { seat, card }];
+  // A carta real fica no estado (é ela que sai da mão); `covered` só existe quando é virada.
+  const play: PlayedCard = covered ? { seat, card, covered: true } : { seat, card };
+  const currentRound: PlayedCard[] = [...hand.currentRound, play];
 
-  const next = emit(withHand(state, { hands, currentRound }), { type: 'CARD_PLAYED', seat, card });
+  const next = emit(
+    withHand(state, { hands, currentRound }),
+    covered
+      ? { type: 'CARD_PLAYED', seat, card, covered: true }
+      : { type: 'CARD_PLAYED', seat, card },
+  );
 
   if (currentRound.length < PLAYERS) {
     return withHand(next, { turnSeat: nextSeat(seat) });
@@ -312,24 +350,32 @@ function playCard(state: MatchState, seat: Seat, card: Card): MatchState {
   return resolveRound(next);
 }
 
+/**
+ * Cartas que `seat` pode jogar agora pela regra da vaza (sem olhar de quem é a vez).
+ * No desempate por cango só a maior carta (ou as de mesma força máxima); fora dele, a mão toda.
+ */
+export function playableCards(state: MatchState, seat: Seat): Card[] {
+  const owned = state.hand.hands[seat] ?? [];
+  return state.hand.tieBreak ? highestCards(owned) : owned.slice();
+}
+
+/** Aplica `ALL_THREE_TRICKS_TIED_POLICY` (hoje só existe `NO_POINTS`: ninguém pontua). */
+function allTiedResult(): HandResult {
+  const policy: typeof ALL_THREE_TRICKS_TIED_POLICY = ALL_THREE_TRICKS_TIED_POLICY;
+  switch (policy) {
+    case 'NO_POINTS':
+      return { winner: null, points: 0, reason: 'ALL_TIED' };
+  }
+}
+
 function resolveRound(state: MatchState): MatchState {
   const hand = state.hand;
   const plays = hand.currentRound;
-
-  // Highest card wins; if the two highest belong to different teams and tie, the round ties.
-  let best: PlayedCard = plays[0]!;
-  let tied = false;
-  for (const p of plays.slice(1)) {
-    const cmp = compareCards(p.card, best.card);
-    if (cmp > 0) {
-      best = p;
-      tied = false;
-    } else if (cmp === 0 && teamOf(p.seat) !== teamOf(best.seat)) {
-      tied = true;
-    }
-  }
-  const winner: Team | null = tied ? null : teamOf(best.seat);
-  const winnerSeat: Seat = tied ? hand.roundLeader : best.seat;
+  const trick = resolveTrick(plays);
+  const tied = trick.outcome === 'TIE';
+  const winner: Team | null = tied ? null : (trick.outcome as Team);
+  // Em cango quem "fica com a vaza" para abrir a próxima é quem cangou.
+  const winnerSeat: Seat = (tied ? trick.tieCausedBySeat : trick.winnerSeat) ?? hand.roundLeader;
   const roundIndex = hand.rounds.length;
   const rounds = [...hand.rounds, { winner, winnerSeat, plays }];
 
@@ -340,32 +386,32 @@ function resolveRound(state: MatchState): MatchState {
     winnerSeat,
   });
 
-  const outcome = decideHand(rounds.map((r) => r.winner));
-  if (outcome !== undefined) {
-    if (outcome === null) return finishHand(next, { winner: null, points: 0, reason: 'ALL_TIED' });
-    return finishHand(next, { winner: outcome, points: next.hand.value, reason: 'ROUNDS' });
+  const resolution = resolveHand(rounds.map(trickOutcome));
+  switch (resolution.status) {
+    case 'ALL_TIED':
+      return finishHand(next, allTiedResult());
+    case 'WINNER':
+      return finishHand(next, {
+        winner: resolution.winner,
+        points: next.hand.value,
+        reason: 'ROUNDS',
+        decidedBy: resolution.decidedBy,
+      });
+    case 'CONTINUE': {
+      // Quem venceu abre a próxima; em cango, quem cangou abre o desempate.
+      const tieBreak: TieBreakState | null = resolution.tieBreak
+        ? { causedBySeat: winnerSeat, round: roundIndex + 1 }
+        : null;
+      const moved = withHand(next, { roundLeader: winnerSeat, turnSeat: winnerSeat, tieBreak });
+      if (!tieBreak) return moved;
+      return emit(moved, {
+        type: 'TIE_BREAK_STARTED',
+        round: tieBreak.round,
+        leadSeat: winnerSeat,
+        continued: hand.tieBreak !== null,
+      });
+    }
   }
-
-  // Next round: the winner leads (on a tie, the previous leader leads again).
-  return withHand(next, { roundLeader: winnerSeat, turnSeat: winnerSeat });
-}
-
-/**
- * Best-of-three with Truco tie rules.
- * Returns the winning team, null when the hand is void (all tied), or undefined if it continues.
- */
-export function decideHand(results: readonly (Team | null)[]): Team | null | undefined {
-  const [r1, r2, r3] = results;
-  if (results.length < 2) return undefined;
-  if (results.length === 2) {
-    if (r1 !== null && r2 === null) return r1; // won first, tied second
-    if (r1 === null && r2 !== null) return r2; // tied first, won second
-    if (r1 !== null && r1 === r2) return r1; // won both
-    return undefined; // 1-1 or both tied: third round decides
-  }
-  if (r3 !== null && r3 !== undefined) return r3;
-  if (r1 !== null && r1 !== undefined) return r1; // third tied: first round winner
-  return null; // everything tied: no points
 }
 
 // --- Truco -----------------------------------------------------------------
@@ -426,7 +472,14 @@ function acceptMaoDeOnze(state: MatchState): MatchState {
 function declineMaoDeOnze(state: MatchState): MatchState {
   const team = state.hand.maoDeOnzeTeam!;
   const winner = otherTeam(team);
-  const next = emit(state, { type: 'MAO_DE_ONZE_DECLINED', team, winner });
+  let next = emit(state, { type: 'MAO_DE_ONZE_DECLINED', team, winner });
+  // Correu da mão de onze: a mão já está decidida, e as cartas de todos são mostradas na mesa.
+  // Nenhuma carta foi jogada ainda (a decisão vem logo depois da distribuição).
+  next = emit(next, {
+    type: 'HAND_REVEALED',
+    reason: 'MAO_DE_ONZE_DECLINED',
+    hands: state.hand.hands.map((h) => h.slice()),
+  });
   return finishHand(next, { winner, points: 1, reason: 'MAO_DE_ONZE_DECLINED' });
 }
 
@@ -441,7 +494,7 @@ function finishHand(state: MatchState, result: HandResult): MatchState {
     );
   }
   let next: MatchState = {
-    ...withHand(state, { phase: 'FINISHED', result, truco: null }),
+    ...withHand(state, { phase: 'FINISHED', result, truco: null, tieBreak: null }),
     scores,
     handsPlayed: state.handsPlayed + 1,
   };
@@ -480,10 +533,18 @@ export interface SeatView {
   turnSeat: Seat;
   roundLeader: Seat;
   myCards: Card[];
+  /**
+   * Ids das minhas cartas que o motor aceita agora pela regra da vaza (no desempate, só a maior).
+   * A mesa habilita/destaca por aqui — nunca calcula a regra.
+   */
+  playableCardIds: string[];
+  /** Desempate por cango em andamento (público: todos veem quem abre). */
+  tieBreak: TieBreakState | null;
   /** Number of cards still held by each seat (never the cards themselves). */
   cardCounts: number[];
-  currentRound: PlayedCard[];
-  rounds: { winner: Team | null; winnerSeat: Seat; plays: PlayedCard[] }[];
+  /** Cartas na mesa; carta virada de outro assento chega com `card: null`. */
+  currentRound: TablePlay[];
+  rounds: { winner: Team | null; winnerSeat: Seat; plays: TablePlay[] }[];
   availableActions: ActionType[];
   maoDeOnzeTeam: Team | null;
   trucoRequesterTeam: Team | null;
@@ -512,9 +573,15 @@ export function viewForSeat(state: MatchState, seat: Seat): SeatView {
     turnSeat: h.turnSeat,
     roundLeader: h.roundLeader,
     myCards: h.hands[seat]!.slice(),
+    playableCardIds: playableCards(state, seat).map(cardId),
+    tieBreak: h.tieBreak ? { ...h.tieBreak } : null,
     cardCounts: h.hands.map((c) => c.length),
-    currentRound: h.currentRound.slice(),
-    rounds: h.rounds.map((r) => ({ winner: r.winner, winnerSeat: r.winnerSeat, plays: r.plays })),
+    currentRound: h.currentRound.map((p) => playForSeat(p, seat)),
+    rounds: h.rounds.map((r) => ({
+      winner: r.winner,
+      winnerSeat: r.winnerSeat,
+      plays: r.plays.map((p) => playForSeat(p, seat)),
+    })),
     availableActions: getAvailableActions(state, seat),
     maoDeOnzeTeam: h.maoDeOnzeTeam,
     trucoRequesterTeam: h.truco?.requesterTeam ?? null,
@@ -522,6 +589,25 @@ export function viewForSeat(state: MatchState, seat: Seat): SeatView {
     lastResult: h.result,
     version: state.version,
   };
+}
+
+/**
+ * Uma jogada como `seat` a enxerga: carta virada só mostra a identidade para quem a jogou.
+ * O formato é sempre o mesmo (`covered` presente), o que também serve ao RTDB.
+ */
+export function playForSeat(play: PlayedCard, seat: Seat): TablePlay {
+  if (!play.covered) return { seat: play.seat, card: play.card, covered: false };
+  return { seat: play.seat, card: play.seat === seat ? play.card : null, covered: true };
+}
+
+/**
+ * Eventos como `seat` pode vê-los. Toda saída de eventos para um assento (view online, mesa local)
+ * passa por aqui: o `CARD_PLAYED` de uma carta virada perde a identidade para os outros assentos.
+ */
+export function eventsForSeat(events: readonly GameEvent[], seat: Seat): GameEvent[] {
+  return events.map((e) =>
+    e.type === 'CARD_PLAYED' && e.covered && e.seat !== seat ? { ...e, card: null } : e,
+  );
 }
 
 /** Seats that may act right now (used by the AI driver and the multiplayer server). */

@@ -106,6 +106,21 @@ export async function readDeviceContacts(
 }
 
 /**
+ * Números de UM contato, lidos na hora (nada disso fica guardado). Usado para provar ao servidor
+ * o vínculo da agenda quando o usuário chama um contato que ainda não é amigo para jogar.
+ */
+export async function readContactPhones(contactId: string): Promise<string[]> {
+  try {
+    const phones = await new Contact(contactId).getPhones();
+    return phones
+      .map((p) => p.number)
+      .filter((n): n is string => typeof n === 'string' && n.length > 0);
+  } catch (e) {
+    throw new ContactsReadError(e);
+  }
+}
+
+/**
  * Avisa quando a agenda muda, para marcar a sincronização como desatualizada.
  *
  * Só no iOS: no Android o evento vem de um `ContentObserver` que atrasa 5-7 segundos e

@@ -3,6 +3,7 @@ import { NativeAdEventType, type NativeAd } from 'react-native-google-mobile-ads
 import { AdAnalytics } from '../analytics/AdAnalytics';
 import { NativeAdManager } from '../managers/NativeAdManager';
 import { useAdStore } from '../core/AdState';
+import { isAdFreeScreen } from '../config/adFreeScreens';
 import type { NativePlacement } from '../types/ads.types';
 
 const MAX_ATTEMPTS = 4;
@@ -17,6 +18,8 @@ const MAX_ATTEMPTS = 4;
 export function useNativeAd(placement: NativePlacement) {
   const canRequestAds = useAdStore((s) => s.canRequestAds);
   const adsEnabled = useAdStore((s) => s.adsEnabled);
+  // Native também respeita as telas sem anúncio (defesa: nenhum placement mora nelas hoje).
+  const adFree = useAdStore((s) => isAdFreeScreen(s.currentScreen));
   const [ad, setAd] = useState<NativeAd | null>(null);
   const attempt = useRef(0);
 
@@ -37,7 +40,7 @@ export function useNativeAd(placement: NativePlacement) {
 
     const load = async () => {
       if (cancelled) return;
-      if (!adsEnabled || !canRequestAds || !NativeAdManager.isEnabled(placement)) return;
+      if (adFree || !adsEnabled || !canRequestAds || !NativeAdManager.isEnabled(placement)) return;
 
       const loaded = await NativeAdManager.load(placement);
       if (cancelled) {
@@ -80,7 +83,7 @@ export function useNativeAd(placement: NativePlacement) {
       setAd(null);
       cleanup();
     };
-  }, [adsEnabled, canRequestAds, placement]);
+  }, [adFree, adsEnabled, canRequestAds, placement]);
 
   return ad;
 }

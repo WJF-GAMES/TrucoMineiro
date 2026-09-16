@@ -107,6 +107,7 @@ export function PlayingCard({
       ]}
       testID={testID ?? `card-${cardId(card)}`}
       accessibilityLabel={`${card.rank} de ${SUIT_NAME[card.suit]}`}
+      accessibilityState={!onPress && disabled ? { disabled: true } : undefined}
     >
       {corner()}
       <View style={styles.centre} pointerEvents="none">

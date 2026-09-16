@@ -3,6 +3,7 @@ import {
   connectFirestoreEmulator,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
   getFirestore,
   limit,
@@ -49,11 +50,24 @@ function subscribeDoc<T>(
 
 // --- Profiles / stats --------------------------------------------------------
 
+/**
+ * O segundo argumento diz se o retrato veio só do cache local — ausência no cache não prova que
+ * o perfil não existe (primeiro login no aparelho, cache limpo).
+ */
 export const subscribeProfile = (
   uid: string,
-  cb: (p: Profile | null) => void,
+  cb: (p: Profile | null, fromCache: boolean) => void,
   onError?: (e: Error) => void,
-) => subscribeDoc<Profile>(`profiles/${uid}`, cb, onError);
+): Unsub =>
+  onSnapshot(
+    doc(db, 'profiles', uid),
+    (snap) =>
+      cb(
+        snap.exists() ? ({ id: snap.id, ...snap.data() } as Profile) : null,
+        snap.metadata?.fromCache === true,
+      ),
+    (e) => onError?.(e as Error),
+  );
 
 export const subscribeStats = (
   uid: string,
@@ -63,6 +77,12 @@ export const subscribeStats = (
 
 export async function getProfile(uid: string): Promise<Profile | null> {
   const snap = await getDoc(doc(db, 'profiles', uid));
+  return snap.exists() ? ({ id: snap.id, ...snap.data() } as Profile) : null;
+}
+
+/** Lê o perfil direto do servidor (sem cache): falha se não houver conexão. */
+export async function getProfileFromServer(uid: string): Promise<Profile | null> {
+  const snap = await getDocFromServer(doc(db, 'profiles', uid));
   return snap.exists() ? ({ id: snap.id, ...snap.data() } as Profile) : null;
 }
 

@@ -1,9 +1,10 @@
-import { FieldPath, Query, WriteBatch } from 'firebase-admin/firestore';
+import { FieldPath, Query } from 'firebase-admin/firestore';
 import { onRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import { authedCallable, HttpsError, num, obj } from './lib/callable';
 import { db, IS_EMULATOR, now, REGION } from './lib/admin';
+import { BatchWriter } from './lib/batchWriter';
 import {
   LEAGUE_DEFINITIONS,
   LEAGUE_IDS,
@@ -58,7 +59,6 @@ const HISTORY = 'leagueHistory';
 /** Acima disso, redistribuir a liga inteira no meio da semana sairia caro demais (ver `assignToGroup`). */
 const REBALANCE_MAX_MEMBERS = 5_000;
 /** Limite de operações por batch do Firestore. */
-const BATCH_LIMIT = 450;
 const PAGE_SIZE = 300;
 const LOCK_TTL_MS = 9 * 60_000;
 
@@ -499,47 +499,6 @@ function divisionFromId(groupId: string, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-/** Acumula escritas e comita em lotes dentro do limite do Firestore. */
-class BatchWriter {
-  private batch: WriteBatch = db.batch();
-  private count = 0;
-  private pending: Promise<unknown>[] = [];
-
-  private bump() {
-    if (++this.count < BATCH_LIMIT) return;
-    this.pending.push(this.batch.commit());
-    this.batch = db.batch();
-    this.count = 0;
-  }
-
-  set(
-    ref: FirebaseFirestore.DocumentReference,
-    data: FirebaseFirestore.DocumentData,
-    merge = false,
-  ) {
-    this.batch.set(ref, data, { merge });
-    this.bump();
-  }
-
-  update(ref: FirebaseFirestore.DocumentReference, data: FirebaseFirestore.DocumentData) {
-    this.batch.set(ref, data, { merge: true });
-    this.bump();
-  }
-
-  delete(ref: FirebaseFirestore.DocumentReference) {
-    this.batch.delete(ref);
-    this.bump();
-  }
-
-  async flush() {
-    if (this.count > 0) this.pending.push(this.batch.commit());
-    await Promise.all(this.pending);
-    this.pending = [];
-    this.batch = db.batch();
-    this.count = 0;
-  }
-}
-
 // --- Pontuação -----------------------------------------------------------------------------
 
 export type LeaguePointsEvent = 'match_win' | 'match_loss' | 'bonus';
@@ -919,7 +878,8 @@ export async function prepareNextWeekGroups(
 }
 
 /** Mantém apelido/avatar/bandeira do membro em dia com o perfil (barato, roda na abertura da tela). */
-async function refreshIdentity(uid: string, groupId: string): Promise<void> {
+/** Copia apelido/avatar/país atuais do perfil para a linha do jogador no grupo da semana. */
+export async function refreshIdentity(uid: string, groupId: string): Promise<void> {
   const [identity, snap] = await Promise.all([identityOf(uid), memberRef(groupId, uid).get()]);
   const member = snap.data() as Partial<WeeklyLeagueMember> | undefined;
   if (!member) return;

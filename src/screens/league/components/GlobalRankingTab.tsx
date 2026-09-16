@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { colors, spacing } from '@/design-system';
 import { leagueShield } from '@/assets';
@@ -8,12 +8,18 @@ import { getGlobalLeagueRanking, FunctionsError } from '@/services/firebase/func
 import { leagueById } from '@/domain/model/leagues';
 import { formatNumber } from '@/utils/format';
 import type { GlobalRankingEntry } from '@/domain/model/types';
+import type { RankingPlayer } from './PlayerProfileSheet';
 
 /**
  * Classificação geral da temporada — separada do ranking do grupo semanal.
  * A ordem vem pronta do backend (o cliente nunca ordena ranking global).
  */
-export function GlobalRankingTab() {
+export function GlobalRankingTab({
+  onOpenPlayer,
+}: {
+  /** Tocar num jogador abre a ficha dele. */
+  onOpenPlayer?: (player: RankingPlayer) => void;
+}) {
   const [items, setItems] = useState<GlobalRankingEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,31 +69,55 @@ export function GlobalRankingTab() {
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.list}
       renderItem={({ item }) => (
-        <Surface style={[styles.row, ...(item.isMe ? [styles.me] : [])]} padding={10}>
-          <AppText
-            variant="bodyBold"
-            color={item.rank <= 3 ? colors.gold : colors.textSecondary}
-            style={styles.rank}
-          >
-            {item.rank}
-          </AppText>
-          <PlayerAvatar avatarId={item.avatarId} size={34} ring={false} />
-          <View style={styles.flag}>
-            <CountryFlag code={item.countryCode} width={20} />
-          </View>
-          <View style={styles.info}>
-            <AppText variant="bodyBold" numberOfLines={1}>
-              {item.nickname}
+        <Pressable
+          onPress={
+            onOpenPlayer
+              ? () =>
+                  onOpenPlayer({
+                    id: item.uid,
+                    nickname: item.nickname,
+                    avatarId: item.avatarId,
+                    countryCode: item.countryCode,
+                  })
+              : undefined
+          }
+          disabled={!onOpenPlayer}
+          accessibilityRole={onOpenPlayer ? 'button' : undefined}
+          accessibilityLabel={`${item.rank}º, ${item.nickname}, ${formatNumber(item.seasonPoints)} pontos`}
+          accessibilityHint={onOpenPlayer ? 'Abre o perfil do jogador' : undefined}
+          testID={`global-row-${item.uid}`}
+          style={({ pressed }) => pressed && styles.pressed}
+        >
+          <Surface style={[styles.row, ...(item.isMe ? [styles.me] : [])]} padding={10}>
+            <AppText
+              variant="bodyBold"
+              color={item.rank <= 3 ? colors.gold : colors.textSecondary}
+              style={styles.rank}
+            >
+              {item.rank}
             </AppText>
-            <AppText variant="caption" color={colors.textSecondary}>
-              Liga {leagueById(item.leagueId).displayName}
+            <PlayerAvatar avatarId={item.avatarId} size={34} ring={false} />
+            <View style={styles.flag}>
+              <CountryFlag code={item.countryCode} width={20} />
+            </View>
+            <View style={styles.info}>
+              <AppText variant="bodyBold" numberOfLines={1}>
+                {item.nickname}
+              </AppText>
+              <AppText variant="caption" color={colors.textSecondary}>
+                Liga {leagueById(item.leagueId).displayName}
+              </AppText>
+            </View>
+            <Image
+              source={leagueShield(item.leagueId)}
+              style={styles.shield}
+              contentFit="contain"
+            />
+            <AppText variant="bodyBold" color={colors.primaryBright} style={styles.points}>
+              {formatNumber(item.seasonPoints)}
             </AppText>
-          </View>
-          <Image source={leagueShield(item.leagueId)} style={styles.shield} contentFit="contain" />
-          <AppText variant="bodyBold" color={colors.primaryBright} style={styles.points}>
-            {formatNumber(item.seasonPoints)}
-          </AppText>
-        </Surface>
+          </Surface>
+        </Pressable>
       )}
     />
   );
@@ -97,6 +127,7 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: spacing.screen, paddingTop: spacing.md, paddingBottom: spacing.xl },
   row: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
   me: { borderColor: colors.primaryBright },
+  pressed: { opacity: 0.7 },
   rank: { width: 26, textAlign: 'center' },
   flag: { marginLeft: spacing.sm },
   info: { flex: 1, marginLeft: spacing.sm },

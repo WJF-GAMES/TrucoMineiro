@@ -1,7 +1,8 @@
 import { onValueWritten } from 'firebase-functions/v2/database';
-import { authedCallable, HttpsError, bool, obj, str } from './lib/callable';
+import { arr, authedCallable, HttpsError, bool, obj, str } from './lib/callable';
 import { db, DB_TRIGGER_REGION, messaging, now, rtdb } from './lib/admin';
 import { FriendRequest, Presence, Profile } from './domain/model/types';
+import { phoneHash } from './contacts';
 
 async function pushTo(uid: string, title: string, body: string, data: Record<string, string>) {
   const user = (await db.doc(`users/${uid}`).get()).data() as
@@ -56,8 +57,11 @@ export const sendFriendRequest = authedCallable<{ toUid: string }, { ok: true }>
     const outgoing = await db.doc(`friendRequests/${requestId(uid, data.toUid)}`).get();
     if ((outgoing.data() as FriendRequest | undefined)?.status === 'pending')
       throw new HttpsError('already-exists', 'Solicitação já enviada.');
-    const p = me.data() as Profile;
+    // O perfil de quem chama alimenta a solicitação. Sem ele, `p.nickname` estourava um
+    // TypeError e o cliente recebia "internal" — sem mensagem e sem caminho de volta.
+    const p = me.data() as Profile | undefined;
     const t = target.data() as Profile;
+    if (!p) throw new HttpsError('failed-precondition', 'Complete seu cadastro para continuar.');
     const req: Omit<FriendRequest, 'id'> = {
       from: uid,
       to: data.toUid,
@@ -164,12 +168,41 @@ export const removeFriend = authedCallable<{ friendUid: string }, { ok: true }>(
   (d) => ({ friendUid: str(obj(d, 'payload').friendUid, 'friendUid', 4, 128) }),
 );
 
-export const inviteFriendToRoom = authedCallable<{ friendUid: string; code: string }, { ok: true }>(
+/**
+ * Convite para a sala: vale para amigos e para contatos da agenda que já jogam.
+ *
+ * Para quem ainda não é amigo, o app manda os números desse contato (lidos da agenda na hora) e
+ * o servidor confere no índice de telefones que um deles é mesmo desse jogador — a mesma prova que
+ * o "encontrar pela agenda" usa. Nada disso é gravado. Bloqueio em qualquer sentido barra o convite, com a mesma mensagem (quem bloqueou
+ * não fica exposto).
+ */
+export const inviteFriendToRoom = authedCallable<
+  { friendUid: string; code: string; phones?: string[] },
+  { ok: true }
+>(
   async ({ uid, data }) => {
+    if (data.friendUid === uid)
+      throw new HttpsError('invalid-argument', 'Você não pode convidar a si mesmo.');
     const friendship = await db.doc(`friendships/${uid}/friends/${data.friendUid}`).get();
-    if (!friendship.exists)
-      throw new HttpsError('permission-denied', 'Só é possível convidar amigos.');
-    const me = (await db.doc(`profiles/${uid}`).get()).data() as Profile;
+    if (!friendship.exists) {
+      const denied = new HttpsError(
+        'permission-denied',
+        'Só é possível chamar amigos ou contatos da sua agenda.',
+      );
+      if (!data.phones?.length) throw denied;
+      const [iBlocked, blockedMe, ...indexes] = await Promise.all([
+        db.doc(`blocks/${uid}/blocked/${data.friendUid}`).get(),
+        db.doc(`blockedBy/${uid}/users/${data.friendUid}`).get(),
+        ...data.phones.map((p) => db.doc(`phoneIndex/${phoneHash(p)}`).get()),
+      ]);
+      if (iBlocked.exists || blockedMe.exists) throw denied;
+      const owns = indexes.some(
+        (i) => (i.data() as { uid?: string } | undefined)?.uid === data.friendUid,
+      );
+      if (!owns) throw denied;
+    }
+    const me = (await db.doc(`profiles/${uid}`).get()).data() as Profile | undefined;
+    if (!me) throw new HttpsError('failed-precondition', 'Complete seu cadastro para continuar.');
     await rtdb
       .ref(`invites/${data.friendUid}/${data.code}`)
       .set({ from: uid, fromNickname: me.nickname, code: data.code, createdAt: now() });
@@ -183,9 +216,19 @@ export const inviteFriendToRoom = authedCallable<{ friendUid: string; code: stri
   },
   (d) => {
     const o = obj(d, 'payload');
+    // Um contato tem poucos números: o teto evita usar o convite para testar números em massa.
+    const phones =
+      o.phones === undefined
+        ? undefined
+        : arr(o.phones, 'phones', 5, (p) => {
+            const phone = str(p, 'phone', 8, 16);
+            if (!/^\+[1-9]\d{6,14}$/.test(phone)) throw new Error('phone inválido.');
+            return phone;
+          });
     return {
       friendUid: str(o.friendUid, 'friendUid', 4, 128),
       code: str(o.code, 'code', 6, 6).toUpperCase(),
+      ...(phones ? { phones } : {}),
     };
   },
 );

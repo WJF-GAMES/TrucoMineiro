@@ -177,11 +177,15 @@ export const createFriendInviteToken = () =>
   call<Record<string, never>, FriendInviteToken>('createFriendInviteToken', {});
 export const resolveFriendInviteToken = (token: string) =>
   call<{ token: string }, { uid: string }>('resolveFriendInviteToken', { token });
-export const inviteFriendToRoom = (friendUid: string, code: string) =>
-  call<{ friendUid: string; code: string }, { ok: true }>('inviteFriendToRoom', {
-    friendUid,
-    code,
-  });
+/**
+ * Chama para a sala. Para um contato que ainda não é amigo, `phones` (os números desse contato,
+ * lidos da agenda na hora) prova o vínculo — nada disso fica guardado.
+ */
+export const inviteFriendToRoom = (friendUid: string, code: string, phones?: string[]) =>
+  call<{ friendUid: string; code: string; phones?: string[] }, { ok: true }>(
+    'inviteFriendToRoom',
+    { friendUid, code, ...(phones?.length ? { phones } : {}) },
+  );
 
 // --- Ligas -------------------------------------------------------------------
 
@@ -190,6 +194,13 @@ export const inviteFriendToRoom = (friendUid: string, code: string) =>
  * É auto-corretivo: se faltar vínculo (conta nova, semana virada, grupo finalizado), o backend
  * conserta antes de responder — a tela nunca precisa mostrar "você não está em uma liga".
  */
+/** Garante liga + grupo da semana (idempotente; conserta quem ficou sem liga). */
+export const ensureUserLeagueAssignment = () =>
+  call<Record<string, never>, { leagueId: string; weekKey: string; groupId: string }>(
+    'ensureUserLeagueAssignment',
+    {},
+  );
+
 export const getLeagueScreenSnapshot = () =>
   call<Record<string, never>, LeagueScreenSnapshot>('getLeagueScreenSnapshot', {});
 

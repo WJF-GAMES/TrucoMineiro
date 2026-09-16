@@ -1,19 +1,20 @@
 import React, { useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { z } from 'zod';
 import { colors, spacing } from '@/design-system';
-import { images, avatarNames } from '@/assets';
-import { AppText, IconButton, PlayerAvatar, PrimaryButton, Screen, TextField } from '@/components';
-import { AVATAR_IDS, AvatarId } from '@/domain/model/types';
+import { images } from '@/assets';
+import {
+  AppText,
+  AvatarPicker,
+  IconButton,
+  LoadingOverlay,
+  PrimaryButton,
+  Screen,
+  TextField,
+} from '@/components';
+import type { AvatarId } from '@/domain/model/types';
 import { updateProfile, FunctionsError } from '@/services/firebase/functions';
 import { signOut } from '@/services/firebase/auth';
 import { useAuthStore } from '@/stores/authStore';
@@ -30,6 +31,15 @@ export const nicknameSchema = z
   .max(16, 'Use no máximo 16 caracteres.')
   .regex(/^[\p{L}\p{N} _.-]+$/u, 'Use apenas letras, números e espaços.');
 
+/**
+ * A regra do apelido, escrita uma vez.
+ *
+ * O botão fica desabilitado até o apelido valer, então quem digita "Zé" vê o CTA morto e nenhuma
+ * explicação. "Editar perfil" já mostrava o limite; o cadastro — que é a primeira tela de todas —
+ * não mostrava. Mesma frase nas duas, de uma constante só, para não voltarem a divergir.
+ */
+export const NICKNAME_HINT = '3 a 16 caracteres.';
+
 export function RegisterScreen() {
   const navigation = useNavigation<RootNavigation>();
   const insets = useSafeAreaInsets();
@@ -43,6 +53,7 @@ export function RegisterScreen() {
   const valid = parsed.success;
 
   const submit = async () => {
+    if (loading) return;
     const result = nicknameSchema.safeParse(nickname);
     if (!result.success) {
       setError(result.error.issues[0]?.message ?? 'Apelido inválido.');
@@ -52,6 +63,7 @@ export function RegisterScreen() {
     setError(null);
     setLoading(true);
     try {
+      // O servidor grava perfil e liga (Bronze + grupo da semana) antes de liberar o app.
       await updateProfile({ nickname: result.data, avatarId });
       logEvent('profile_created', { avatar: avatarId });
       haptic.success();
@@ -60,7 +72,6 @@ export function RegisterScreen() {
       const msg = e instanceof FunctionsError ? e.message : 'Não foi possível criar a conta.';
       setError(msg);
       toast.error('Ops', msg);
-    } finally {
       setLoading(false);
     }
   };
@@ -106,7 +117,7 @@ export function RegisterScreen() {
             }}
             valid={valid}
             error={error}
-            hint="Você poderá alterar depois."
+            hint={`${NICKNAME_HINT} Você poderá alterar depois.`}
             maxLength={16}
             autoCapitalize="words"
             autoCorrect={false}
@@ -118,30 +129,7 @@ export function RegisterScreen() {
           <AppText variant="h3" style={styles.section}>
             Escolha seu avatar
           </AppText>
-          <View style={styles.avatars}>
-            {AVATAR_IDS.map((id) => (
-              <Pressable
-                key={id}
-                testID={`avatar-${id}`}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: id === avatarId }}
-                accessibilityLabel={avatarNames[id]}
-                onPress={() => {
-                  haptic.selection();
-                  setAvatarId(id);
-                }}
-                style={styles.avatarWrap}
-              >
-                <PlayerAvatar
-                  avatarId={id}
-                  size={78}
-                  ring
-                  ringColor={id === avatarId ? colors.primaryBright : 'rgba(120,200,170,0.35)'}
-                  badge={id === avatarId ? 'check' : null}
-                />
-              </Pressable>
-            ))}
-          </View>
+          <AvatarPicker value={avatarId} onChange={setAvatarId} disabled={loading} />
 
           <View style={styles.flexSpacer} />
           <AppText variant="h2">Vamos nessa?</AppText>
@@ -174,6 +162,7 @@ export function RegisterScreen() {
           />
         </ScrollView>
       </KeyboardAvoidingView>
+      <LoadingOverlay visible={loading} message="Criando sua conta..." testID="register-loading" />
     </Screen>
   );
 }
@@ -191,8 +180,6 @@ const styles = StyleSheet.create({
   title: { marginTop: spacing.md, marginBottom: 4 },
   field: { marginTop: spacing.xl },
   section: { marginTop: spacing.xl, marginBottom: spacing.md },
-  avatars: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  avatarWrap: { padding: 2 },
   flexSpacer: { flex: 1, minHeight: spacing.xl },
   terms: { marginTop: 6, lineHeight: 18 },
   link: { textDecorationLine: 'underline', color: colors.text },

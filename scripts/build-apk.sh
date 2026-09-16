@@ -4,9 +4,10 @@
 #   ./scripts/build-apk.sh              # all ABIs (installs on real phones)
 #   ./scripts/build-apk.sh x86_64       # emulator only — much faster
 #
-# The release variant is signed with android/app/debug.keystore (Expo template default), NOT with
-# ~/.android/debug.keystore. The fingerprints printed at the end are read from the APK itself and are
-# the ones that must be registered in the Firebase Console for Phone Auth to work.
+# The release variant is signed with the production keystore declared in android/keystore.properties
+# (storeFile/storePassword/keyAlias/keyPassword). Sem esse arquivo o build cai no
+# android/app/debug.keystore do template Expo. The fingerprints printed at the end are read from the
+# APK itself and are the ones that must be registered in the Firebase Console for Phone Auth to work.
 set -euo pipefail
 
 ABIS="${1:-}"

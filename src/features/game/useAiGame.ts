@@ -9,6 +9,7 @@ import {
   applyAction,
   createMatch,
   createRng,
+  eventsForSeat,
   getAvailableActions,
   nextAIAction,
   viewForSeat,
@@ -19,30 +20,7 @@ import { logEvent } from '@/services/firebase/analytics';
 import { setCrashContext } from '@/services/firebase/crashlytics';
 import type { TableController, TablePlayer } from './types';
 import { devLog } from '@/utils/devLog';
-import { TRICK_RESOLVE_PAUSE_MS } from './trickPresentation';
-
-/**
- * Quanto um bot "pensa" antes de jogar.
- *
- * Com um valor fixo e curto os três bots respondiam sempre no mesmo compasso, e a mesa inteira
- * passava a sensação de pressa — ninguém na mesa joga em 900 ms, toda vez. A base é mais
- * folgada e cada jogada ganha uma variação própria, derivada da versão da partida: é estável
- * entre renders do mesmo estado (o efeito não pode reagendar sozinho) e reproduzível.
- */
-const AI_DELAY_MS = 1_300;
-const AI_DELAY_JITTER_MS = 700;
-/** Entre uma mistura/corte e o seguinte a IA leva um tempo humano. */
-const AI_SHUFFLE_MS = 1_250;
-const AI_SHUFFLE_JITTER_MS = 500;
-// Depois de uma vaza fechar a mesa ainda mostra a quarta carta, a vencedora e o recolhimento.
-const ROUND_END_PAUSE_MS = TRICK_RESOLVE_PAUSE_MS;
-
-/** Variação determinística em [0, span) a partir da versão da partida. */
-function pacingJitter(version: number, span: number): number {
-  // Hash inteiro simples: versões vizinhas não caem em valores vizinhos.
-  const h = Math.imul(version ^ 0x9e3779b9, 0x85ebca6b) >>> 0;
-  return (h % 1000) * (span / 1000);
-}
+import { botPauseMs } from './botPacing';
 
 const BOT_NAMES: Record<AIDifficultyId, { seat: Seat; nickname: string; avatarId: AvatarId }[]> = {
   easy: [
@@ -108,7 +86,8 @@ export function useAiGame(
       // O registro da partida (verificado no servidor) só leva ações aceitas. O updater pode
       // rodar duas vezes com o mesmo objeto: o dedupe por referência evita a duplicata.
       if (actions.current[actions.current.length - 1] !== action) actions.current.push(action);
-      const recentEvents = next.events.slice(prev.state.events.length);
+      // A mesa local é o assento 0: carta virada dos bots chega sem identidade, como online.
+      const recentEvents = eventsForSeat(next.events.slice(prev.state.events.length), 0);
       devLog('EVENTS', recentEvents.map((e) => e.type).join(','), { version: next.version });
       return { state: next, recentEvents };
     });
@@ -154,12 +133,12 @@ export function useAiGame(
     if (!action) return;
     commitBusy(true);
     const lastEvent = state.events[state.events.length - 1];
-    const pause =
-      lastEvent?.type === 'ROUND_ENDED' || lastEvent?.type === 'HAND_ENDED'
-        ? ROUND_END_PAUSE_MS
-        : state.hand.phase === 'SHUFFLING' || state.hand.phase === 'CUTTING'
-          ? AI_SHUFFLE_MS + pacingJitter(state.version, AI_SHUFFLE_JITTER_MS)
-          : AI_DELAY_MS + pacingJitter(state.version, AI_DELAY_JITTER_MS);
+    const ceremony = state.hand.phase === 'SHUFFLING' || state.hand.phase === 'CUTTING';
+    const pause = botPauseMs(
+      state.version,
+      ceremony ? 'ceremony' : 'play',
+      lastEvent?.type === 'ROUND_ENDED' || lastEvent?.type === 'HAND_ENDED',
+    );
     const timer = setTimeout(() => apply(action), pause);
     return () => {
       clearTimeout(timer);
@@ -169,7 +148,8 @@ export function useAiGame(
 
   const act = useCallback(
     (action: GameAction) => {
-      if (action.type === 'PLAY_CARD') logEvent('card_played', { mode: 'ai' });
+      if (action.type === 'PLAY_CARD' || action.type === 'PLAY_CARD_COVERED')
+        logEvent('card_played', { mode: 'ai', covered: action.type === 'PLAY_CARD_COVERED' });
       if (action.type === 'REQUEST_TRUCO' || action.type === 'RAISE')
         logEvent('truco_requested', { mode: 'ai' });
       if (action.type === 'ACCEPT_TRUCO') logEvent('truco_accepted', { mode: 'ai' });

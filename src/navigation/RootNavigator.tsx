@@ -30,6 +30,15 @@ import { setCrashContext } from '@/services/firebase/crashlytics';
 import { useFriendInviteLink } from '@/features/friends/useFriendInviteLink';
 import { useRoomInvitePrompt } from '@/features/friends/useRoomInvitePrompt';
 import { navigationRef } from './navigationRef';
+import { useAdStore } from '@/ads/core/AdState';
+
+/** Rota de topo em foco — é ela que decide se a tela admite anúncio (`AD_FREE_SCREENS`). */
+function syncAdScreen() {
+  if (!navigationRef.isReady()) return;
+  const root = navigationRef.getRootState();
+  const name = root?.routes[root.index]?.name ?? null;
+  if (useAdStore.getState().currentScreen !== name) useAdStore.getState().setCurrentScreen(name);
+}
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -57,7 +66,9 @@ export function RootNavigator() {
     <NavigationContainer
       ref={navigationRef}
       theme={theme}
+      onReady={syncAdScreen}
       onStateChange={(state) => {
+        syncAdScreen();
         const name = state?.routes[state.index]?.name;
         if (name && name !== routeName) {
           setRouteName(name);

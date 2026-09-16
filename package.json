@@ -1,6 +1,6 @@
 {
   "name": "trucox",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "main": "index.ts",
   "dependencies": {
     "@expo-google-fonts/kaushan-script": "^0.4.1",
@@ -36,6 +36,7 @@
     "expo-font": "~57.0.4",
     "expo-haptics": "~57.0.3",
     "expo-image": "~57.0.5",
+    "expo-keep-awake": "~57.0.2",
     "expo-linear-gradient": "~57.0.2",
     "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
@@ -84,7 +85,9 @@
     "test:engine": "jest src/domain",
     "test:sim": "tsx scripts/simulate-ai.ts",
     "emulators": "firebase emulators:start --project truco-mineiro-wjf",
-    "check": "npm run lint && npm run typecheck && npm test"
+    "typecheck:functions": "npm --prefix functions run build",
+    "test:functions": "npm --prefix functions test",
+    "check": "npm run lint && npm run typecheck && npm test && npm run typecheck:functions && npm run test:functions"
   },
   "private": true
 }

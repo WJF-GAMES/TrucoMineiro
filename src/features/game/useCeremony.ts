@@ -82,25 +82,26 @@ const INACTIVE: Omit<ShuffleCeremony, 'bump' | 'finish' | 'setCutDepth'> = {
  * - `SHUFFLING` → estágio "shuffle": o dealer mistura quantas vezes quiser (`SHUFFLE`) e fecha
  *   (`FINISH_SHUFFLE`). Cada mistura muda o baralho de verdade; `shuffleCount`/`deckVersion` vêm
  *   da view.
- * - `CUTTING` → estágio "cut": o assento seguinte corta (`CUT` com a profundidade escolhida) e o
- *   motor distribui na mesma ação.
- * - "deal" é o único estágio local: depois do `CUT_DONE` a mesa mostra as cartas voando por
- *   `CEREMONY_TIMING.dealMs` antes de liberar a mão.
+ * - `CUTTING` → estágio "cut": o assento seguinte corta (`CUT`, repetível) e fecha com
+ *   `FINISH_CUT`, que é a ação em que o motor distribui (`HAND_DEALT`).
+ * - "deal" é o único estágio local: depois do `HAND_DEALT` a mesa mostra as cartas voando por
+ *   `CEREMONY_TIMING.dealMs` antes de liberar a mão. Não pode ser o `CUT_DONE`: com o corte
+ *   repetível, cada corte a mais fazia a mesa ir de "cortar" para "distribuir" e voltar.
  */
 export function useCeremony({ view, mySeat, recentEvents, deadlineAt, act, held }: Options) {
   const [cutDepth, setCutDepth] = useState<CutDepth>('middle');
 
-  // Distribuição: começa quando o lote traz o corte (derivado no render, como a apresentação da
-  // vaza) e dura o tempo da animação.
+  // Distribuição: começa quando o lote traz a distribuição de verdade (derivado no render, como a
+  // apresentação da vaza) e dura o tempo da animação.
   const [dealSnap, setDealSnap] = useState<{ batch: GameEvent[] | null; until: number | null }>({
     batch: null,
     until: null,
   });
   let dealingUntil = dealSnap.until;
   if (dealSnap.batch !== recentEvents) {
-    const cut = recentEvents.some((e) => e.type === 'CUT_DONE');
-    dealingUntil = cut ? nowMs() + CEREMONY_TIMING.dealMs : dealSnap.until;
-    if (cut) devLog('CEREMONY_STAGE', 'deal', { hand: view?.handNumber ?? null });
+    const dealt = recentEvents.some((e) => e.type === 'HAND_DEALT');
+    dealingUntil = dealt ? nowMs() + CEREMONY_TIMING.dealMs : dealSnap.until;
+    if (dealt) devLog('CEREMONY_STAGE', 'deal', { hand: view?.handNumber ?? null });
     setDealSnap({ batch: recentEvents, until: dealingUntil });
   }
   useEffect(() => {

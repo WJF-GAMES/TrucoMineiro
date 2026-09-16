@@ -10,6 +10,7 @@ import {
   applyAction,
   createMatch,
   createRng,
+  eventsForSeat,
   getAvailableActions,
   nextAIAction,
   seatsToAct,
@@ -37,11 +38,43 @@ function trim(state: StoredState): StoredState {
   };
 }
 
-function buildViews(state: StoredState, recent: GameEvent[]): Record<string, SeatViewPayload> {
+export function buildViews(
+  state: StoredState,
+  recent: GameEvent[],
+): Record<string, SeatViewPayload> {
   const views: Record<string, SeatViewPayload> = {};
   for (const seat of [0, 1, 2, 3] as Seat[])
-    views[String(seat)] = { ...viewForSeat(state, seat), recentEvents: recent };
+    // Cada assento recebe o próprio lote: carta virada dos outros sai sem identidade.
+    views[String(seat)] = {
+      ...viewForSeat(state, seat),
+      recentEvents: eventsForSeat(recent, seat),
+    };
   return views;
+}
+
+/**
+ * Publica as views, **nunca para trás**.
+ *
+ * O estado é serializado pela transação, mas a publicação das views é uma escrita separada: duas
+ * ações aplicadas quase juntas podem chegar aqui fora de ordem e a mais velha sobrescrever a mais
+ * nova. Não é hipótese — `advanceBots` é chamado por *qualquer* jogador da sessão, num timer, e
+ * corre contra a carta que um humano acabou de jogar. O estado seguiria certo e a mesa de todo
+ * mundo ficaria parada numa versão anterior até a ação seguinte.
+ *
+ * A transação compara com o que já está publicado e desiste (retorna `undefined`) se for mais
+ * novo. Escrever a mesma versão de novo é inofensivo e mantém o caminho idempotente funcionando.
+ */
+async function publishViews(id: string, state: StoredState, recent: GameEvent[]) {
+  const ref = rtdb.ref(`gameSessions/${id}/views`);
+  await ref.transaction((current: Record<string, SeatViewPayload> | null) => {
+    if (!shouldPublishViews(current?.['0']?.version, state.version)) return undefined;
+    return buildViews(state, recent);
+  });
+}
+
+/** A decisão de `publishViews`, isolada para o teste: só publica o que não é mais velho. */
+export function shouldPublishViews(publishedVersion: unknown, nextVersion: number): boolean {
+  return typeof publishedVersion !== 'number' || publishedVersion <= nextVersion;
 }
 
 export async function createSession(room: Room): Promise<string> {
@@ -151,7 +184,7 @@ async function applyToSession(
   if (!res.snapshot.exists() || !produced)
     throw new HttpsError('not-found', 'Partida não encontrada.');
   const state = produced as StoredState;
-  await rtdb.ref(`gameSessions/${id}/views`).set(buildViews(state, recent));
+  await publishViews(id, state, recent);
   return { version: state.version, status: state.status, state };
 }
 

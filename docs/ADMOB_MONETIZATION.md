@@ -157,6 +157,15 @@ Coberto por `src/ads/__tests__/AdService.guards.test.ts` e pelo bloco "guardas d
 
 ---
 
+### Telas sem anúncio
+
+Introdução, Login, código (OTP), cadastro, partida, matchmaking e lobby **nunca** mostram anúncio
+(`src/ads/config/adFreeScreens.ts`). O `RootNavigator` informa a rota de topo em foco
+(`AdState.currentScreen`) e a guarda `isAdFreeScreen` barra interstitial, rewarded, App Open (inclusive
+na volta do app de SMS para a tela do código) e Native (`skip reason: ad_free_screen`). Além disso o
+`AdService.initialize()` — SDK, formulário de consentimento e pré-carregamento — só roda depois que
+o usuário conclui login e cadastro (`status === 'signed_in'`).
+
 ## 6. Interstitial
 
 Único ponto automático: **fim de partida**.

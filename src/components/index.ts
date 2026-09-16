@@ -16,3 +16,5 @@ export * from './StateView';
 export * from './SectionTitle';
 export * from './Sheet';
 export * from './Toast';
+export * from './LoadingOverlay';
+export * from './AvatarPicker';

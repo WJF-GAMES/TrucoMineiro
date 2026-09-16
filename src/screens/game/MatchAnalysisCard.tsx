@@ -21,7 +21,7 @@ export function MatchAnalysisCard({ analysis }: { analysis: MatchAnalysis }) {
         <Metric label="Mãos" value={`${analysis.handsPlayed}`} />
         <Metric label="Rodadas ganhas" value={`${rounds.won}`} />
         <Metric label="Rodadas perdidas" value={`${rounds.lost}`} />
-        <Metric label="Empates" value={`${rounds.tied}`} />
+        <Metric label="Cangadas" value={`${rounds.tied}`} />
         <Metric label="Trucos pedidos" value={`${truco.calledByUs}`} />
         <Metric label="Trucos sofridos" value={`${truco.calledByThem}`} />
         <Metric label="Fugas" value={`${analysis.runs.us}`} />

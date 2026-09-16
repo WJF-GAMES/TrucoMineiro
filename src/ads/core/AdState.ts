@@ -8,6 +8,7 @@ import type {
   RewardedPlacement,
 } from '../types/ads.types';
 import { adEnvironment, usingTestAds } from '../config/environment';
+import { isAdFreeScreen } from '../config/adFreeScreens';
 import { emptySnapshot, rollDaily, startSession } from './AdFrequencyManager';
 
 const STORAGE_KEY = 'trucox.ads.v1';
@@ -43,6 +44,8 @@ interface AdStore {
   criticalModalCount: number;
   isAppActive: boolean;
   isNavigationStable: boolean;
+  /** Rota de topo em foco (`RootNavigator`); `null` antes de a navegação montar. */
+  currentScreen: string | null;
 
   /** Um full-screen já foi consumido para o resultado de partida atual. */
   fullScreenUsedForCurrentResult: boolean;
@@ -73,6 +76,7 @@ interface AdStore {
   popCriticalModal: () => void;
   setAppActive: (v: boolean) => void;
   setNavigationStable: (v: boolean) => void;
+  setCurrentScreen: (screen: string | null) => void;
   setResultFullScreenUsed: (v: boolean) => void;
   setInterstitialLoaded: (v: boolean) => void;
   setAppOpenLoaded: (v: boolean) => void;
@@ -98,6 +102,7 @@ export const useAdStore = create<AdStore>((set, get) => ({
   criticalModalCount: 0,
   isAppActive: true,
   isNavigationStable: true,
+  currentScreen: null,
 
   fullScreenUsedForCurrentResult: false,
 
@@ -159,6 +164,7 @@ export const useAdStore = create<AdStore>((set, get) => ({
     set((s) => ({ criticalModalCount: Math.max(0, s.criticalModalCount - 1) })),
   setAppActive: (v) => set({ isAppActive: v }),
   setNavigationStable: (v) => set({ isNavigationStable: v }),
+  setCurrentScreen: (screen) => set({ currentScreen: screen }),
   setResultFullScreenUsed: (v) => set({ fullScreenUsedForCurrentResult: v }),
   setInterstitialLoaded: (v) => set({ interstitialLoaded: v }),
   setAppOpenLoaded: (v) => set({ appOpenLoaded: v }),
@@ -203,6 +209,7 @@ export function currentGuards(): AdRuntimeGuards {
     isCriticalModalOpen: s.criticalModalCount > 0,
     isAppActive: s.isAppActive,
     isNavigationStable: s.isNavigationStable,
+    isAdFreeScreen: isAdFreeScreen(s.currentScreen),
   };
 }
 

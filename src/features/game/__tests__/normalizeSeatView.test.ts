@@ -80,6 +80,45 @@ describe('normalizeSessionMeta', () => {
     expect(meta.roomCode).toBeNull();
   });
 
+  it('carta virada de outro assento (sem `card`, que o RTDB apaga) continua na mesa', () => {
+    const v = normalizeSeatView({
+      seat: 1,
+      phase: 'PLAY',
+      currentRound: [
+        { seat: 0, covered: true },
+        { seat: 1, card: { rank: '3', suit: 'paus' } },
+      ],
+      rounds: [{ winner: 1, winnerSeat: 1, plays: [{ seat: 2, covered: true }] }],
+    })!;
+    expect(v.currentRound).toEqual([
+      { seat: 0, card: null, covered: true },
+      { seat: 1, card: { rank: '3', suit: 'paus' }, covered: false },
+    ]);
+    expect(v.rounds[0]?.plays).toEqual([{ seat: 2, card: null, covered: true }]);
+  });
+
+  it('desempate por cango: sem a chave (RTDB apaga null / servidor antigo) volta ao jogo normal', () => {
+    const cards = [
+      { rank: '3', suit: 'paus' },
+      { rank: '4', suit: 'ouros' },
+    ];
+    const old = normalizeSeatView({ seat: 0, phase: 'PLAY', myCards: cards })!;
+    expect(old.tieBreak).toBeNull();
+    expect(old.playableCardIds).toEqual(['3P', '4O']);
+
+    const tb = normalizeSeatView({
+      seat: 0,
+      phase: 'PLAY',
+      myCards: cards,
+      playableCardIds: ['3P'],
+      tieBreak: { causedBySeat: 1, round: 1 },
+    })!;
+    expect(tb.tieBreak).toEqual({ causedBySeat: 1, round: 1 });
+    expect(tb.playableCardIds).toEqual(['3P']);
+  });
+});
+
+describe('normalizeSessionMeta (sem status)', () => {
   it('rejects payloads without a status', () => {
     expect(normalizeSessionMeta(null)).toBeNull();
     expect(normalizeSessionMeta({ id: 'x' })).toBeNull();

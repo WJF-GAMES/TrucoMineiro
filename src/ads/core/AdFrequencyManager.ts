@@ -118,6 +118,7 @@ export function shouldShowInterstitial(input: InterstitialDecisionInput): AdDeci
   if (!config.interstitialEnabled) return deny('interstitial_disabled');
   if (!guards.canRequestAds) return deny('consent_missing');
   if (!guards.isAppActive) return deny('app_background');
+  if (guards.isAdFreeScreen) return deny('ad_free_screen');
 
   // Gameplay é intocável.
   if (guards.isGameActive) return deny('game_active');
@@ -180,6 +181,7 @@ export function shouldShowAppOpen(input: AppOpenDecisionInput): AdDecision {
   if (!config.appOpenEnabled) return deny('interstitial_disabled');
   if (!guards.canRequestAds) return deny('consent_missing');
   if (!guards.isAppActive) return deny('app_background');
+  if (guards.isAdFreeScreen) return deny('ad_free_screen');
   if (guards.isGameActive) return deny('game_active');
   if (guards.isMatchmakingActive) return deny('matchmaking_active');
   if (guards.isCriticalModalOpen) return deny('modal_open');
@@ -204,6 +206,7 @@ export function canShowRewarded(config: AdConfig, guards: AdRuntimeGuards): AdDe
   if (!config.rewardedEnabled) return deny('interstitial_disabled');
   if (!guards.canRequestAds) return deny('consent_missing');
   if (!guards.isAppActive) return deny('app_background');
+  if (guards.isAdFreeScreen) return deny('ad_free_screen');
   if (guards.isGameActive) return deny('game_active');
   if (guards.isMatchmakingActive) return deny('matchmaking_active');
   if (guards.isFullScreenAdShowing) return deny('full_screen_showing');

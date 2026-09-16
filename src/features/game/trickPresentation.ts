@@ -1,7 +1,7 @@
 import {
   leadingPlay,
   type GameEvent,
-  type PlayedCard,
+  type TablePlay,
   type Seat,
   type SeatView,
   type Team,
@@ -24,7 +24,10 @@ import {
 export const TRICK_TIMING = {
   /** Carta saindo da mão/assento até o centro. */
   flyMs: 300,
-  /** Quarta carta na mesa, vencedora destacada, antes de recolher. */
+  /**
+   * Quarta carta na mesa, vencedora destacada (ou o aviso de cango), antes de recolher. Cobre o
+   * aviso de cango com folga: ele precisa ser lido antes de a mesa limpar.
+   */
   holdMs: 1_900,
   /** Cartas juntando e indo para quem levou. */
   collectMs: 420,
@@ -36,14 +39,47 @@ export const TRICK_RESOLVE_PAUSE_MS =
 
 export type TrickPhase = 'open' | 'resolved' | 'collecting' | 'empty';
 
+/**
+ * O que um cango significou, segundo o motor (evento `TIE_BREAK_STARTED` ou o `HAND_ENDED`):
+ * - `TIE_BREAK_STARTED`: 1ª cangou — a próxima vaza é de desempate;
+ * - `TIE_BREAK_AGAIN`: cangou de novo no desempate — a terceira decide;
+ * - `FIRST_TRICK_PREVAILS`: cangou depois de a 1ª ter vencedor — vale a primeira;
+ * - `ALL_TIED`: as três cangaram — ninguém pontua.
+ */
+export type CangoNote =
+  'TIE_BREAK_STARTED' | 'TIE_BREAK_AGAIN' | 'FIRST_TRICK_PREVAILS' | 'ALL_TIED';
+
+/** Texto curto da mesa para cada cango ("Cangou" é o termo do jogo em todo o app). */
+export const CANGO_COPY: Record<CangoNote, string> = {
+  TIE_BREAK_STARTED: 'Cangou! Agora todos jogam a maior carta.',
+  TIE_BREAK_AGAIN: 'Cangou de novo! A terceira decide.',
+  FIRST_TRICK_PREVAILS: 'Cangou! Vale a primeira.',
+  ALL_TIED: 'Cangou tudo! Ninguém pontua.',
+};
+
+/** Lê no lote do motor o que o cango da vaza `round` causou. `null` se o lote não diz. */
+export function cangoNote(batch: readonly GameEvent[], round: number): CangoNote | null {
+  for (const e of batch) {
+    if (e.type === 'TIE_BREAK_STARTED' && e.round === round + 1)
+      return e.continued ? 'TIE_BREAK_AGAIN' : 'TIE_BREAK_STARTED';
+    if (e.type === 'HAND_ENDED') {
+      if (e.result.reason === 'ALL_TIED') return 'ALL_TIED';
+      if (e.result.decidedBy === 'FIRST_TRICK_ADVANTAGE') return 'FIRST_TRICK_PREVAILS';
+    }
+  }
+  return null;
+}
+
 export interface TrickPresentation {
   phase: TrickPhase;
   /** Cartas que a mesa desenha agora (inclui a quarta enquanto a vaza está sendo mostrada). */
-  plays: PlayedCard[];
+  plays: TablePlay[];
+  /** Índice da vaza mostrada (0–2); `-1` com a mesa vazia. Estável de aberta para resolvida. */
+  round: number;
   /** Assento cuja carta está ganhando numa vaza ainda aberta (`null` em empate ou mesa vazia). */
   leadingSeat: Seat | null;
   /** Resultado da vaza fechada, enquanto ela ainda está na mesa. */
-  resolved: { winnerSeat: Seat; winner: Team | null } | null;
+  resolved: { winnerSeat: Seat; winner: Team | null; cango: CangoNote | null } | null;
   /** A vaza fechou a mão: a view já é da mão seguinte, então a mesa segura mais uma coisa — a mão. */
   handEnded: boolean;
   /** Instante (epoch ms) em que a mesa passa a recolher; `null` fora de `resolved`. */
@@ -55,6 +91,7 @@ export interface TrickPresentation {
 export const EMPTY_TRICK: TrickPresentation = {
   phase: 'empty',
   plays: [],
+  round: -1,
   leadingSeat: null,
   resolved: null,
   handEnded: false,
@@ -62,13 +99,14 @@ export const EMPTY_TRICK: TrickPresentation = {
   clearAt: null,
 };
 
-function leading(plays: PlayedCard[]): Seat | null {
+function leading(plays: TablePlay[]): Seat | null {
   const lead = leadingPlay(plays);
-  return lead && !lead.tied ? lead.seat : null;
+  // Carta virada nunca aparece como "Ganhando": ela vale o mínimo.
+  return lead && !lead.tied && !lead.covered ? lead.seat : null;
 }
 
-function openTrick(plays: PlayedCard[]): TrickPresentation {
-  return { ...EMPTY_TRICK, phase: 'open', plays, leadingSeat: leading(plays) };
+function openTrick(plays: TablePlay[], round: number): TrickPresentation {
+  return { ...EMPTY_TRICK, phase: 'open', plays, round, leadingSeat: leading(plays) };
 }
 
 /**
@@ -82,16 +120,17 @@ function resolvedPlays(
   batch: GameEvent[],
   roundIndex: number,
   handEnded: boolean,
-): PlayedCard[] {
+): TablePlay[] {
   if (!handEnded) {
     const fromView = view.rounds[roundIndex]?.plays;
     if (fromView && fromView.length === 4) return fromView;
   }
-  const merged = new Map<Seat, PlayedCard>();
+  const merged = new Map<Seat, TablePlay>();
   prev.plays.forEach((p) => merged.set(p.seat, p));
   for (const e of batch) {
     if (e.type === 'ROUND_ENDED' && e.round < roundIndex) merged.clear();
-    if (e.type === 'CARD_PLAYED') merged.set(e.seat, { seat: e.seat, card: e.card });
+    if (e.type === 'CARD_PLAYED')
+      merged.set(e.seat, { seat: e.seat, card: e.card ?? null, covered: Boolean(e.covered) });
   }
   return [...merged.values()];
 }
@@ -109,7 +148,7 @@ export function presentTrick(
 ): TrickPresentation {
   // Vaza aberta: a verdade é a view. Isso também é o fast-forward de reconexão — se já há carta
   // nova na mesa, nada de segurar a anterior.
-  if (view.currentRound.length > 0) return openTrick(view.currentRound);
+  if (view.currentRound.length > 0) return openTrick(view.currentRound, view.rounds.length);
 
   if (batchIsNew) {
     const lastRound = [...batch].reverse().find((e) => e.type === 'ROUND_ENDED');
@@ -121,8 +160,13 @@ export function presentTrick(
         return {
           phase: 'resolved',
           plays,
+          round: lastRound.round,
           leadingSeat: null,
-          resolved: { winnerSeat: lastRound.winnerSeat, winner: lastRound.winner },
+          resolved: {
+            winnerSeat: lastRound.winnerSeat,
+            winner: lastRound.winner,
+            cango: lastRound.winner === null ? cangoNote(batch, lastRound.round) : null,
+          },
           handEnded,
           holdUntil,
           clearAt: holdUntil + TRICK_TIMING.collectMs,

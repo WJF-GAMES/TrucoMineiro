@@ -57,6 +57,7 @@ describe('fluxo do Rewarded', () => {
       criticalModalCount: 0,
       isAppActive: true,
       isNavigationStable: true,
+      currentScreen: 'Main',
       fullScreenUsedForCurrentResult: false,
     });
   });

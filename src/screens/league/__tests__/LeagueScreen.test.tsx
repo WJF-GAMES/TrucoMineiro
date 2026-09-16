@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { LeagueScreen } from '../LeagueScreen';
 import { leagueById } from '@/domain/model/leagues';
@@ -19,15 +19,60 @@ const mockSubscribe = jest.fn(
       undefined,
 );
 
+const mockSendFriendRequest = jest.fn((..._args: unknown[]) => Promise.resolve({ ok: true }));
+/** Relação com os outros jogadores na ficha: amigos e pedidos que chegam pelos snapshots. */
+const mockSocial = {
+  friends: [] as { id: string }[],
+  incoming: [] as { from: string; to: string; createdAt: number }[],
+  outgoing: [] as { from: string; to: string; createdAt: number }[],
+};
 jest.mock('@/services/firebase/functions', () => ({
   getLeagueScreenSnapshot: (...args: unknown[]) => mockSnapshot(...args),
   getGlobalLeagueRanking: jest.fn(() => Promise.resolve({ entries: [] })),
+  sendFriendRequest: (...args: unknown[]) => mockSendFriendRequest(...args),
   FunctionsError: class extends Error {},
 }));
 jest.mock('@/services/firebase/firestore', () => ({
   subscribeGroupMembers: (groupId: string, cb: unknown, onError: unknown) =>
     mockSubscribe(groupId, cb, onError),
   getLeagueHistory: jest.fn(() => Promise.resolve([])),
+  // Ficha do jogador: perfil completo e números.
+  getProfile: (uid: string) =>
+    Promise.resolve({
+      id: uid,
+      nickname: `Perfil ${uid}`,
+      avatarId: 'galo',
+      countryCode: 'BR',
+      level: 7,
+      leagueId: 'gold',
+      leaguePoints: 1500,
+    }),
+  subscribeStats: (_uid: string, cb: (s: unknown) => void) => {
+    cb({ matches: 10, wins: 6 });
+    return () => undefined;
+  },
+  subscribeFriends: (_uid: string, cb: (list: { id: string }[]) => void) => {
+    cb(mockSocial.friends);
+    return () => undefined;
+  },
+  subscribeBlockedUsers: (_uid: string, cb: (ids: string[]) => void) => {
+    cb([]);
+    return () => undefined;
+  },
+  subscribeIncomingRequests: (_uid: string, cb: (r: unknown[]) => void) => {
+    cb(mockSocial.incoming);
+    return () => undefined;
+  },
+  subscribeOutgoingRequests: (_uid: string, cb: (r: unknown[]) => void) => {
+    cb(mockSocial.outgoing);
+    return () => undefined;
+  },
+}));
+jest.mock('@/services/firebase/rtdb', () => ({
+  subscribePresence: () => () => undefined,
+}));
+jest.mock('@/stores/toastStore', () => ({
+  toast: { info: jest.fn(), success: jest.fn(), error: jest.fn() },
 }));
 jest.mock('@/services/firebase/analytics', () => ({ logEvent: jest.fn() }));
 jest.mock('@/stores/authStore', () => ({
@@ -101,7 +146,12 @@ const renderScreen = () =>
 
 // Nada de mexer no relógio: o valor inicial do countdown sai de `endAt - serverTime`, ou seja,
 // do próprio snapshot. Congelar `Date.now()` quebraria o agendador do React.
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockSocial.friends = [];
+  mockSocial.incoming = [];
+  mockSocial.outgoing = [];
+});
 
 describe('LeagueScreen', () => {
   it('mostra liga, divisão, countdown e as zonas vindas do backend', async () => {
@@ -226,5 +276,55 @@ describe('LeagueScreen', () => {
 
     expect(await view.findByLabelText('1º lugar, Jogador 1, 2.900 pontos')).toBeTruthy();
     expect(view.getByLabelText('7º lugar, Eu Mesmo, 2.300 pontos, você')).toBeTruthy();
+  });
+});
+
+describe('LeagueScreen — ficha do jogador', () => {
+  async function openPlayer(uid: string, snapshot = snapshotWith(10)) {
+    mockSnapshot.mockResolvedValue(snapshot);
+    const view = await renderScreen();
+    await view.findByText('Jogador 1');
+    await act(async () => {
+      fireEvent.press(view.getByTestId(`ranking-row-${uid}`));
+    });
+    return view;
+  }
+
+  it('tocar num jogador abre a ficha com liga e números, como em Amigos', async () => {
+    const view = await openPlayer('u2');
+    expect(view.getByTestId('sheet-player')).toBeTruthy();
+    expect(await view.findByText('@Perfil u2')).toBeTruthy();
+    expect(view.getByText('Nível 7')).toBeTruthy();
+    expect(view.getByText('Liga Ouro')).toBeTruthy();
+    expect(view.getByText('60%')).toBeTruthy();
+  });
+
+  it('adiciona como amigo a partir da ficha', async () => {
+    const view = await openPlayer('u2');
+    await act(async () => {
+      fireEvent.press(await view.findByTestId('player-sheet-add'));
+    });
+    expect(mockSendFriendRequest).toHaveBeenCalledWith('u2');
+    expect(view.getByTestId('player-relation-sent')).toBeTruthy();
+  });
+
+  it('com pedido dele pendente oferece aceitar', async () => {
+    mockSocial.incoming = [{ from: 'u3', to: 'me', createdAt: 1 }];
+    const view = await openPlayer('u3');
+    expect(await view.findByText('Aceitar pedido de amizade')).toBeTruthy();
+  });
+
+  it('amigo e o próprio usuário não têm botão de adicionar', async () => {
+    mockSocial.friends = [{ id: 'u4' }];
+    const friendView = await openPlayer('u4');
+    expect(await friendView.findByTestId('player-relation-friend')).toBeTruthy();
+    expect(friendView.queryByTestId('player-sheet-add')).toBeNull();
+    await friendView.unmount();
+
+    // Na vida real a linha "sou eu" tem o uid do usuário logado.
+    const mine = snapshotWith(10);
+    mine.members = mine.members.map((m) => (m.isMe ? { ...m, uid: 'me' } : m));
+    const meView = await openPlayer('me', mine);
+    expect(await meView.findByTestId('player-relation-me')).toBeTruthy();
   });
 });

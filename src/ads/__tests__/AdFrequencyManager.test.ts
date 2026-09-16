@@ -28,6 +28,7 @@ const openGuards: AdRuntimeGuards = {
   isCriticalModalOpen: false,
   isAppActive: true,
   isNavigationStable: true,
+  isAdFreeScreen: false,
 };
 
 /** Sessão madura (3ª), fora do período de aquecimento, com o anúncio já carregado. */
@@ -200,6 +201,10 @@ describe('guardas de gameplay', () => {
       show: false,
       reason: 'modal_open',
     });
+    expect(decide(matureSnapshot(), { guards: { isAdFreeScreen: true } })).toEqual({
+      show: false,
+      reason: 'ad_free_screen',
+    });
     expect(decide(matureSnapshot(), { guards: { isNavigationStable: false } })).toEqual({
       show: false,
       reason: 'navigation_unstable',
@@ -296,6 +301,18 @@ describe('app open', () => {
       show: false,
       reason: 'cadence',
     });
+  });
+
+  it('quando ligado, nunca aparece ao voltar para o login ou para a tela do código', () => {
+    const on = { ...config, appOpenEnabled: true };
+    expect(
+      shouldShowAppOpen({
+        ...base,
+        config: on,
+        backgroundSeconds: 7 * 3600,
+        guards: { ...openGuards, isAdFreeScreen: true },
+      }),
+    ).toEqual({ show: false, reason: 'ad_free_screen' });
   });
 
   it('quando ligado, aparece para usuário maduro após background longo', () => {

@@ -94,26 +94,46 @@ curl -H "x-seed-secret: <segredo>" https://southamerica-east1-truco-mineiro-wjf.
 
 ## Assinatura do APK
 
-`android/app/build.gradle` usa `signingConfig signingConfigs.debug` também na variante `release`, e esse
-config aponta para **`android/app/debug.keystore`** (o keystore genérico do template Expo, o mesmo em
-qualquer projeto criado por ele). Impressões atuais:
+`android/app/build.gradle` lê as credenciais de **`android/keystore.properties`** e, quando o arquivo
+existe, assina a variante `release` com o keystore de produção. Sem o arquivo, o `release` cai no
+`android/app/debug.keystore` do template Expo — build local descartável, nunca para a loja.
+
+Keystore de produção: `F:/WJF_GAMES/KeyAndroid/key_android`, alias `wjf_games`, RSA 2048 / SHA256withRSA,
+`CN=William Fernandes, O=WJF SOFTWARE DEVELOPMENT LTDA - ME`. Impressões atuais:
 
 | | |
 |---|---|
-| SHA-1 | `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25` |
-| SHA-256 | `FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C` |
+| SHA-1 | `38:AC:65:55:E1:2F:76:05:1E:57:53:76:DF:5A:23:28:A3:0B:DE:9D` |
+| SHA-256 | `A2:F3:B2:31:3B:74:4F:FB:20:C9:10:77:18:2A:C2:61:6C:96:77:8C:54:0F:31:83:4A:2D:9D:15:E9:F9:FD:72` |
 
-**Isso não pode ir para a loja**: como o keystore é público, qualquer um consegue assinar um APK com a
-mesma identidade e passar pela verificação de impressão digital do Firebase (Phone Auth, App Check).
-Antes de publicar, gerar um keystore próprio, guardá-lo fora do Git, apontar `signingConfigs.release`
-para ele e registrar o novo SHA-1/SHA-256 no Console.
+**O keystore e o `keystore.properties` ficam fora do Git** (`/android` é gerado pelo prebuild e está no
+`.gitignore`; o keystore mora fora do repositório). Consequências operacionais:
+
+- `expo prebuild --clean` apaga `android/keystore.properties` — recriar antes do próximo build de release.
+- Perder `key_android` ou a senha significa perder a capacidade de publicar atualizações do app na Play
+  Store sob o mesmo `applicationId`. Manter backup offline do arquivo e da senha.
+- Publicando com **Play App Signing**, essa chave vira a *upload key* e o Google passa a assinar o que é
+  entregue ao usuário — nesse caso o SHA-1 da chave do Google também vai para o Firebase Console.
 
 Para conferir a assinatura real de um APK (fonte de verdade — não presuma o keystore):
 ```
-"$ANDROID_HOME/build-tools/36.1.0/apksigner.bat" verify --print-certs dist/truco-mineiro-1.0.0.apk
+"$ANDROID_HOME/build-tools/37.0.0/apksigner.bat" verify --print-certs dist/truco-mineiro-1.1.0.apk
+keytool -printcert -jarfile dist/truco-mineiro-1.1.0.aab
 ```
 
 ## Pendências
-- Registrar no Console o SHA-1/SHA-256 acima (necessário para Phone Auth fora do emulador).
-- Criar o keystore de release próprio e registrar o SHA dele antes da publicação.
+- Registrar no Console o SHA-1/SHA-256 acima (necessário para Phone Auth fora do emulador) e baixar
+  de novo o `google-services.json` — o atual ainda está com `oauth_client: []`.
 - Ligar o App Check (passos acima) antes da publicação.
+
+## Cartas escondidas (mãos e carta virada)
+
+- O estado completo da partida (`gameSessions/{id}/state`) é ilegível para clientes (regra RTDB
+  `.read: false`); cada assento lê só a própria view.
+- A view de cada assento leva apenas as próprias cartas (`myCards`) e contagens das outras mãos.
+- **Carta virada**: a identidade só aparece na view e nos eventos de quem a jogou. `buildViews`
+  monta um lote de `recentEvents` por assento com `eventsForSeat`, e `viewForSeat` projeta a mesa
+  com `playForSeat` — não basta esconder na UI: o payload dos outros assentos vem com `card: null`
+  (coberto por `functions/test/rtdbState.test.ts` e `src/domain/game/__tests__/covered.test.ts`).
+- As mãos só são mostradas a todos quando a mão de onze é recusada (`HAND_REVEALED`), depois de a
+  mão estar decidida.

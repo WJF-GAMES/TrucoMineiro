@@ -26,6 +26,12 @@ jest.mock('@react-native-firebase/remote-config', () => ({
 // Ionicons carrega expo-font/expo-asset, que não existem no ambiente de teste.
 jest.mock('@expo/vector-icons/Ionicons', () => 'Ionicons');
 
+// Tela acesa durante a partida: módulo nativo do Expo, sem runtime sob Jest.
+jest.mock('expo-keep-awake', () => ({
+  activateKeepAwakeAsync: jest.fn(() => Promise.resolve()),
+  deactivateKeepAwake: jest.fn(() => Promise.resolve()),
+}));
+
 // AsyncStorage é módulo nativo: sem isso qualquer teste que toque um store persistido quebra.
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
@@ -47,6 +53,7 @@ jest.mock('react-native-reanimated', () => {
   };
   const presets = [
     'FadeIn', 'FadeInUp', 'FadeInDown', 'FadeOut', 'FadeOutUp', 'FadeOutDown', 'ZoomIn', 'ZoomOut',
+    'FlipInYLeft', 'LinearTransition',
   ];
   const easing = () => (t: number) => t;
   const api: Record<string, unknown> = {

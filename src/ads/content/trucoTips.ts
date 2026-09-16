@@ -14,7 +14,7 @@ export const TRUCO_TIPS: readonly TrucoTip[] = [
   {
     id: 'primeira_rodada',
     title: 'Ganhe a primeira, respire o resto',
-    body: 'Quem leva a primeira rodada joga as outras duas com vantagem: empate na segunda já fecha a mão. Gaste sua carta mais forte na primeira quando a mão for mediana.',
+    body: 'Quem leva a primeira rodada joga as outras duas com vantagem: cangar a segunda já fecha a mão. Gaste sua carta mais forte na primeira quando a mão for mediana.',
   },
   {
     id: 'guardar_manilha',
@@ -24,7 +24,7 @@ export const TRUCO_TIPS: readonly TrucoTip[] = [
   {
     id: 'truco_de_pressao',
     title: 'Trucar não é só ter carta',
-    body: 'Pedir truco logo depois de vencer a primeira rodada assusta: o adversário sabe que um empate já te dá a mão. É o momento em que o blefe custa mais barato.',
+    body: 'Pedir truco logo depois de vencer a primeira rodada assusta: o adversário sabe que um cango já te dá a mão. É o momento em que o blefe custa mais barato.',
   },
   {
     id: 'ler_o_parceiro',
@@ -43,8 +43,8 @@ export const TRUCO_TIPS: readonly TrucoTip[] = [
   },
   {
     id: 'empate_estrategico',
-    title: 'Empate é aliado de quem vem na frente',
-    body: 'Ganhou a primeira? Um empate na segunda já encerra a mão a seu favor. Jogue uma carta que empate com a do adversário em vez de gastar a manilha.',
+    title: 'Cango é aliado de quem vem na frente',
+    body: 'Ganhou a primeira? Cangar a segunda já encerra a mão a seu favor. Jogue uma carta que cangue com a do adversário em vez de gastar a manilha. Mas se a primeira cangar, todo mundo joga a maior carta na seguinte.',
   },
   {
     id: 'correr_na_hora',

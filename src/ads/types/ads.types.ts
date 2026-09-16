@@ -89,6 +89,8 @@ export interface AdRuntimeGuards {
   isCriticalModalOpen: boolean;
   isAppActive: boolean;
   isNavigationStable: boolean;
+  /** A tela em foco não admite anúncio (autenticação, cadastro, partida — `AD_FREE_SCREENS`). */
+  isAdFreeScreen: boolean;
 }
 
 export type InterstitialSkipReason =
@@ -100,6 +102,7 @@ export type InterstitialSkipReason =
   | 'matchmaking_active'
   | 'modal_open'
   | 'navigation_unstable'
+  | 'ad_free_screen'
   | 'full_screen_showing'
   | 'result_already_used_full_screen'
   | 'first_session'

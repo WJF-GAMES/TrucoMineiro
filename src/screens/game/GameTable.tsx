@@ -21,16 +21,20 @@ import type { TableController, TablePlayer } from '@/features/game/types';
 import { relativePosition, type TablePosition } from '@/features/game/seatLayout';
 import { useCeremony } from '@/features/game/useCeremony';
 import { useTrickPresentation } from '@/features/game/useTrickPresentation';
-import { isHolding, type TrickPresentation } from '@/features/game/trickPresentation';
+import { CANGO_COPY, isHolding, type TrickPresentation } from '@/features/game/trickPresentation';
 import { useTurnTimer } from '@/features/game/useTurnTimer';
 import { TURN_TIMING, formatTurnClock } from '@/features/game/turnTimer';
 import { PlayingCard } from './PlayingCard';
-import { DraggableCard } from './DraggableCard';
+import { HandCard } from './HandCard';
 import { TrickCard, type TrickCardStatus } from './TrickCard';
+import { HandRevealOverlay } from './HandRevealOverlay';
+import { useHandReveal } from '@/features/game/handReveal';
+import { useMatchKeepAwake } from '@/features/game/useMatchKeepAwake';
 import { CeremonyStagePill, TableCeremony } from './TableCeremony';
 import { MatchCountdown } from './MatchCountdown';
 import { DealOverlay, type DealTargets, type Point } from './DealOverlay';
 import { haptic } from '@/utils/haptics';
+import { logEvent } from '@/services/firebase/analytics';
 
 interface Props {
   controller: TableController;
@@ -70,6 +74,26 @@ export function GameTable({ controller, onExit }: Props) {
     if (text) setBanner({ text: text.text, color: text.color, key: (banner?.key ?? 0) + 1 });
   }
 
+  // Telemetria do cango (opcional; a regra é do motor). Uma vez por versão: online o mesmo lote
+  // pode chegar em mais de um snapshot.
+  const loggedVersion = useRef<number | null>(null);
+  const version = controller.view?.version ?? null;
+  useEffect(() => {
+    if (version === null || loggedVersion.current === version) return;
+    loggedVersion.current = version;
+    let round = 0;
+    for (const e of controller.recentEvents) {
+      if (e.type === 'ROUND_ENDED') {
+        round = e.round + 1;
+        if (e.winner === null) logEvent('trick_tied', { round });
+      }
+      if (e.type === 'TIE_BREAK_STARTED')
+        logEvent('cango_tiebreak_started', { round: e.round + 1, continued: e.continued });
+      if (e.type === 'HAND_ENDED' && e.result.decidedBy === 'CANGO_TIE_BREAK')
+        logEvent('cango_tiebreak_resolved', { round });
+    }
+  }, [version, controller.recentEvents]);
+
   useEffect(() => {
     if (!banner) return;
     haptic.light();
@@ -83,6 +107,8 @@ export function GameTable({ controller, onExit }: Props) {
    * Precisa ficar antes dos `return` de loading/erro: é um hook.
    */
   const tableLive = status === 'playing' || status === 'reconnecting';
+  // Partida em andamento: a tela não apaga sozinha. Ao terminar/sair, volta o normal.
+  useMatchKeepAwake(tableLive);
   // Abertura da partida: "3, 2, 1, Valendo!" antes do primeiro embaralho. Só na primeira mão,
   // antes de qualquer ação — quem reconecta no meio não vê contagem.
   const [countdownDone, setCountdownDone] = useState(false);
@@ -92,12 +118,15 @@ export function GameTable({ controller, onExit }: Props) {
   // A vaza que fechou a mão anterior ainda está na mesa: a cerimônia da mão nova espera por ela.
   const trick = useTrickPresentation(view, controller.recentEvents);
   const holding = isHolding(trick);
+  // Correram da mão de onze: a mesa mostra as cartas de todos antes da mão seguinte.
+  const reveal = useHandReveal(controller.recentEvents, view?.version ?? null);
+  const revealing = reveal !== null;
   // Cerimônia dirigida pelo motor (SHUFFLING/CUTTING) + distribuição local depois do corte.
-  // Ela espera a vaza anterior sair da mesa e a contagem inicial acabar.
-  const ceremonyHeld = !tableLive || holding || countdownActive;
+  // Ela espera a vaza anterior sair da mesa, a revelação e a contagem inicial acabarem.
+  const ceremonyHeld = !tableLive || holding || revealing || countdownActive;
   // Relógio da jogada local: corre para carta, truco, mão de onze e também para embaralhar e
   // cortar (o estouro fecha o embaralhamento / corta no meio).
-  const myMove = availableActions.length > 0 && !holding && !countdownActive && !busy;
+  const myMove = availableActions.length > 0 && !holding && !revealing && !countdownActive && !busy;
   const deadlineAt = useTurnTimer({
     view,
     mySeat,
@@ -120,13 +149,27 @@ export function GameTable({ controller, onExit }: Props) {
   const { setBotsPaused } = controller;
   // Bots só param durante a distribuição (a mesa está mostrando as cartas voando); no embaralho e
   // no corte eles agem pelo motor como qualquer jogador.
-  const botsHold = countdownActive || (ceremony.active && ceremony.stage === 'deal');
+  const botsHold = countdownActive || revealing || (ceremony.active && ceremony.stage === 'deal');
 
   // Distribuição: as cartas voam do baralho até as posições reais (montinhos e slots da mão).
   // As posições são medidas na hora em que o estágio começa — a mesa está montada por baixo.
   const bodyRef = useRef<View>(null);
   const crossRef = useRef<View>(null);
   const handRef = useRef<View>(null);
+  /**
+   * Trava de jogada dupla: a versão da view em que o jogador tocou uma carta. Até a view mudar,
+   * nenhuma outra carta responde — dois toques rápidos não viram duas jogadas.
+   */
+  const [playLock, setPlayLock] = useState<number | null>(null);
+  const locked = playLock !== null && playLock === view?.version;
+  useEffect(() => {
+    if (!locked) return;
+    // Jogada recusada (rede, versão velha): a vez continua e a mão volta a responder.
+    const t = setTimeout(() => setPlayLock(null), 2500);
+    return () => clearTimeout(t);
+  }, [locked]);
+  /** Modo "virada" armado para a decisão atual (a versão em que foi armado). */
+  const [coverArmedAt, setCoverArmedAt] = useState<number | null>(null);
   /**
    * Altura real da mesa. A cruz de cartas tem tamanho fixo e ficava ancorada em 22% do topo:
    * num aparelho baixo (320x640 e afins) a carta de baixo caía em cima do meu próprio avatar e
@@ -212,13 +255,30 @@ export function GameTable({ controller, onExit }: Props) {
   const us = view.scores[myTeam];
   const them = view.scores[myTeam === 0 ? 1 : 0];
   const isMyTurn = view.phase === 'PLAY' && view.turnSeat === mySeat;
-  const canPlay = availableActions.includes('PLAY_CARD') && !busy && !holding && !tableHold;
+  const canPlay =
+    availableActions.includes('PLAY_CARD') &&
+    !busy &&
+    !holding &&
+    !revealing &&
+    !tableHold &&
+    !locked;
+  // Carta virada: só quando o motor libera (nunca no desempate por cango).
+  const canCover = canPlay && availableActions.includes('PLAY_CARD_COVERED');
+  const coverArmed = canCover && coverArmedAt === view.version;
+  const playCard = (id: string) => {
+    setPlayLock(view.version);
+    setCoverArmedAt(null);
+    void act({ type: coverArmed ? 'PLAY_CARD_COVERED' : 'PLAY_CARD', seat: mySeat, cardId: id });
+  };
   const canTruco = availableActions.includes('REQUEST_TRUCO') && !busy && !holding && !tableHold;
   const responding = availableActions.includes('ACCEPT_TRUCO');
   const maoDeOnze = availableActions.includes('ACCEPT_MAO_DE_ONZE');
   const nextValue =
     view.phase === 'TRUCO_RESPONSE' ? (view.proposedValue ?? 3) : (nextStake(view.handValue) ?? 12);
   const turnPlayer = bySeat.get(view.turnSeat);
+  // Desempate por cango: quais cartas valem vem pronto do motor (só a maior).
+  const tieBreak = view.phase === 'PLAY' ? view.tieBreak : null;
+  const playable = new Set(view.playableCardIds);
 
   const seatAt = (pos: TablePosition) =>
     players.find((p) => relativePosition(p.seat, mySeat) === pos);
@@ -243,7 +303,7 @@ export function GameTable({ controller, onExit }: Props) {
   return (
     <View style={styles.root} testID="screen-game">
       <LinearGradient colors={gradients.table} style={StyleSheet.absoluteFill} />
-      <View style={styles.felt} pointerEvents="none" />
+      <TableFelt top="19%" bottom="40%" />
 
       {/* Header: score, hand value, rounds */}
       <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
@@ -328,10 +388,7 @@ export function GameTable({ controller, onExit }: Props) {
       <View style={styles.body} ref={bodyRef}>
         <View style={styles.tableBody} pointerEvents={tableHold ? 'none' : 'auto'}>
           {/* Table: three opponents around the felt and the played cards in a cross */}
-          <View
-            style={styles.table}
-            onLayout={(e) => setTableHeight(e.nativeEvent.layout.height)}
-          >
+          <View style={styles.table} onLayout={(e) => setTableHeight(e.nativeEvent.layout.height)}>
             <View style={styles.seatTop}>
               <SeatInfo
                 player={top}
@@ -480,14 +537,41 @@ export function GameTable({ controller, onExit }: Props) {
                 testID="trick-result"
               >
                 {trick.resolved.winner === null
-                  ? 'Rodada empatada'
+                  ? trick.resolved.cango
+                    ? CANGO_COPY[trick.resolved.cango]
+                    : 'Cangou!'
                   : trick.resolved.winnerSeat === mySeat
                     ? 'Você venceu a rodada!'
                     : `${bySeat.get(trick.resolved.winnerSeat)?.nickname ?? '...'} venceu a rodada`}
               </AppText>
+            ) : tieBreak ? (
+              <AppText
+                variant="smallBold"
+                color={colors.gold}
+                center
+                testID="tiebreak-status"
+                accessibilityLiveRegion="polite"
+              >
+                {isMyTurn
+                  ? 'Cangou! Jogue sua maior carta.'
+                  : view.currentRound.length === 0 && view.turnSeat === tieBreak.causedBySeat
+                    ? `${turnPlayer?.nickname ?? '...'} abre o desempate. Vale a maior carta.`
+                    : `Desempate: vez de ${turnPlayer?.nickname ?? '...'}. Vale a maior carta.`}
+              </AppText>
+            ) : revealing ? (
+              <AppText variant="smallBold" color={colors.gold} center testID="reveal-status">
+                Correram da mão de onze! Veja as cartas.
+              </AppText>
             ) : isMyTurn ? (
-              <AppText variant="smallBold" color={colors.primaryBright} center>
-                Sua vez! Escolha uma carta.
+              <AppText
+                variant="smallBold"
+                color={coverArmed ? colors.gold : colors.primaryBright}
+                center
+                accessibilityLiveRegion="polite"
+              >
+                {coverArmed
+                  ? 'Toque na carta que vai virada.'
+                  : 'Sua vez! Toque numa carta para jogar.'}
               </AppText>
             ) : (
               <AppText variant="small" color={colors.textSecondary} center>
@@ -509,22 +593,25 @@ export function GameTable({ controller, onExit }: Props) {
               pointerEvents="none"
             />
             <View style={styles.hand} testID="my-hand" ref={handRef}>
-              {handCards.map((c) => (
-                <Animated.View key={cardId(c)} layout={LinearTransition.duration(220)}>
-                  <DraggableCard
-                    card={c}
-                    width={82}
-                    onPlay={
-                      canPlay
-                        ? () => act({ type: 'PLAY_CARD', seat: mySeat, cardId: cardId(c) })
-                        : undefined
-                    }
-                    disabled={!canPlay}
-                    dimmed={!canPlay && view.phase === 'PLAY'}
-                    highlighted={canPlay}
-                  />
-                </Animated.View>
-              ))}
+              {handCards.map((c) => {
+                const id = cardId(c);
+                // No desempate o motor só libera a maior carta: as outras nem chegam a ser tocáveis.
+                const allowed = playable.has(id);
+                const playThis = canPlay && allowed;
+                return (
+                  <Animated.View key={id} layout={LinearTransition.duration(220)}>
+                    <HandCard
+                      card={c}
+                      width={82}
+                      onPlay={playThis ? () => playCard(id) : undefined}
+                      dimmed={(!canPlay && view.phase === 'PLAY') || !allowed}
+                      highlighted={playThis && !coverArmed}
+                      required={!!tieBreak && allowed}
+                      coverArmed={coverArmed}
+                    />
+                  </Animated.View>
+                );
+              })}
             </View>
 
             {/* Actions come strictly from availableActions */}
@@ -575,16 +662,36 @@ export function GameTable({ controller, onExit }: Props) {
                     testID="action-run"
                   />
                 </>
-              ) : canTruco ? (
-                <SecondaryButton
-                  label={CALL_LABELS[nextValue] ?? `Pedir ${nextValue}`}
-                  size="md"
-                  icon="flame"
-                  style={styles.trucoBtn}
-                  onPress={() => act({ type: 'REQUEST_TRUCO', seat: mySeat })}
-                  disabled={busy}
-                  testID="action-truco"
-                />
+              ) : canTruco || canCover ? (
+                <>
+                  {canTruco ? (
+                    <SecondaryButton
+                      label={CALL_LABELS[nextValue] ?? `Pedir ${nextValue}`}
+                      size="md"
+                      icon="flame"
+                      style={styles.trucoBtn}
+                      onPress={() => act({ type: 'REQUEST_TRUCO', seat: mySeat })}
+                      disabled={busy}
+                      testID="action-truco"
+                    />
+                  ) : null}
+                  {canCover ? (
+                    // Alterna o modo: armado, o próximo toque numa carta a joga virada.
+                    <SecondaryButton
+                      label={coverArmed ? 'Cancelar virada' : 'Jogar virada'}
+                      size="md"
+                      icon={icons.coveredCard}
+                      style={coverArmed ? styles.coverBtnArmed : styles.coverBtn}
+                      onPress={() => setCoverArmedAt(coverArmed ? null : view.version)}
+                      accessibilityLabel={
+                        coverArmed
+                          ? 'Cancelar: a próxima carta sai aberta'
+                          : 'Jogar virada: a próxima carta tocada sai com a face para baixo e vale menos que qualquer carta aberta'
+                      }
+                      testID="action-cover"
+                    />
+                  ) : null}
+                </>
               ) : null}
             </View>
           </View>
@@ -598,7 +705,7 @@ export function GameTable({ controller, onExit }: Props) {
             exiting={FadeOut.duration(260)}
           >
             <LinearGradient colors={gradients.table} style={StyleSheet.absoluteFill} />
-            <View style={styles.feltOverlay} pointerEvents="none" />
+            <TableFelt top="8%" bottom="34%" />
             <TableCeremony
               ceremony={ceremony}
               players={players}
@@ -615,6 +722,10 @@ export function GameTable({ controller, onExit }: Props) {
             mySeat={mySeat}
             myCards={view.myCards}
           />
+        ) : null}
+
+        {reveal ? (
+          <HandRevealOverlay hands={reveal.hands} players={players} mySeat={mySeat} />
         ) : null}
 
         {countdownActive ? <MatchCountdown onDone={finishCountdown} /> : null}
@@ -635,6 +746,21 @@ export function GameTable({ controller, onExit }: Props) {
           </AppText>
         </Animated.View>
       ) : null}
+    </View>
+  );
+}
+
+/**
+ * O pano da mesa.
+ *
+ * Eram duas elipses chapadas (uma na mesa, outra na cerimônia) com uma borda fina por cima do
+ * fundo da tela — de longe lia como uma mancha, não como uma mesa. Agora são três camadas:
+ * o anel escuro em volta (a beirada), o pano com a luz caindo de cima, e o fio claro na borda.
+ */
+function TableFelt({ top, bottom }: { top: `${number}%`; bottom: `${number}%` }) {
+  return (
+    <View style={[styles.feltRail, { top, bottom }]} pointerEvents="none">
+      <LinearGradient colors={gradients.felt} style={styles.feltCloth} />
     </View>
   );
 }
@@ -738,8 +864,10 @@ function PlayedSlot({
       : null;
   return (
     <TrickCard
-      key={cardId(play.card)}
+      // Carta virada de outro assento não tem id: a vaza (`trick.round`) diferencia as jogadas.
+      key={play.card ? cardId(play.card) : `covered-${play.seat}-${trick.round}`}
       card={play.card}
+      covered={Boolean(play.covered)}
       width={width}
       from={pos}
       status={status}
@@ -777,7 +905,7 @@ function describeEvent(
     // ROUND_ENDED não vira faixa: a própria mesa mostra a carta vencedora e a linha de status
     // diz quem levou — a faixa só cobriria as cartas.
     case 'HAND_ENDED':
-      if (e.result.winner === null) return { text: 'MÃO EMPATADA', color: colors.gold };
+      if (e.result.winner === null) return { text: 'MÃO CANGADA', color: colors.gold };
       return e.result.winner === myTeam
         ? { text: `+${e.result.points} pra nós!`, color: colors.primaryBright }
         : { text: `+${e.result.points} pra eles`, color: colors.dangerSoft };
@@ -796,17 +924,18 @@ const SEAT_ME_SPACE = 88;
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bgTop },
-  felt: {
+  feltRail: {
     position: 'absolute',
-    left: '7%',
-    right: '7%',
-    top: '19%',
-    bottom: '40%',
+    left: '6%',
+    right: '6%',
     borderRadius: 180,
-    backgroundColor: 'rgba(20, 110, 70, 0.2)',
-    borderWidth: 2,
-    borderColor: 'rgba(120, 220, 160, 0.14)',
+    // A beirada: um anel escuro com um fio de luz por fora, e o pano recuado dentro dele.
+    backgroundColor: colors.feltRail,
+    borderWidth: 1,
+    borderColor: colors.feltEdge,
+    padding: 5,
   },
+  feltCloth: { flex: 1, borderRadius: 176 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -838,17 +967,7 @@ const styles = StyleSheet.create({
 
   body: { flex: 1 },
   // Cópia do feltro para o overlay da cerimônia (o do root fica coberto pelo gradiente opaco).
-  feltOverlay: {
-    position: 'absolute',
-    left: '7%',
-    right: '7%',
-    top: '8%',
-    bottom: '34%',
-    borderRadius: 180,
-    backgroundColor: 'rgba(20, 110, 70, 0.2)',
-    borderWidth: 2,
-    borderColor: 'rgba(120, 220, 160, 0.14)',
-  },
+
   tableBody: { flex: 1 },
   table: { flex: 1, position: 'relative' },
   seatTop: { position: 'absolute', top: 4, left: 0, right: 0, alignItems: 'center' },
@@ -884,10 +1003,12 @@ const styles = StyleSheet.create({
   crossRight: { position: 'absolute', right: 0, top: CROSS / 2 - 39 },
   crossBottom: { position: 'absolute', bottom: 0, left: CROSS / 2 - 30 },
   slot: {
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: 'rgba(255,255,255,0.12)',
+    // O tracejado branco lia como rascunho de layout. Um retângulo de cantos arredondados, um
+    // tom mais fundo que o pano, lê como o lugar onde a carta vai pousar.
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.slotEdge,
+    backgroundColor: colors.slotFill,
   },
 
   // Abaixo da cruz de cartas e acima do meu avatar: a faixa nunca cobre uma carta jogada.
@@ -942,6 +1063,14 @@ const styles = StyleSheet.create({
   // somavam mais que a tela em aparelhos de 360dp e o "Correr" saía pela borda. Dividindo a
   // faixa disponível o conjunto cabe em qualquer largura, sem esconder nenhuma ação.
   actionBtn: { flex: 1, minWidth: 0, maxWidth: 160 },
+  coverBtn: { flex: 1, minWidth: 0, maxWidth: 200 },
+  coverBtnArmed: {
+    flex: 1,
+    minWidth: 0,
+    maxWidth: 200,
+    borderColor: colors.gold,
+    backgroundColor: 'rgba(120, 90, 0, 0.45)',
+  },
   trucoBtn: {
     flex: 1,
     minWidth: 0,

@@ -29,12 +29,15 @@ export function Screen({
   testID,
 }: PropsWithChildren<Props>) {
   const insets = useSafeAreaInsets();
-  const tabBarSpace = withTabBar ? spacing.tabBarHeight + insets.bottom : 0;
-  const inner = [
-    padded && styles.padded,
-    { paddingBottom: bottomInset + tabBarSpace + spacing.xl },
-    contentStyle,
-  ];
+  // Sem a Bottom Navigation, ninguém mais afasta o conteúdo da barra de navegação do sistema: o
+  // último botão (ex.: "Fechar sala") ficava atrás dela no Android.
+  const tabBarSpace = withTabBar ? spacing.tabBarHeight + insets.bottom : insets.bottom;
+  // A Bottom Navigation ocupa o próprio espaço embaixo da tela (não fica por cima dela). Numa
+  // tela que não rola — as que têm uma FlatList própria, como Liga e Amigos — reservar a altura
+  // da barra no container virava uma faixa morta: a lista terminava antes dela e as últimas
+  // linhas pareciam cortadas. Ali o espaço final fica por conta da própria lista.
+  const bottom = !scroll && withTabBar ? bottomInset : bottomInset + tabBarSpace + spacing.xl;
+  const inner = [padded && styles.padded, { paddingBottom: bottom }, contentStyle];
   return (
     <View style={styles.root} testID={testID}>
       <StatusBar style="light" />

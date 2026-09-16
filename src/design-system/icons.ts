@@ -72,6 +72,8 @@ export const icons = {
   leaf: 'leaf' as IoniconName,
   flame: 'flame' as IoniconName,
   skull: 'skull' as IoniconName,
+  /** Jogar carta virada ("no escuro"). */
+  coveredCard: 'eye-off' as IoniconName,
 
   // More / settings
   store: 'cart' as IoniconName,

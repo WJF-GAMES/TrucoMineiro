@@ -28,11 +28,26 @@ describe('AdService.canShowFullScreenAd', () => {
       criticalModalCount: 0,
       isAppActive: true,
       isNavigationStable: true,
+      currentScreen: 'Main',
     });
   });
 
   it('libera quando o app está parado numa tela comum', () => {
     expect(AdService.canShowFullScreenAd()).toBe(true);
+  });
+
+  it.each(['Splash', 'Intro', 'Login', 'Otp', 'Register', 'Game', 'Matchmaking', 'Lobby'])(
+    'bloqueia na tela sem anúncio %s',
+    (screen) => {
+      useAdStore.getState().setCurrentScreen(screen);
+      expect(AdService.canShowFullScreenAd()).toBe(false);
+      expect(AdService.rewardedDecision()).toEqual({ show: false, reason: 'ad_free_screen' });
+    },
+  );
+
+  it('sem tela conhecida (navegação montando) também bloqueia', () => {
+    useAdStore.getState().setCurrentScreen(null);
+    expect(AdService.canShowFullScreenAd()).toBe(false);
   });
 
   it('bloqueia durante a partida', () => {
@@ -84,6 +99,7 @@ describe('showInterstitial durante gameplay', () => {
       isGameActive: true,
       isAppActive: true,
       isNavigationStable: true,
+      currentScreen: 'Main',
       criticalModalCount: 0,
       isFullScreenAdShowing: false,
       isMatchmakingActive: false,

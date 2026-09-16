@@ -187,6 +187,25 @@ describe('useContactsSync — lotes', () => {
     expect(functionsService.matchPhoneContacts).toHaveBeenCalledTimes(1);
   });
 
+  it('ao reabrir a tela, a sincronização automática usa o cache e não vai ao servidor', async () => {
+    contactsService.readDeviceContacts.mockResolvedValue(agendaOf(5));
+    const first = await setup();
+    await act(async () => {
+      await first.result.current.sync();
+    });
+    expect(functionsService.matchPhoneContacts).toHaveBeenCalledTimes(1);
+    await first.unmount();
+
+    // Tela montada de novo e sincronização disparada logo no foco, antes do cache terminar de
+    // carregar: ela espera o cache e reconhece que a agenda é a mesma.
+    const second = await setup();
+    await act(async () => {
+      await second.result.current.sync();
+    });
+    expect(functionsService.matchPhoneContacts).toHaveBeenCalledTimes(1);
+    expect(second.result.current.syncedAt).not.toBeNull();
+  });
+
   it('refaz a busca quando a agenda muda', async () => {
     contactsService.readDeviceContacts.mockResolvedValue(agendaOf(5));
     const { result } = await setup();
