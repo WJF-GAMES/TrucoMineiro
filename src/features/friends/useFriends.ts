@@ -19,7 +19,10 @@ const PRESENCE_RANK: Record<PresenceState, number> = { online: 0, in_match: 1, o
 /** Amigos do usuário com o perfil e a presença (online / na partida / offline). */
 export function useFriends(uid: string | undefined) {
   const [friendIds, setFriendIds] = useState<string[] | null>(null);
-  const [entries, setEntries] = useState<Record<string, FriendEntry>>({});
+  const [profiles, setProfiles] = useState<Record<string, Profile>>({});
+  // Separada do perfil: a presença costuma chegar antes do `getProfile` (já está em cache quando o
+  // contato vira amigo) e, guardada junto dele, era descartada — o amigo ficava "Offline".
+  const [presences, setPresences] = useState<Record<string, Presence | null>>({});
   const [blockedIds, setBlockedIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,7 +32,8 @@ export function useFriends(uid: string | undefined) {
   if (uid !== prevUid) {
     setPrevUid(uid);
     setFriendIds(null);
-    setEntries({});
+    setProfiles({});
+    setPresences({});
     setBlockedIds([]);
     setError(null);
   }
@@ -54,13 +58,10 @@ export function useFriends(uid: string | undefined) {
     const unsubs = friendIds.map((id) => {
       getProfile(id).then((p) => {
         if (!active || !p) return;
-        setEntries((prev) => ({
-          ...prev,
-          [id]: { profile: p, presence: prev[id]?.presence ?? null },
-        }));
+        setProfiles((prev) => ({ ...prev, [id]: p }));
       });
       return subscribePresence(id, (presence) =>
-        setEntries((prev) => (prev[id] ? { ...prev, [id]: { ...prev[id]!, presence } } : prev)),
+        setPresences((prev) => ({ ...prev, [id]: presence })),
       );
     });
     return () => {
@@ -72,15 +73,16 @@ export function useFriends(uid: string | undefined) {
   const friends = useMemo(
     () =>
       (friendIds ?? [])
-        .map((id) => entries[id])
-        .filter((e): e is FriendEntry => Boolean(e))
+        .flatMap((id): FriendEntry[] =>
+          profiles[id] ? [{ profile: profiles[id], presence: presences[id] ?? null }] : [],
+        )
         .sort(
           (a, b) =>
             PRESENCE_RANK[a.presence?.state ?? 'offline'] -
               PRESENCE_RANK[b.presence?.state ?? 'offline'] ||
             a.profile.nickname.localeCompare(b.profile.nickname, 'pt-BR'),
         ),
-    [friendIds, entries],
+    [friendIds, profiles, presences],
   );
 
   return {
