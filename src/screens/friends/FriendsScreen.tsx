@@ -18,6 +18,7 @@ import {
   GameHeader,
   MenuGroup,
   MenuItem,
+  PillButton,
   PrimaryButton,
   Screen,
   SearchField,
@@ -26,16 +27,17 @@ import {
 } from '@/components';
 import { useAuthStore } from '@/stores/authStore';
 import { useProfileStore } from '@/stores/profileStore';
-import { searchProfiles } from '@/services/firebase/firestore';
 import {
   blockUser,
   cancelFriendRequest,
   createFriendInviteToken,
+  createFriendRoom,
   createRoom,
   FunctionsError,
   inviteFriendToRoom,
   removeFriend,
   respondFriendRequest,
+  searchPlayers,
   sendFriendRequest,
 } from '@/services/firebase/functions';
 import { flag } from '@/services/firebase/remoteConfig';
@@ -50,6 +52,7 @@ import { useRoomInvites } from '@/features/friends/useRoomInvites';
 import type { MatchedContact } from '@/features/friends/contactsMatch';
 import { buildFriendsDirectory, type DirectoryEntry } from '@/features/friends/friendsDirectory';
 import { usePresenceMap } from '@/features/friends/usePresenceMap';
+import { isSelectionLocked, toggleFriend } from '@/features/friends/friendSelection';
 import type { FriendRequest, Profile, RoomInvite } from '@/domain/model/types';
 import type { TabScreenProps } from '@/navigation/types';
 import { FriendsQuickActions } from './components/FriendsQuickActions';
@@ -66,12 +69,19 @@ import { MyQrCodeSheet } from './components/MyQrCodeSheet';
 import { AddManuallySheet } from './components/AddManuallySheet';
 import { FriendSheet } from './components/FriendSheet';
 import { BlockedSheet } from './components/BlockedSheet';
+import { FriendSelectionBar } from './components/FriendSelectionBar';
 
 type Tab = 'friends' | 'requests' | 'search';
 
 /** Cada linha da FlatList. Seções e cards viajam na mesma lista para nada sair da virtualização. */
 type Item =
-  | { kind: 'section'; key: string; title: string; trailing?: string }
+  | {
+      kind: 'section';
+      key: string;
+      title: string;
+      trailing?: string;
+      action?: { label: string; onPress: () => void; testID: string };
+    }
   | { kind: 'node'; key: string; node: React.ReactNode }
   /** Uma pessoa da lista única: amigo, contato que já joga ou contato para convidar. */
   | { kind: 'person'; key: string; person: DirectoryEntry; first: boolean; last: boolean }
@@ -104,6 +114,10 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
   const [blockedOpen, setBlockedOpen] = useState(false);
   /** Amigo com a ficha aberta. O dado sai sempre da lista ao vivo, não de uma cópia. */
   const [openFriendUid, setOpenFriendUid] = useState<string | null>(null);
+  /** Montando uma partida: amigos marcados, na ordem da escolha (ela define os assentos). */
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [creatingRoom, setCreatingRoom] = useState(false);
   const [inviteLimit, setInviteLimit] = useState(INVITE_PAGE);
   const inviteLink = useRef<string | null>(null);
   const friendsEnabled = flag('friends_enabled');
@@ -209,7 +223,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
     setSearching(true);
     logEvent('friends_search_used');
     try {
-      const found = await searchProfiles(term);
+      const found = await searchPlayers(term);
       // Eu mesmo e quem eu bloqueei ficam fora: nenhum dos dois tem ação possível aqui.
       setResults(found.filter((p) => p.id !== uid && !blockedSet.has(p.id)));
     } catch {
@@ -303,6 +317,56 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
   );
 
   const country = countryOf(user?.phoneNumber);
+
+  /**
+   * Sala com amigos: o servidor grava a sala com as vagas reservadas e só então manda os convites
+   * (lista + push). Quem não entrar a tempo vira IA.
+   */
+  const inviteFriends = useCallback(
+    async (friendUids: string[]) => {
+      if (friendUids.length === 0 || creatingRoom) return;
+      setCreatingRoom(true);
+      if (friendUids.length === 1) setBusy(friendUids[0]!);
+      try {
+        const { code } = await createFriendRoom(friendUids);
+        logEvent('game_invite_created', { friends: friendUids.length });
+        logEvent('game_invite_sent', { friends: friendUids.length });
+        logEvent('room_invite_sent', { source: 'friend' });
+        setOpenFriendUid(null);
+        setSelecting(false);
+        setSelected([]);
+        toast.success(
+          friendUids.length === 1 ? 'Convite enviado' : 'Convites enviados',
+          'Quem não entrar a tempo é substituído pela IA.',
+        );
+        navigation.navigate('Lobby', { code });
+      } catch (e) {
+        toast.error(
+          'Não foi possível convidar',
+          e instanceof FunctionsError ? e.message : undefined,
+        );
+      } finally {
+        setCreatingRoom(false);
+        setBusy(null);
+      }
+    },
+    [navigation, creatingRoom],
+  );
+
+  const toggleSelected = useCallback((friendUid: string) => {
+    setSelected((current) => {
+      const { next, limited } = toggleFriend(current, friendUid);
+      if (limited) toast.info('Máximo de 3 amigos', 'Desmarque alguém para escolher outro.');
+      return next;
+    });
+  }, []);
+
+  const startSelecting = useCallback(() => {
+    setSelected([]);
+    setSelecting(true);
+    setQuery('');
+  }, []);
+
   /**
    * Cria a sala, chama o jogador e vai para o lobby. `contactId` vem quando é um contato da agenda
    * que ainda não é amigo: os números dele são lidos da agenda agora (nada fica guardado) e o
@@ -310,6 +374,8 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
    */
   const playWith = useCallback(
     async (friendUid: string, contactId?: string) => {
+      // Amigo: mesma sala dos convites em grupo (vaga reservada, push, IA se não entrar).
+      if (!contactId) return inviteFriends([friendUid]);
       setBusy(friendUid);
       try {
         let phones: string[] | undefined;
@@ -338,7 +404,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
         setBusy(null);
       }
     },
-    [navigation, country],
+    [navigation, country, inviteFriends],
   );
 
   const unfriend = useCallback(
@@ -506,6 +572,40 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
 
     // --- Aba "Meus Amigos" ---
 
+    // Montando uma partida: só amigos (o convite para a sala é deles), online primeiro.
+    if (selecting) {
+      const friendsOnly = directory.people.filter((p) => p.kind === 'friend');
+      items.push({
+        kind: 'section',
+        key: 's-select',
+        title: 'Escolha até 3 amigos',
+        trailing: `${selected.length}/3`,
+      });
+      if (friendsOnly.length === 0) {
+        items.push({
+          kind: 'node',
+          key: 'select-empty',
+          node: (
+            <StateView
+              kind="empty"
+              icon="people"
+              title={query ? 'Nada com esse nome' : 'Nenhum amigo ainda'}
+              message="Só amigos podem ser chamados para a sua sala."
+              compact
+            />
+          ),
+        });
+      }
+      pushRows(friendsOnly, (person, first, last) => ({
+        kind: 'person',
+        key: person.key,
+        person,
+        first,
+        last,
+      }));
+      return items;
+    }
+
     // Convites de sala vêm primeiro: são o único item da tela com prazo para responder.
     if (roomInvites.length > 0) {
       items.push({
@@ -531,11 +631,16 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
     const visibleInvites = invites.slice(0, inviteLimit);
     const rows = [...directory.people, ...visibleInvites];
 
+    const hasFriends = directory.people.some((p) => p.kind === 'friend');
     items.push({
       kind: 'section',
       key: 's-people',
       title: contactsShown ? 'Amigos e contatos' : 'Meus amigos',
       trailing: `${directory.people.length + invites.length}`,
+      // Atalho para montar a partida com até 3 amigos de uma vez.
+      action: hasFriends
+        ? { label: 'Jogar com amigos', onPress: startSelecting, testID: 'friends-select-start' }
+        : undefined,
     });
     if (contactsShown) {
       items.push({
@@ -670,6 +775,9 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
     shareInvite,
     roomInvites,
     blockedIds,
+    selecting,
+    selected.length,
+    startSelecting,
   ]);
 
   const renderItem = useCallback(
@@ -678,10 +786,23 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
         case 'section':
           return (
             <View style={styles.sectionRow}>
-              <AppText variant="h3" style={styles.sectionTitle}>
-                {item.title}
-              </AppText>
-              {item.trailing ? (
+              <View style={styles.sectionTitleRow}>
+                <AppText variant="h3" style={styles.sectionTitle} numberOfLines={1}>
+                  {item.title}
+                </AppText>
+                {item.action && item.trailing ? (
+                  <AppText variant="small" color={colors.textSecondary}>
+                    {item.trailing}
+                  </AppText>
+                ) : null}
+              </View>
+              {item.action ? (
+                <PillButton
+                  label={item.action.label}
+                  onPress={item.action.onPress}
+                  testID={item.action.testID}
+                />
+              ) : item.trailing ? (
                 <AppText variant="small" color={colors.textSecondary}>
                   {item.trailing}
                 </AppText>
@@ -702,6 +823,15 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
                   divider={!item.last}
                   onPlay={playWith}
                   onOpen={openFriend}
+                  selection={
+                    selecting
+                      ? {
+                          selected: selected.includes(person.entry.profile.id),
+                          locked: isSelectionLocked(selected, person.entry.profile.id),
+                          onToggle: toggleSelected,
+                        }
+                      : undefined
+                  }
                 />
               ) : person.kind === 'match' ? (
                 <ContactMatchRow
@@ -801,6 +931,9 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
       acceptRoomInvite,
       declineRoomInvite,
       contactPresence,
+      selecting,
+      selected,
+      toggleSelected,
     ],
   );
 
@@ -823,6 +956,8 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
             setTab(t);
             setQuery('');
             setResults(null);
+            setSelecting(false);
+            setSelected([]);
           }}
         />
       </View>
@@ -937,7 +1072,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
         windowSize={9}
         removeClippedSubviews
         refreshControl={
-          tab === 'friends' && contacts.permission === 'granted' && synced ? (
+          !selecting && tab === 'friends' && contacts.permission === 'granted' && synced ? (
             <RefreshControl
               refreshing={contacts.syncing}
               onRefresh={() => void contacts.sync({ force: true })}
@@ -948,6 +1083,17 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
           ) : undefined
         }
       />
+      {selecting && tab === 'friends' ? (
+        <FriendSelectionBar
+          count={selected.length}
+          busy={creatingRoom}
+          onConfirm={() => void inviteFriends(selected)}
+          onCancel={() => {
+            setSelecting(false);
+            setSelected([]);
+          }}
+        />
+      ) : null}
       <ContactsSyncSheet
         visible={syncOpen}
         onClose={() => setSyncOpen(false)}
@@ -1025,7 +1171,14 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
-  sectionTitle: { fontSize: 17 },
+  sectionTitle: { fontSize: 17, flexShrink: 1 },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flex: 1,
+    marginRight: spacing.sm,
+  },
   privacy: { marginBottom: spacing.sm },
   syncing: { marginBottom: spacing.sm },
   more: { marginTop: spacing.md, alignSelf: 'center', minWidth: 220 },

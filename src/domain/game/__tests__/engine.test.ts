@@ -54,7 +54,8 @@ describe('createMatch', () => {
 describe('turn order and validation', () => {
   it('only the seat in turn can play, and only its own cards', () => {
     const m = dealt(1);
-    expect(getAvailableActions(m, 0)).toEqual(['PLAY_CARD', 'PLAY_CARD_COVERED', 'REQUEST_TRUCO']);
+    // Primeira rodada da mão: carta virada ainda não é permitida.
+    expect(getAvailableActions(m, 0)).toEqual(['PLAY_CARD', 'REQUEST_TRUCO']);
     expect(getAvailableActions(m, 1)).toEqual([]);
     const foreign = cardId(m.hand.hands[1]![0]!);
     expect(() => applyAction(m, { type: 'PLAY_CARD', seat: 1, cardId: foreign })).toThrow(
@@ -163,9 +164,9 @@ describe('truco', () => {
     expect(s.hand.phase).toBe('PLAY');
     expect(s.hand.turnSeat).toBe(0);
     // Same team cannot raise again while the other team has not raised
-    expect(getAvailableActions(s, 0)).toEqual(['PLAY_CARD', 'PLAY_CARD_COVERED']);
+    expect(getAvailableActions(s, 0)).toEqual(['PLAY_CARD']);
     const s2 = applyAction(s, { type: 'PLAY_CARD', seat: 0, cardId: cardId(s.hand.hands[0]![0]!) });
-    expect(getAvailableActions(s2, 1)).toEqual(['PLAY_CARD', 'PLAY_CARD_COVERED', 'REQUEST_TRUCO']);
+    expect(getAvailableActions(s2, 1)).toEqual(['PLAY_CARD', 'REQUEST_TRUCO']);
   });
 
   it('running concedes the current value to the requester', () => {
@@ -250,7 +251,7 @@ describe('mão de onze', () => {
     expect(accepted.hand.phase).toBe('PLAY');
     // Nobody can call truco in a mão de onze hand
     const seat = accepted.hand.turnSeat as Seat;
-    expect(getAvailableActions(accepted, seat)).toEqual(['PLAY_CARD', 'PLAY_CARD_COVERED']);
+    expect(getAvailableActions(accepted, seat)).toEqual(['PLAY_CARD']);
   });
 });
 

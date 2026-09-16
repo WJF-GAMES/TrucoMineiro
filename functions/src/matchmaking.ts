@@ -88,7 +88,7 @@ export async function tryFormTable(allowBots: boolean): Promise<void> {
       };
     });
     const missing = 4 - Object.keys(players).length;
-    if (missing > 0) Object.assign(players, botPlayers(players, missing));
+    if (missing > 0) Object.assign(players, botPlayers(players, missing, now()));
     const full: Room = { ...room, players, status: 'starting', updatedAt: now() };
     await rtdb.ref(`rooms/${room.code}`).set(full);
     const updates: Record<string, unknown> = {};

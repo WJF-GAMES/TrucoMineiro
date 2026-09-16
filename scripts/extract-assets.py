@@ -73,7 +73,6 @@ save(circle(crop(sq(799, 941, 26))), 'avatars/tiao.png')          # Loja (óculo
 # Introdução: arte sem nenhum elemento de UI (sem status bar do mockup, sem cards).
 save(crop((13, 28, 313, 380)), 'hero/intro_hero.png')
 save(crop((326, 14, 617, 132)), 'hero/login_header.png')          # logo + vilarejo (Login)
-save(feather_edges(crop((362, 395, 580, 482)), 14), 'hero/login_cards.png')
 save(key_dark(crop((715, 14, 826, 64)), 40, 120), 'hero/logo.png')  # logo sobre fundo escuro
 
 # ---- Game mode illustrations
@@ -82,7 +81,6 @@ save(crop((1068, 116, 1196, 236)), 'cards/mode_online.png')
 
 # ---- Banners
 save(crop((173, 686, 304, 762)), 'banners/amigos_turma.png')
-save(crop((757, 627, 901, 750)), 'banners/loja_personalize.png')
 save(crop((1234, 430, 1511, 521)), 'banners/temporada_minas.png')
 
 # (Moedas e gemas não existem mais no produto: os recortes coins_*/coin/gem foram removidos.)

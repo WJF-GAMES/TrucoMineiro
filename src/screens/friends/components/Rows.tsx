@@ -74,6 +74,14 @@ export function ContactInitials({ name, size = 46 }: { name: string; size?: numb
 
 // --- Amigo -------------------------------------------------------------------
 
+/** Modo "escolher amigos para jogar": a linha inteira marca/desmarca. */
+export interface FriendRowSelection {
+  selected: boolean;
+  /** Limite atingido e esta linha não está marcada. */
+  locked: boolean;
+  onToggle: (uid: string) => void;
+}
+
 export const FriendRow = memo(function FriendRow({
   entry,
   busy,
@@ -81,6 +89,7 @@ export const FriendRow = memo(function FriendRow({
   onPlay,
   onOpen,
   contactName,
+  selection,
 }: {
   entry: FriendEntry;
   /** Nome salvo na agenda, quando o amigo também é um contato (como o usuário o reconhece). */
@@ -89,9 +98,53 @@ export const FriendRow = memo(function FriendRow({
   divider: boolean;
   onPlay: (uid: string) => void;
   onOpen: (uid: string) => void;
+  selection?: FriendRowSelection;
 }) {
   const { profile, presence } = entry;
   const state = presence?.state ?? 'offline';
+  if (selection) {
+    const { selected, locked, onToggle } = selection;
+    const status = STATUS_LABEL[state].toLowerCase();
+    return (
+      <Row divider={divider} testID={`friend-${profile.id}`}>
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: selected, disabled: locked }}
+          accessibilityLabel={`${profile.nickname}, ${status}, ${
+            selected
+              ? 'selecionado para convite'
+              : locked
+                ? 'limite de 3 atingido'
+                : 'não selecionado'
+          }`}
+          onPress={() => onToggle(profile.id)}
+          style={[styles.identity, locked && styles.locked]}
+          testID={`friend-select-${profile.id}`}
+        >
+          <PlayerAvatar avatarId={profile.avatarId} size={46} status={state} />
+          <View style={styles.texts}>
+            <AppText variant="h3" numberOfLines={1} style={styles.name}>
+              {profile.nickname}
+            </AppText>
+            <View style={styles.statusRow}>
+              <View style={[styles.dot, { backgroundColor: STATUS_COLOR[state] }]} />
+              <AppText
+                variant="small"
+                color={state === 'online' ? colors.online : colors.textSecondary}
+              >
+                {state === 'in_match' ? 'Em partida agora' : STATUS_LABEL[state]}
+              </AppText>
+            </View>
+          </View>
+          <Ionicons
+            name={selected ? icons.checkboxOn : icons.checkboxOff}
+            size={26}
+            color={selected ? colors.primaryBright : colors.textSecondary}
+          />
+        </Pressable>
+      </Row>
+    );
+  }
   return (
     <Row divider={divider} testID={`friend-${profile.id}`}>
       {/* A linha inteira abre a ficha do amigo; o pill continua sendo o caminho curto para jogar. */}
@@ -424,6 +477,7 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   more: { paddingLeft: 8, paddingVertical: 6 },
+  locked: { opacity: 0.45 },
   stacked: { paddingHorizontal: 10, paddingVertical: 10 },
   stackedIdentity: { flexDirection: 'row', alignItems: 'center' },
   // Ações alinhadas à direita, a secundária primeiro: aceitar fica na quina do polegar.

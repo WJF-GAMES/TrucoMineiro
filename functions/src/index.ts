@@ -3,8 +3,29 @@ import { REGION } from './lib/admin';
 
 setGlobalOptions({ region: REGION, maxInstances: 20 });
 
-export { bootstrapUser, updateProfile, registerDevice, deleteAccount } from './users';
-export { createRoom, joinRoom, leaveRoom, setReady, fillRoomWithBots, startMatch } from './rooms';
+export {
+  bootstrapUser,
+  updateProfile,
+  registerDevice,
+  unregisterDevice,
+  deleteAccount,
+  onAuthUserDeleted,
+  searchPlayers,
+} from './users';
+export {
+  createRoom,
+  createFriendRoom,
+  joinRoom,
+  respondRoomInvite,
+  leaveRoom,
+  setReady,
+  fillRoomWithBots,
+  startMatch,
+  resolveLobbyTimeout,
+  inviteToRoom,
+  removeRoomInvite,
+  sweepRooms,
+} from './rooms';
 export { startMatchmaking, cancelMatchmaking, onMatchmakingJoin } from './matchmaking';
 export {
   submitGameAction,
@@ -13,6 +34,7 @@ export {
   advanceBots,
   abandonMatch,
   rejoinMatch,
+  claimReservedSeat,
 } from './sessions';
 export { finalizeMatch } from './matches';
 export {

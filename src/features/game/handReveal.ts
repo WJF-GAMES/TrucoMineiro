@@ -8,8 +8,12 @@ import { nowMs } from '@/utils/clock';
  * O motor já decidiu e pontuou a mão no mesmo lote (`HAND_REVEALED` → `HAND_ENDED` →
  * `HAND_STARTED`); aqui só se decide por quanto tempo a mesa mostra as cartas de todos antes de a
  * cerimônia da mão seguinte começar. Nada é recalculado a partir disto.
+ *
+ * São até 12 cartas para ler: com 1,8 s a mesa sumia antes de dar para conferir as mãos. O relógio
+ * da jogada e os bots ficam parados enquanto a revelação está na tela (ver `GameTable`), então o
+ * tempo extra não come o prazo de ninguém.
  */
-export const REVEAL_MS = 1_800;
+export const REVEAL_MS = 5_000;
 
 export interface HandRevealState {
   /** `hands[seat]`: cartas que estavam na mão daquele assento. */

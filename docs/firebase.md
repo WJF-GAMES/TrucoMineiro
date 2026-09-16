@@ -8,7 +8,7 @@ Projeto: `truco-mineiro-wjf` · RTDB `https://truco-mineiro-wjf-default-rtdb.fir
 | Firestore | `services/firebase/firestore.ts` | Dados persistentes (ver docs/data-model.md). Cliente só lê. |
 | Realtime Database | `services/firebase/rtdb.ts` | Presença, matchmaking, salas, sessões, views por assento, conexão. |
 | Cloud Functions | `functions/src` | Toda escrita crítica (ver lista em docs/multiplayer.md e docs/security.md). Região `southamerica-east1`. |
-| Storage | `storage.rules` | Reservado para upload de avatar (futuro). |
+| Storage | `storage.rules` | Reservado para upload de avatar (futuro). O SDK cliente (`@react-native-firebase/storage`) não está instalado — adicionar junto com a feature. |
 | Cloud Messaging | `services/firebase/messaging.ts` + `registerDevice` | Convites de amigos/salas, recompensas, liga, temporada, novidades. |
 | Remote Config | `services/firebase/remoteConfig.ts` + `remoteconfig.template.json` | Flags: maintenance_mode, minimum_supported_version, ai_*_enabled, online_enabled, matchmaking_enabled, friends_enabled, league_enabled, store_enabled, daily_reward_enabled, xp_multiplier, matchmaking_bot_fill_seconds, matchmaking_timeout_seconds. |
 | App Check | `services/firebase/appCheck.ts` | Play Integrity / App Attest em produção; Debug Provider em `__DEV__` (`EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN`). Functions exigem token fora do emulador. |

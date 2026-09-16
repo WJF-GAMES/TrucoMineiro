@@ -4,7 +4,7 @@ import type { LeagueDefinition, LeagueId } from './types';
  * Escada oficial das 20 ligas, na ordem definitiva do produto.
  *
  * Os ids são estáveis em inglês (nunca mudam, são chave no Firestore e no mapa de assets);
- * o nome exibido é em português. `assetKey` aponta para `assets/images/icons/<assetKey>.png` —
+ * o nome exibido é em português. `assetKey` aponta para `assets/images/icons/<assetKey>.webp` —
  * o caminho local NUNCA é gravado no banco, só a chave.
  */
 const LADDER: { id: LeagueId; displayName: string }[] = [

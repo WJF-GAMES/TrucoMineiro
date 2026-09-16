@@ -138,7 +138,59 @@ function globalLeagueRanking() {
 export const PREVIEW_CALLABLES = {
   getLeagueScreenSnapshot: leagueScreenSnapshot,
   getGlobalLeagueRanking: globalLeagueRanking,
+  searchPlayers: searchPreviewPlayers,
+  createFriendRoom: () => ({ code: PREVIEW_ROOM, inviteExpiresAt: Date.now() + 30_000 }),
 };
+
+/** Sala de amigos de inspeção: dono + uma amiga que entrou + um convite pendente + uma recusa. */
+const PREVIEW_ROOM = 'PRV123';
+let previewRoomStartedAt = 0;
+function previewRoom() {
+  if (!previewRoomStartedAt || Date.now() - previewRoomStartedAt > 30_000)
+    previewRoomStartedAt = Date.now();
+  const t = previewRoomStartedAt;
+  const seat = (uid, nickname, avatarId, s, extra = {}) => ({
+    uid,
+    seat: s,
+    nickname,
+    avatarId,
+    ready: true,
+    bot: false,
+    joinedAt: t,
+    connected: true,
+    ...extra,
+  });
+  const invite = (uid, nickname, avatarId, s, status) => ({
+    uid,
+    seat: s,
+    nickname,
+    avatarId,
+    status,
+    invitedAt: t,
+  });
+  return {
+    code: PREVIEW_ROOM,
+    hostUid: ME_UID,
+    status: 'waiting',
+    maxPlayers: 4,
+    players: {
+      [ME_UID]: seat(ME_UID, 'Trucador', 'joao', 0),
+      'friend-1': seat('friend-1', 'Dona Conceição', 'maria', 1),
+    },
+    invites: {
+      'friend-1': invite('friend-1', 'Dona Conceição', 'maria', 1, 'ACCEPTED'),
+      'friend-3': invite('friend-3', 'Bituca', 'seu_ze', 2, 'PENDING'),
+      'friend-4': invite('friend-4', 'Galo', 'galo', 3, 'DECLINED'),
+    },
+    sessionId: null,
+    createdAt: t,
+    updatedAt: t,
+    source: 'private',
+    fillWithAi: 'on_timeout',
+    inviteExpiresAt: t + 30_000,
+    lateJoinUntil: t + 600_000,
+  };
+}
 
 // --- Amigos ------------------------------------------------------------------
 // A aba "Meus Amigos" vive de assinaturas do Firestore/RTDB, não de callables. Sem estes
@@ -184,6 +236,13 @@ FRIENDS.forEach((f) => (PROFILES[f.uid] = profileOf(f.uid, f.nickname, f.avatarI
 REQUESTS_IN.concat(REQUESTS_OUT).forEach(
   (r) => (PROFILES[r.uid] = profileOf(r.uid, r.nickname, r.avatarId, 7)),
 );
+
+/** Busca por apelido no navegador: prefixo sobre os perfis de inspeção, como o servidor faz. */
+function searchPreviewPlayers(payload) {
+  const term = String(payload?.term ?? '').trim().toLowerCase();
+  const players = Object.values(PROFILES).filter((p) => term && p.nicknameLower.startsWith(term));
+  return { players };
+}
 
 export function previewDoc(path) {
   const parts = String(path).split('/');
@@ -246,5 +305,6 @@ export function previewRtdbValue(path) {
     };
   }
   if (path === 'stats/onlineCount') return 1284;
+  if (path === `rooms/${PREVIEW_ROOM}`) return previewRoom();
   return null;
 }

@@ -31,7 +31,7 @@ describe('LEAGUE_SHIELDS', () => {
 
   it('tem o arquivo real de cada assetKey no disco', () => {
     for (const league of LEAGUE_DEFINITIONS) {
-      const file = path.join(ICONS_DIR, `${league.assetKey}.png`);
+      const file = path.join(ICONS_DIR, `${league.assetKey}.webp`);
       expect({ league: league.id, exists: fs.existsSync(file) }).toEqual({
         league: league.id,
         exists: true,

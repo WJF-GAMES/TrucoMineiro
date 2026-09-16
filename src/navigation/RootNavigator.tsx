@@ -29,6 +29,7 @@ import { logScreen } from '@/services/firebase/analytics';
 import { setCrashContext } from '@/services/firebase/crashlytics';
 import { useFriendInviteLink } from '@/features/friends/useFriendInviteLink';
 import { useRoomInvitePrompt } from '@/features/friends/useRoomInvitePrompt';
+import { usePendingRoomInvite } from '@/features/friends/usePendingRoomInvite';
 import { navigationRef } from './navigationRef';
 import { useAdStore } from '@/ads/core/AdState';
 
@@ -61,12 +62,21 @@ export function RootNavigator() {
   useFriendInviteLink();
   // Convite de sala de um amigo: o mesmo vale aqui — chega pelo Realtime Database a qualquer hora.
   useRoomInvitePrompt(routeName);
+  // Toque no push / link de sala: guardado até dar para entrar (login e cadastro no meio).
+  usePendingRoomInvite(routeName);
 
   return (
     <NavigationContainer
       ref={navigationRef}
       theme={theme}
-      onReady={syncAdScreen}
+      onReady={() => {
+        syncAdScreen();
+        // O primeiro estado não dispara `onStateChange`: sem isto, quem abre o app pelo push
+        // ficaria sem rota conhecida até navegar.
+        const root = navigationRef.getRootState();
+        const name = root?.routes[root.index]?.name;
+        if (name) setRouteName(name);
+      }}
       onStateChange={(state) => {
         syncAdScreen();
         const name = state?.routes[state.index]?.name;

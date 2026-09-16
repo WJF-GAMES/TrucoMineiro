@@ -310,11 +310,13 @@ function withHand(state: MatchState, hand: Partial<HandState>): MatchState {
 // --- Playing cards ---------------------------------------------------------
 
 /**
- * Carta virada ("no escuro") pode ser jogada em qualquer vaza normal. No desempate por cango é
- * proibida: ali todos jogam a maior carta, aberta.
+ * Carta virada ("no escuro") só pode ser jogada a partir da segunda rodada da mão: na primeira
+ * rodada todos jogam aberto. No desempate por cango também é proibida: ali todos jogam a maior
+ * carta, aberta.
  */
 export function canPlayCovered(state: MatchState): boolean {
-  return state.hand.phase === 'PLAY' && state.hand.tieBreak === null;
+  const hand = state.hand;
+  return hand.phase === 'PLAY' && hand.tieBreak === null && hand.rounds.length > 0;
 }
 
 function playCard(state: MatchState, seat: Seat, card: Card, covered: boolean): MatchState {

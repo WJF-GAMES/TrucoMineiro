@@ -140,15 +140,24 @@ export const subscribeSeatView = (
   onError?: (e: Error) => void,
 ) => subscribe<SeatView>(`gameSessions/${sessionId}/views/${seat}`, cb, onError);
 
-/** Marks this player connected inside a session and flips to false on disconnect. */
+/**
+ * Marks this player connected inside a session and flips to false on disconnect. O horário da
+ * queda (`disconnectedAt`) é o que o servidor usa para deixar a IA jogar a vez de quem caiu.
+ */
 export function connectSessionPresence(sessionId: string, seat: number): Unsub {
-  const r = ref(rtdb, `gameSessions/${sessionId}/meta/players/${seat}/connected`);
+  const base = `gameSessions/${sessionId}/meta/players/${seat}`;
+  const r = ref(rtdb, `${base}/connected`);
+  const since = ref(rtdb, `${base}/disconnectedAt`);
   onDisconnect(r)
     .set(false)
+    .catch(() => undefined);
+  onDisconnect(since)
+    .set(serverTimestamp())
     .catch(() => undefined);
   set(r, true).catch(() => undefined);
   return () => {
     set(r, false).catch(() => undefined);
+    set(since, serverTimestamp()).catch(() => undefined);
   };
 }
 

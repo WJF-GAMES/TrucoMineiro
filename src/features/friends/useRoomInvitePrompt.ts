@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { logEvent } from '@/services/firebase/analytics';
 import { navigationRef, currentRouteName } from '@/navigation/navigationRef';
 import { useRoomInvites } from './useRoomInvites';
+import { usePendingInviteStore } from './roomInviteFlow';
 
 /** Telas em que um diálogo de convite atrapalharia mais do que ajudaria. */
 const BUSY_ROUTES = new Set(['Game', 'Matchmaking', 'Lobby', 'MatchResult']);
@@ -32,16 +33,18 @@ export function useRoomInvitePrompt(routeName: string | null): void {
   useEffect(() => {
     const route = routeName ?? currentRouteName();
     if (route && BUSY_ROUTES.has(route)) return;
-    const invite = invites.find((i) => !prompted.current.has(i.code));
+    // Convite que o usuário abriu pelo push já está sendo tratado: nada de perguntar de novo.
+    const handled = new Set(usePendingInviteStore.getState().handled);
+    const invite = invites.find((i) => !prompted.current.has(i.code) && !handled.has(i.code));
     if (!invite) return;
     prompted.current.add(invite.code);
     logEvent('room_invite_received');
     Alert.alert(
       'Convite para jogar',
-      `${invite.fromNickname} te chamou para a sala ${invite.code}.`,
+      `${invite.fromNickname} convidou você para jogar Truco Mineiro.`,
       [
         { text: 'Agora não', style: 'cancel', onPress: () => void decline(invite) },
-        { text: 'Entrar', onPress: () => void accept(invite) },
+        { text: 'Entrar na sala', onPress: () => void accept(invite) },
       ],
     );
   }, [invites, accept, decline, routeName]);

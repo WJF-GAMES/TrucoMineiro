@@ -286,7 +286,30 @@ export interface RoomPlayer {
   bot: boolean;
   joinedAt: number;
   connected?: boolean;
+  /** IA ocupando a vaga de um convidado que ainda não entrou: ele pode assumir depois. */
+  reservedFor?: string | null;
 }
+
+/**
+ * Situação do convite de um amigo para uma sala privada.
+ * `AI_FILLED`: a vaga foi completada por IA (o convidado ainda pode assumir enquanto valer).
+ */
+export type RoomInviteStatus =
+  'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED' | 'AI_FILLED' | 'CANCELLED';
+
+/** Convidado de uma sala, com a vaga reservada para ele (`rooms/{code}/invites/{uid}`). */
+export interface RoomSeatInvite {
+  uid: string;
+  seat: number;
+  nickname: string;
+  avatarId: AvatarId;
+  status: RoomInviteStatus;
+  invitedAt: number;
+  respondedAt?: number | null;
+}
+
+/** Por que a sala fechou — a tela do convidado mostra a mensagem certa. */
+export type RoomClosedReason = 'cancelled' | 'finished' | 'abandoned' | 'expired';
 
 export interface Room {
   code: string;
@@ -298,6 +321,15 @@ export interface Room {
   createdAt: number;
   updatedAt: number;
   source: 'private' | 'matchmaking';
+  /** Sala montada a partir da lista de amigos: convidados com vaga reservada. */
+  invites?: Record<string, RoomSeatInvite>;
+  /** Fim da espera do lobby: depois disso as vagas restantes são completadas por IA. */
+  inviteExpiresAt?: number | null;
+  /** Até quando um convidado ainda pode entrar (inclusive assumindo a vaga da IA). */
+  lateJoinUntil?: number | null;
+  /** `on_timeout`: ao fim da espera a sala completa com IA e começa sozinha. */
+  fillWithAi?: 'on_timeout' | 'manual';
+  closedReason?: RoomClosedReason | null;
 }
 
 /**
@@ -309,6 +341,10 @@ export interface RoomInvite {
   from: string;
   fromNickname: string;
   createdAt: number;
+  /** Idempotente por sala + convidado (`{code}_{uid}`). */
+  inviteId?: string;
+  /** Depois disso o convite some (o servidor também recusa). */
+  expiresAt?: number;
 }
 
 export type MatchmakingStatus =
@@ -333,6 +369,14 @@ export interface SessionPlayer {
   avatarId: AvatarId;
   bot: boolean;
   connected: boolean;
+  /** Quando o humano caiu (a IA assume a vez dele depois de um curto período). */
+  disconnectedAt?: number | null;
+  /** IA segurando a vaga de um convidado que ainda pode entrar. */
+  reservedFor?: string | null;
+  /** Convidado que já entrou e assume a vaga no próximo ponto seguro (início de mão). */
+  pendingUid?: string | null;
+  /** Humano que saiu no meio e cuja vaga passou para a IA. */
+  replacedUid?: string | null;
 }
 
 export interface SessionMeta {
