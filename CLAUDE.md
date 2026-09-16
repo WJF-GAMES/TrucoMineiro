@@ -10,12 +10,13 @@ npm run check             # lint + typecheck + testes
 npm test                  # jest (engine, IA, utils)
 npm run test:sim -- 3000  # 9.000 partidas IA x IA (deadlock/loop/estado impossível)
 npm run emulators         # auth 9099, functions 5001, firestore 8080, database 9000
-./scripts/build-apk.sh    # APK release em dist/ (sem argumento = todas as ABIs; "x86_64" = só emulador)
+./scripts/build-apk.sh    # APK release em dist/ (sem argumento = ARM; "x86_64" = só emulador; "all" = 4 ABIs)
 ./scripts/deploy.sh       # deploy de rules, indexes, functions, remote config + seed
 ./scripts/qa.sh <cmd>     # QA no emulador Android (launch, shot, tap, errors, otp_code)
 ./scripts/qa-record.sh <nome> <s> [x y]  # grava a tela e gera folha de contato dos quadros
 ./scripts/qa-autoplay.sh  # joga uma partida contra a IA no automático até MATCH_ENDED
 python scripts/visual-diff.py   # comparações com references/
+python scripts/optimize-assets.py [--apply]  # PNG de assets/images -> WebP no tamanho de uso (relatório sem --apply)
 python scripts/generate-app-icons.py     # ícones iOS/Android a partir de references/app-icon.png
 python scripts/extract-screen-assets.py  # artes das telas a partir dos prints em references/
 npx expo start --port 8081               # http://localhost:8081 abre a build web (inspeção rápida de tela)

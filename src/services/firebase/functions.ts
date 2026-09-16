@@ -12,6 +12,7 @@ import type {
   MatchPhoneContactsResult,
   LeagueScreenSnapshot,
   GlobalRankingEntry,
+  Profile,
 } from '@/domain/model/types';
 import type { GameAction } from '@/domain/game';
 
@@ -75,8 +76,38 @@ export const updateProfile = (data: { nickname: string; avatarId: AvatarId }) =>
   call<typeof data, { ok: true }>('updateProfile', data);
 
 export const createRoom = () => call<Record<string, never>, { code: string }>('createRoom', {});
+
+/**
+ * Entrada numa sala. `pending`: a partida já começou e a vaga reservada para mim está com a IA —
+ * eu assumo no próximo ponto seguro (`claimReservedSeat`).
+ */
+export interface JoinRoomResult {
+  code: string;
+  sessionId?: string | null;
+  pending?: boolean;
+}
 export const joinRoom = (code: string) =>
-  call<{ code: string }, { code: string }>('joinRoom', { code });
+  call<{ code: string }, JoinRoomResult>('joinRoom', { code });
+
+/** Sala com até 3 amigos: o servidor grava a sala, reserva as vagas e só então convida. */
+export const createFriendRoom = (friendUids: string[]) =>
+  call<{ friendUids: string[] }, { code: string; inviteExpiresAt: number }>('createFriendRoom', {
+    friendUids,
+  });
+export const respondRoomInvite = (code: string, accept: boolean) =>
+  call<{ code: string; accept: boolean }, JoinRoomResult>('respondRoomInvite', { code, accept });
+export const inviteToRoom = (code: string, friendUid: string) =>
+  call<{ code: string; friendUid: string }, { ok: true }>('inviteToRoom', { code, friendUid });
+export const removeRoomInvite = (code: string, friendUid: string) =>
+  call<{ code: string; friendUid: string }, { ok: true }>('removeRoomInvite', { code, friendUid });
+/** Fim da espera do lobby: o servidor completa com IA e começa (só aceita depois do prazo). */
+export const resolveLobbyTimeout = (code: string) =>
+  call<{ code: string }, { sessionId: string | null }>('resolveLobbyTimeout', { code });
+export const claimReservedSeat = (sessionId: string) =>
+  call<{ sessionId: string }, { status: 'seated' | 'pending' | 'unavailable' }>(
+    'claimReservedSeat',
+    { sessionId },
+  );
 export const leaveRoom = (code: string) =>
   call<{ code: string }, { ok: true }>('leaveRoom', { code });
 export const setReady = (code: string, ready: boolean) =>
@@ -148,6 +179,8 @@ export const finalizeAiMatch = (req: FinalizeAiMatchRequest) =>
 export const registerDevice = (token: string, platform: string) =>
   call<{ token: string; platform: string }, { ok: true }>('registerDevice', { token, platform });
 export const deleteAccount = () => call<Record<string, never>, { ok: true }>('deleteAccount', {});
+export const unregisterDevice = (token: string) =>
+  call<{ token: string }, { ok: true }>('unregisterDevice', { token });
 
 export const sendFriendRequest = (toUid: string) =>
   call<{ toUid: string }, { ok: true }>('sendFriendRequest', { toUid });
@@ -173,6 +206,13 @@ export const unblockUser = (targetUid: string) =>
 export const matchPhoneContacts = (phones: string[]) =>
   call<{ phones: string[] }, MatchPhoneContactsResult>('matchPhoneContacts', { phones });
 
+/**
+ * Busca de jogadores por apelido. Roda no servidor: só ele descarta perfis que ficaram sem conta
+ * (conta apagada fora do app), que antes apareciam como resultados repetidos.
+ */
+export const searchPlayers = async (term: string): Promise<Profile[]> =>
+  (await call<{ term: string }, { players: Profile[] }>('searchPlayers', { term })).players;
+
 export const createFriendInviteToken = () =>
   call<Record<string, never>, FriendInviteToken>('createFriendInviteToken', {});
 export const resolveFriendInviteToken = (token: string) =>
@@ -182,10 +222,11 @@ export const resolveFriendInviteToken = (token: string) =>
  * lidos da agenda na hora) prova o vínculo — nada disso fica guardado.
  */
 export const inviteFriendToRoom = (friendUid: string, code: string, phones?: string[]) =>
-  call<{ friendUid: string; code: string; phones?: string[] }, { ok: true }>(
-    'inviteFriendToRoom',
-    { friendUid, code, ...(phones?.length ? { phones } : {}) },
-  );
+  call<{ friendUid: string; code: string; phones?: string[] }, { ok: true }>('inviteFriendToRoom', {
+    friendUid,
+    code,
+    ...(phones?.length ? { phones } : {}),
+  });
 
 // --- Ligas -------------------------------------------------------------------
 

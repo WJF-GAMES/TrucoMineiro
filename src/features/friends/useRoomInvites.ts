@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { deleteRoomInvite, subscribeRoomInvites } from '@/services/firebase/rtdb';
-import { FunctionsError, joinRoom } from '@/services/firebase/functions';
+import { FunctionsError, respondRoomInvite } from '@/services/firebase/functions';
 import { logEvent } from '@/services/firebase/analytics';
 import { toast } from '@/stores/toastStore';
 import type { RoomInvite } from '@/domain/model/types';
+import { inviteErrorMessage } from './inviteErrors';
 
 /**
  * Depois disso o convite não vale mais: a sala foi fechada ou a partida já começou sem o
@@ -12,16 +13,8 @@ import type { RoomInvite } from '@/domain/model/types';
  */
 export const INVITE_TTL_MS = 15 * 60_000;
 
-const JOIN_ERRORS: Record<string, string> = {
-  'not-found': 'Essa sala não existe mais.',
-  'resource-exhausted': 'A sala já está cheia.',
-  'failed-precondition': 'A partida dessa sala já começou.',
-  unavailable: 'Sem conexão. Verifique sua internet.',
-};
-
-const joinErrorMessage = (e: unknown) =>
-  (e instanceof FunctionsError ? JOIN_ERRORS[e.code] : undefined) ??
-  (e instanceof FunctionsError ? e.message : 'Não foi possível entrar na sala.');
+/** Prazo do convite: o do servidor quando veio; senão, o padrão a partir do envio. */
+export const inviteExpiry = (i: RoomInvite) => i.expiresAt ?? (i.createdAt ?? 0) + INVITE_TTL_MS;
 
 export interface UseRoomInvites {
   /** Convites válidos, do mais recente para o mais antigo. */
@@ -55,11 +48,11 @@ export function useRoomInvites(
   useEffect(() => {
     if (!uid) return;
     return subscribeRoomInvites(uid, (list) => {
-      const cutoff = Date.now() - INVITE_TTL_MS;
-      const expired = list.filter((i) => (i.createdAt ?? 0) < cutoff);
+      const t = Date.now();
+      const expired = list.filter((i) => inviteExpiry(i) < t);
       // Limpeza silenciosa: convite vencido não vira linha na tela nem notificação.
       expired.forEach((i) => void deleteRoomInvite(uid, i.code).catch(() => undefined));
-      setInvites(list.filter((i) => (i.createdAt ?? 0) >= cutoff));
+      setInvites(list.filter((i) => inviteExpiry(i) >= t));
     });
   }, [uid]);
 
@@ -68,8 +61,9 @@ export function useRoomInvites(
       if (!uid) return;
       setBusy(invite.code);
       try {
-        await joinRoom(invite.code);
-        await deleteRoomInvite(uid, invite.code).catch(() => undefined);
+        // O servidor ocupa a vaga reservada (ou marca a troca com a IA) e apaga o convite.
+        await respondRoomInvite(invite.code, true);
+        logEvent('game_invite_accepted', { source: 'list' });
         logEvent('room_invite_accepted');
         logEvent('room_joined', { via: 'invite' });
         onJoined?.(invite.code);
@@ -77,7 +71,7 @@ export function useRoomInvites(
         // Sala cheia ou partida já começada: o convite não serve mais para nada.
         if (e instanceof FunctionsError && e.code !== 'unavailable')
           await deleteRoomInvite(uid, invite.code).catch(() => undefined);
-        toast.error('Não foi possível entrar', joinErrorMessage(e));
+        toast.error('Não foi possível entrar', inviteErrorMessage(e));
       } finally {
         setBusy(null);
       }
@@ -90,7 +84,9 @@ export function useRoomInvites(
       if (!uid) return;
       setBusy(invite.code);
       try {
-        await deleteRoomInvite(uid, invite.code);
+        // O dono vê a recusa na hora; sem rede, pelo menos some da lista local.
+        await respondRoomInvite(invite.code, false).catch(() => deleteRoomInvite(uid, invite.code));
+        logEvent('game_invite_declined');
         logEvent('room_invite_declined');
       } catch {
         toast.error('Não deu certo', 'Tente de novo em instantes.');

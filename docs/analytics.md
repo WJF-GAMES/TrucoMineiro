@@ -41,6 +41,11 @@
 | contacts_sync_failed | erro na sincronização | reason |
 | contact_match_found | alguém da agenda já joga | count |
 
+Convite de sala com amigos: `game_invite_created` / `game_invite_sent` (`friends`),
+`game_invite_opened` (`source`: push/link), `game_invite_accepted` (`source`, `late`),
+`game_invite_declined`, `game_invite_expired`, `room_ai_fill` (`trigger`: timeout/host),
+`late_human_reclaimed_seat`. Nenhum depende de a funcionalidade funcionar.
+
 Nunca enviar telefone ou OTP. `setUserId(uid)` após login; `setUserId(null)` ao sair.
 
 Os eventos de contatos mandam **apenas contagens** (`contacts`, `matches`, `count`) e o tipo do erro

@@ -5,10 +5,30 @@
  */
 import type { ComponentProps } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import createIconSet from '@expo/vector-icons/createIconSet';
 
 export type IoniconName = ComponentProps<typeof Ionicons>['name'];
-export type MciName = ComponentProps<typeof MaterialCommunityIcons>['name'];
+
+/**
+ * Glifos de cartas do MaterialCommunityIcons (mesmos codepoints do pacote). Importar
+ * `@expo/vector-icons/MaterialCommunityIcons` empacotaria a fonte inteira (1,3 MB) e o glyphmap de
+ * 7 mil ícones por causa de dois glifos; `assets/fonts/mci-cards.ttf` é um subconjunto só com eles
+ * (984 bytes), gerado com o fontTools:
+ *   pyftsubset <node_modules/@expo/vector-icons>/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf
+ *     --unicodes=U+F0638,U+F0639 --layout-features='' --notdef-outline --output-file=assets/fonts/mci-cards.ttf
+ * Para outro glifo do MCI: incluir o codepoint aqui e no comando acima.
+ */
+const MCI_CARDS_GLYPHS = {
+  cards: 0xf0638,
+  'cards-outline': 0xf0639,
+} as const;
+
+export const CardsIcon = createIconSet(
+  MCI_CARDS_GLYPHS,
+  'mci-cards',
+  require('../../assets/fonts/mci-cards.ttf'),
+);
+export type MciName = keyof typeof MCI_CARDS_GLYPHS;
 
 export const icons = {
   // Bottom navigation
@@ -106,6 +126,9 @@ export const icons = {
   hand: 'hand-left' as IoniconName,
   stopwatch: 'stopwatch' as IoniconName,
   checkCircle: 'checkmark-circle' as IoniconName,
+  checkboxOn: 'checkbox' as IoniconName,
+  checkboxOff: 'square-outline' as IoniconName,
+  robot: 'hardware-chip' as IoniconName,
   tip: 'bulb' as IoniconName,
   arrowLeft: 'arrow-back' as IoniconName,
   arrowRight: 'arrow-forward' as IoniconName,

@@ -86,19 +86,6 @@ export async function getProfileFromServer(uid: string): Promise<Profile | null>
   return snap.exists() ? ({ id: snap.id, ...snap.data() } as Profile) : null;
 }
 
-export async function searchProfiles(term: string): Promise<Profile[]> {
-  const normalized = term.trim().toLowerCase();
-  if (normalized.length < 2) return [];
-  const q = query(
-    collection(db, 'profiles'),
-    where('nicknameLower', '>=', normalized),
-    where('nicknameLower', '<=', normalized + ''),
-    limit(20),
-  );
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Profile);
-}
-
 // --- Leagues / seasons -------------------------------------------------------
 
 export async function getLeagueDefinitions(): Promise<LeagueDefinition[]> {

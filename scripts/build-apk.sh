@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 # Builds the release APK and copies it to dist/ with a versioned name.
 #
-#   ./scripts/build-apk.sh              # all ABIs (installs on real phones)
+#   ./scripts/build-apk.sh              # ARM (armeabi-v7a + arm64-v8a): todos os celulares reais
+#   ./scripts/build-apk.sh arm64-v8a    # só 64 bits — o menor APK para aparelhos modernos
 #   ./scripts/build-apk.sh x86_64       # emulator only — much faster
+#   ./scripts/build-apk.sh all          # as 4 ABIs (APK universal, inclui x86/x86_64 de emulador)
+#
+# x86/x86_64 só servem para emulador e somavam ~52 MB ao APK universal. O AAB da Play Store
+# (./gradlew bundleRelease) continua com as 4 ABIs de gradle.properties: a Play entrega a cada
+# aparelho só a ABI dele.
 #
 # The release variant is signed with the production keystore declared in android/keystore.properties
 # (storeFile/storePassword/keyAlias/keyPassword). Sem esse arquivo o build cai no
@@ -10,11 +16,16 @@
 # APK itself and are the ones that must be registered in the Firebase Console for Phone Auth to work.
 set -euo pipefail
 
-ABIS="${1:-}"
+ABIS="${1:-armeabi-v7a,arm64-v8a}"
+[ "$ABIS" = "all" ] && ABIS=""
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT/android"
 
 export ANDROID_HOME="${ANDROID_HOME:-$LOCALAPPDATA/Android/Sdk}"
+
+# O plugin do React Native não limpa os assets gerados pelo Metro: se um asset trocar de extensão
+# (ex.: PNG -> WebP) a cópia antiga fica e o merge de recursos falha com "Duplicate resources".
+rm -rf app/build/generated/res/react app/build/generated/assets/react
 
 GRADLE_ARGS=(assembleRelease --no-daemon)
 [ -n "$ABIS" ] && GRADLE_ARGS+=("-PreactNativeArchitectures=$ABIS")

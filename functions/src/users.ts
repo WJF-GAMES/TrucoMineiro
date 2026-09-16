@@ -1,11 +1,12 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { authedCallable, HttpsError, obj, oneOf, str } from './lib/callable';
-import { auth, db, now, rtdb } from './lib/admin';
+import { auth, db, now, REGION, rtdb } from './lib/admin';
 import { BatchWriter } from './lib/batchWriter';
 import { AVATAR_IDS, AvatarId, PlayerStats, Profile, xpForLevel } from './domain/model/types';
 import { indexUserPhone, removePhoneIndex } from './contacts';
 import { ensureAssignment, leaveCurrentLeagueGroup, refreshIdentity } from './leagues';
 import { logger } from 'firebase-functions/v2';
+import { region } from 'firebase-functions/v1';
 
 export function defaultProfile(uid: string): Profile {
   return {
@@ -170,6 +171,18 @@ export const registerDevice = authedCallable<{ token: string; platform: string }
   },
 );
 
+/** Logout: o aparelho deixa de receber push desta conta. */
+export const unregisterDevice = authedCallable<{ token: string }, { ok: true }>(
+  async ({ uid, data }) => {
+    await db
+      .doc(`users/${uid}`)
+      .update({ [`fcmTokens.${data.token}`]: FieldValue.delete() })
+      .catch(() => undefined);
+    return { ok: true };
+  },
+  (d) => ({ token: str(obj(d, 'payload').token, 'token', 10, 4096) }),
+);
+
 /**
  * Deletes every document owned by the user, presence and the Auth account.
  *
@@ -181,51 +194,110 @@ export const registerDevice = authedCallable<{ token: string; platform: string }
  */
 export const deleteAccount = authedCallable<Record<string, never>, { ok: true }>(
   async ({ uid }) => {
-    const batch = new BatchWriter();
-    for (const p of [
-      `users/${uid}`,
-      `profiles/${uid}`,
-      `playerStats/${uid}`,
-      `userAchievements/${uid}`,
-      `playerProgress/${uid}`,
-    ])
-      batch.delete(db.doc(p));
-    // Sai do grupo da semana (senão o ranking continuaria mostrando um fantasma) e apaga o histórico.
-    await leaveCurrentLeagueGroup(uid);
-    const weeks = await db.collection(`leagueHistory/${uid}/weeks`).get();
-    weeks.forEach((w) => batch.delete(w.ref));
-    const friends = await db.collection(`friendships/${uid}/friends`).get();
-    friends.forEach((f) => {
-      batch.delete(f.ref);
-      batch.delete(db.doc(`friendships/${f.id}/friends/${uid}`));
-    });
-    const reqs = await db.collection('friendRequests').where('from', '==', uid).get();
-    reqs.forEach((r) => batch.delete(r.ref));
-    const reqs2 = await db.collection('friendRequests').where('to', '==', uid).get();
-    reqs2.forEach((r) => batch.delete(r.ref));
-    const blocked = await db.collection(`blocks/${uid}/blocked`).get();
-    blocked.forEach((b) => {
-      batch.delete(b.ref);
-      batch.delete(db.doc(`blockedBy/${b.id}/users/${uid}`));
-    });
-    const blockedBy = await db.collection(`blockedBy/${uid}/users`).get();
-    blockedBy.forEach((b) => {
-      batch.delete(b.ref);
-      batch.delete(db.doc(`blocks/${b.id}/blocked/${uid}`));
-    });
-    const user = (await db.doc(`users/${uid}`).get()).data() as
-      { inviteToken?: string } | undefined;
-    if (user?.inviteToken) batch.delete(db.doc(`friendInviteTokens/${user.inviteToken}`));
-    batch.delete(db.doc(`contactSync/${uid}`));
-    // Sai do diretório de telefones ANTES de apagar users/{uid}, que guarda o hash.
-    await removePhoneIndex(uid);
-    await batch.flush();
-    await rtdb.ref(`presence/${uid}`).remove();
-    await rtdb.ref(`matchmaking/queue/${uid}`).remove();
-    await rtdb.ref(`userSessions/${uid}`).remove();
+    await deleteUserData(uid);
     await auth.deleteUser(uid).catch(() => undefined);
     return { ok: true };
   },
+);
+
+/**
+ * Apaga tudo o que pertence ao jogador (menos a conta do Auth). Idempotente: roda no
+ * `deleteAccount` e de novo no `onAuthUserDeleted`, que cobre a conta apagada direto no Console —
+ * sem ele sobrava um perfil órfão aparecendo na busca e no ranking.
+ */
+export async function deleteUserData(uid: string): Promise<void> {
+  const batch = new BatchWriter();
+  for (const p of [
+    `users/${uid}`,
+    `profiles/${uid}`,
+    `playerStats/${uid}`,
+    `userAchievements/${uid}`,
+    `playerProgress/${uid}`,
+  ])
+    batch.delete(db.doc(p));
+  // Sai do grupo da semana (senão o ranking continuaria mostrando um fantasma) e apaga o histórico.
+  await leaveCurrentLeagueGroup(uid);
+  const weeks = await db.collection(`leagueHistory/${uid}/weeks`).get();
+  weeks.forEach((w) => batch.delete(w.ref));
+  const friends = await db.collection(`friendships/${uid}/friends`).get();
+  friends.forEach((f) => {
+    batch.delete(f.ref);
+    batch.delete(db.doc(`friendships/${f.id}/friends/${uid}`));
+  });
+  const reqs = await db.collection('friendRequests').where('from', '==', uid).get();
+  reqs.forEach((r) => batch.delete(r.ref));
+  const reqs2 = await db.collection('friendRequests').where('to', '==', uid).get();
+  reqs2.forEach((r) => batch.delete(r.ref));
+  const blocked = await db.collection(`blocks/${uid}/blocked`).get();
+  blocked.forEach((b) => {
+    batch.delete(b.ref);
+    batch.delete(db.doc(`blockedBy/${b.id}/users/${uid}`));
+  });
+  const blockedBy = await db.collection(`blockedBy/${uid}/users`).get();
+  blockedBy.forEach((b) => {
+    batch.delete(b.ref);
+    batch.delete(db.doc(`blocks/${b.id}/blocked/${uid}`));
+  });
+  const user = (await db.doc(`users/${uid}`).get()).data() as { inviteToken?: string } | undefined;
+  if (user?.inviteToken) batch.delete(db.doc(`friendInviteTokens/${user.inviteToken}`));
+  batch.delete(db.doc(`contactSync/${uid}`));
+  // Sai do diretório de telefones ANTES de apagar users/{uid}, que guarda o hash.
+  await removePhoneIndex(uid);
+  await batch.flush();
+  await rtdb.ref(`presence/${uid}`).remove();
+  await rtdb.ref(`matchmaking/queue/${uid}`).remove();
+  await rtdb.ref(`userSessions/${uid}`).remove();
+}
+
+/**
+ * Gatilho de 1ª geração (a 2ª não tem evento de conta apagada). Ele roda por padrão com a conta de
+ * serviço do App Engine, que este projeto não tem; usa a mesma conta das funções de 2ª geração.
+ */
+const AUTH_TRIGGER_SERVICE_ACCOUNT = '595442235811-compute@developer.gserviceaccount.com';
+
+/** Conta apagada por qualquer caminho (app ou Console): limpa os documentos do jogador. */
+export const onAuthUserDeleted = region(REGION)
+  .runWith({ serviceAccount: AUTH_TRIGGER_SERVICE_ACCOUNT })
+  .auth.user()
+  .onDelete(async (user) => {
+    await deleteUserData(user.uid).catch((e: Error) =>
+      logger.error('onAuthUserDeleted: limpeza falhou', { uid: user.uid, error: e.message }),
+    );
+  });
+
+const SEARCH_LIMIT = 20;
+
+/**
+ * Busca de jogadores por prefixo do apelido. Fica no servidor porque só ele sabe quais perfis
+ * ainda têm conta no Auth: um perfil órfão (conta apagada fora do app) aparecia como um
+ * "jogador" repetido na busca. Também ficam de fora quem ainda não tem apelido e eu mesmo.
+ */
+export const searchPlayers = authedCallable<{ term: string }, { players: Profile[] }>(
+  async ({ uid, data }) => {
+    const term = data.term.trim().toLowerCase();
+    if (term.length < 2) return { players: [] };
+    const snap = await db
+      .collection('profiles')
+      .where('nicknameLower', '>=', term)
+      .where('nicknameLower', '<=', `${term}`)
+      .limit(SEARCH_LIMIT * 2)
+      .get();
+    const byId = new Map<string, Profile>();
+    snap.docs.forEach((d) => {
+      const profile = { ...(d.data() as Profile), id: d.id };
+      if (d.id !== uid && profile.nickname) byId.set(d.id, profile);
+    });
+    if (byId.size === 0) return { players: [] };
+    const { notFound } = await auth.getUsers([...byId.keys()].map((id) => ({ uid: id })));
+    for (const missing of notFound) {
+      const orphan = 'uid' in missing ? missing.uid : null;
+      if (!orphan) continue;
+      byId.delete(orphan);
+      logger.warn('searchPlayers: perfil sem conta no Auth', { uid: orphan });
+    }
+    return { players: [...byId.values()].slice(0, SEARCH_LIMIT) };
+  },
+  (d) => ({ term: str(obj(d, 'payload').term, 'term', 1, 40) }),
 );
 
 export const touchIncrement = FieldValue.increment;

@@ -22,6 +22,14 @@ import type { GameAction, HandState, MatchState, PlayedCard, Seat } from '../sta
 
 const dealt = () => skipCeremony(createMatch(3, 99));
 
+/**
+ * Carta virada só vale a partir da segunda rodada da mão: os cenários abaixo partem de uma mão
+ * com a primeira rodada já decidida (`winner`), com o assento 0 abrindo a vaza atual.
+ */
+const afterFirstRound = (winner: 0 | 1): Partial<HandState> => ({
+  rounds: [{ winner, winnerSeat: winner === 0 ? 0 : 1, plays: [] }],
+});
+
 function rig(hands: string[][], extra: Partial<HandState> = {}): MatchState {
   const s = dealt();
   return { ...s, hand: { ...s.hand, hands: hands.map((h) => h.map(parseCardId)), ...extra } };
@@ -106,13 +114,13 @@ describe('motor — jogar virada', () => {
   ];
 
   it('a ação aparece em availableActions só para quem está na vez', () => {
-    const s = rig(HANDS);
+    const s = rig(HANDS, afterFirstRound(0));
     expect(getAvailableActions(s, 0)).toEqual(['PLAY_CARD', 'PLAY_CARD_COVERED', 'REQUEST_TRUCO']);
     expect(getAvailableActions(s, 1)).toEqual([]);
   });
 
   it('remove a carta certa da mão e guarda a identidade só no estado autoritativo', () => {
-    const s = play(rig(HANDS), [[0, '4P', 'covered']]);
+    const s = play(rig(HANDS, afterFirstRound(0)), [[0, '4P', 'covered']]);
     expect(s.hand.hands[0]!.map(cardId)).toEqual(['5O', '6O']);
     expect(s.hand.currentRound).toEqual([{ seat: 0, card: parseCardId('4P'), covered: true }]);
     expect(s.events[s.events.length - 1]).toEqual({
@@ -124,19 +132,42 @@ describe('motor — jogar virada', () => {
   });
 
   it('Zap virado perde a vaza para um 4 aberto', () => {
-    const s = play(rig(HANDS), [
+    const s = play(rig(HANDS, afterFirstRound(0)), [
       [0, '4P', 'covered'],
       [1, '4O', 'open'],
       [2, '7C', 'covered'],
       [3, 'QP', 'open'],
     ]);
-    expect(s.hand.rounds[0]).toMatchObject({ winner: 1, winnerSeat: 3 });
+    expect(s.hand.rounds[1]).toMatchObject({ winner: 1, winnerSeat: 3 });
     expect(s.hand.turnSeat).toBe(3);
   });
 
   it('carta que não está na mão continua recusada, virada ou não', () => {
-    expect(() => play(rig(HANDS), [[0, '4O', 'covered']])).toThrow(InvalidActionError);
-    expect(() => play(rig(HANDS), [[1, '4O', 'covered']])).toThrow(InvalidActionError);
+    const s = rig(HANDS, afterFirstRound(0));
+    expect(() => play(s, [[0, '4O', 'covered']])).toThrow(InvalidActionError);
+    expect(() => play(s, [[1, '4O', 'covered']])).toThrow(InvalidActionError);
+  });
+
+  it('é proibida em toda a primeira rodada da mão, no motor e em availableActions', () => {
+    let s = rig(HANDS);
+    expect(s.hand.rounds).toHaveLength(0);
+    for (const [seat, id] of [
+      [0, '4P'],
+      [1, '4O'],
+      [2, '7C'],
+      [3, 'QP'],
+    ] as [Seat, string][]) {
+      expect(getAvailableActions(s, seat)).not.toContain('PLAY_CARD_COVERED');
+      expect(viewForSeat(s, seat).availableActions).not.toContain('PLAY_CARD_COVERED');
+      expect(() => play(s, [[seat, id, 'covered']])).toThrow(/PLAY_CARD_COVERED not allowed/);
+      s = play(s, [[seat, id, 'open']]);
+    }
+    // Fechada a primeira rodada, quem abre a segunda já pode jogar virada.
+    expect(s.hand.rounds).toHaveLength(1);
+    expect(getAvailableActions(s, s.hand.turnSeat)).toContain('PLAY_CARD_COVERED');
+    const card = cardId(s.hand.hands[s.hand.turnSeat]![0]!);
+    const next = play(s, [[s.hand.turnSeat, card, 'covered']]);
+    expect(next.hand.currentRound[0]).toMatchObject({ covered: true });
   });
 
   it('é proibida no desempate por cango, no motor e em availableActions', () => {
@@ -165,24 +196,38 @@ describe('motor — jogar virada', () => {
 
   it('fora do desempate o cango é resolvido pelas forças efetivas', () => {
     // K aberto (A) x K virado (B) não canga: o virado vale zero e A leva.
-    const s = play(rig([['KO'], ['KP'], ['4E'], ['4C']]), [
-      [0, 'KO', 'open'],
-      [1, 'KP', 'covered'],
-      [2, '4E', 'open'],
-      [3, '4C', 'open'],
-    ]);
-    expect(s.hand.rounds[0]?.winner).toBe(0);
+    const s = play(
+      rig(
+        [
+          ['KO', '5O'],
+          ['KP', '5C'],
+          ['4E', '5E'],
+          ['4C', '5P'],
+        ],
+        afterFirstRound(1),
+      ),
+      [
+        [0, 'KO', 'open'],
+        [1, 'KP', 'covered'],
+        [2, '4E', 'open'],
+        [3, '4C', 'open'],
+      ],
+    );
+    expect(s.hand.rounds[1]?.winner).toBe(0);
   });
 });
 
 describe('segredo da carta virada', () => {
   const s = play(
-    rig([
-      ['4P', '5O', '6O'],
-      ['4O', '5C', '6C'],
-      ['7C', '5E', '6E'],
-      ['QP', '5P', '6P'],
-    ]),
+    rig(
+      [
+        ['4P', '5O', '6O'],
+        ['4O', '5C', '6C'],
+        ['7C', '5E', '6E'],
+        ['QP', '5P', '6P'],
+      ],
+      afterFirstRound(1),
+    ),
     [
       [0, '4P', 'covered'],
       [1, '4O', 'open'],
@@ -228,7 +273,7 @@ describe('segredo da carta virada', () => {
       [3, 'QP', 'open'],
     ]);
     const v = viewForSeat(closed, 3);
-    expect(v.rounds[0]?.plays[0]).toEqual({ seat: 0, card: null, covered: true });
+    expect(v.rounds[1]?.plays[0]).toEqual({ seat: 0, card: null, covered: true });
   });
 });
 
@@ -280,7 +325,7 @@ describe('mão de onze recusada revela as mãos', () => {
 
 describe('IA e carta virada', () => {
   it.each<AIDifficulty>(['easy', 'normal', 'hard'])(
-    '%s: só vira quando permitido, nunca ao abrir a vaza e nunca tudo',
+    '%s: só vira quando permitido, nunca na primeira rodada, nunca ao abrir a vaza e nunca tudo',
     (difficulty) => {
       const ai = aiForDifficulty(difficulty);
       const seats = new Map<Seat, AIPlayer>(
@@ -297,6 +342,7 @@ describe('IA e carta virada', () => {
           if (action.type === 'PLAY_CARD_COVERED') {
             covered++;
             expect(s.hand.tieBreak).toBeNull();
+            expect(s.hand.rounds.length).toBeGreaterThan(0);
             expect(s.hand.currentRound.length).toBeGreaterThan(0);
           }
           s = applyAction(s, action);

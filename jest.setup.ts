@@ -25,6 +25,8 @@ jest.mock('@react-native-firebase/remote-config', () => ({
 
 // Ionicons carrega expo-font/expo-asset, que não existem no ambiente de teste.
 jest.mock('@expo/vector-icons/Ionicons', () => 'Ionicons');
+// Mesmo motivo para o subconjunto de glifos de cartas (`CardsIcon`, em design-system/icons).
+jest.mock('@expo/vector-icons/createIconSet', () => () => 'CardsIcon');
 
 // Tela acesa durante a partida: módulo nativo do Expo, sem runtime sob Jest.
 jest.mock('expo-keep-awake', () => ({

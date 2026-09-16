@@ -63,6 +63,16 @@ carrega `trucomineiro://add-friend?token=...` — sem telefone e sem o uid inter
 solicitação depois de o usuário confirmar o diálogo no app (link é conteúdo externo, nunca ação
 automática).
 
+## Convites de sala e push
+
+- Só o servidor envia push (`lib/push.ts`); o cliente manda a intenção (`createFriendRoom`,
+  `inviteToRoom`). O convite em grupo só aceita **amigos**, sem bloqueio em nenhum sentido.
+- Limites em `rateLimits/{uid}` (Firestore, sem acesso do cliente): 6 salas com amigos/min,
+  10 salas/min, 20 convites/min e um push por convite a cada 15 s.
+- O payload do push leva só `type`, `code` e `inviteId`. O servidor confere prazo, reserva e
+  status da sala em toda aceitação — o push/link é só um atalho.
+- RTDB: o dono do assento escreve apenas `connected` e `disconnectedAt` (número ≤ `now`).
+
 ## App Check — estado atual
 
 O enforcement é **controlado por `ENFORCE_APP_CHECK`** (`functions/.env`, hoje `false`) e lido em

@@ -43,6 +43,15 @@ function stripEmpties<T>(value: T): T | undefined {
   return value === null ? undefined : value;
 }
 
+/** Primeira rodada já jogada (vencida pelo assento 0): carta virada só vale a partir da segunda. */
+function firstRoundWonBySeat0(): MatchState['hand']['rounds'][number] {
+  const plays = (['3O', 'KC', '6O', 'QC'] as const).map((id, seat) => ({
+    seat: seat as 0 | 1 | 2 | 3,
+    card: parseCardId(id),
+  }));
+  return { winner: 0, winnerSeat: 0, plays };
+}
+
 describe('normalizeStoredState (Realtime Database round-trip)', () => {
   // Mão já embaralhada e cortada: o round-trip que importa aqui é o da mesa jogando.
   const fresh = {
@@ -174,7 +183,8 @@ describe('normalizeStoredState (Realtime Database round-trip)', () => {
       ['4E', '6E'],
       ['QP', '5P'],
     ].map((h) => h.map(parseCardId));
-    let s = { ...base, hand: { ...base.hand, hands } };
+    // Carta virada só a partir da segunda rodada: a primeira já foi do time 0.
+    let s = { ...base, hand: { ...base.hand, hands, rounds: [firstRoundWonBySeat0()] } };
     s = applyAction(s, { type: 'PLAY_CARD_COVERED', seat: 0, cardId: '4P' });
     const back = normalizeStoredState(
       stripEmpties({ ...s, appliedActionIds: {}, aiRngState: 7, trucos: {} }),
@@ -188,7 +198,7 @@ describe('normalizeStoredState (Realtime Database round-trip)', () => {
     ] as const)
       end = applyAction(end, { type: 'PLAY_CARD', seat, cardId: c });
     // Zap virado não vence: a vaza é do time 1 (assento 3 com o 5, maior que o 4 aberto).
-    expect(end.hand.rounds[0]).toMatchObject({ winner: 1, winnerSeat: 3 });
+    expect(end.hand.rounds[1]).toMatchObject({ winner: 1, winnerSeat: 3 });
   });
 
   it('rejects garbage', () => {
@@ -244,7 +254,7 @@ describe('buildViews (carta virada)', () => {
       ['7C', '5E'],
       ['QP', '5P'],
     ].map((h) => h.map(parseCardId));
-    const before = { ...base, hand: { ...base.hand, hands } };
+    const before = { ...base, hand: { ...base.hand, hands, rounds: [firstRoundWonBySeat0()] } };
     const after = applyAction(before, { type: 'PLAY_CARD_COVERED', seat: 0, cardId: '4P' });
     const recent = after.events.slice(before.events.length);
     const views = buildViews({ ...after, appliedActionIds: {}, aiRngState: 0, trucos: {} }, recent);

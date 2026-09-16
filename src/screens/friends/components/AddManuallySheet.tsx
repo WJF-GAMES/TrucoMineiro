@@ -2,8 +2,12 @@ import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { colors, spacing } from '@/design-system';
 import { AppText, Chips, PrimaryButton, Sheet, TextField } from '@/components';
-import { getProfile, searchProfiles } from '@/services/firebase/firestore';
-import { FunctionsError, resolveFriendInviteToken } from '@/services/firebase/functions';
+import { getProfile } from '@/services/firebase/firestore';
+import {
+  FunctionsError,
+  resolveFriendInviteToken,
+  searchPlayers,
+} from '@/services/firebase/functions';
 
 type Mode = 'nickname' | 'link';
 
@@ -40,7 +44,7 @@ export function AddManuallySheet({
     setError(null);
     try {
       if (mode === 'nickname') {
-        const found = await searchProfiles(term);
+        const found = await searchPlayers(term);
         const exact = found.find((p) => p.nicknameLower === term.toLowerCase()) ?? found[0];
         if (!exact) {
           setError('Ninguém com esse apelido. Confira e tente de novo.');

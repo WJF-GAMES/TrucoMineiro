@@ -40,6 +40,9 @@ jest.mock('@/services/firebase/functions', () => {
       Promise.resolve({ token: 't', link: 'trucomineiro://add-friend?token=t', expiresAt: 0 }),
     ),
     resolveFriendInviteToken: jest.fn(() => Promise.resolve({ uid: 'other' })),
+    createFriendRoom: jest.fn(() => Promise.resolve({ code: 'ZZZ999', inviteExpiresAt: 0 })),
+    respondRoomInvite: jest.fn(() => Promise.resolve({ code: 'ABC123' })),
+    searchPlayers: (term: string) => mockSearchProfiles(term),
   };
 });
 
@@ -61,7 +64,6 @@ const mockEmit = {
 };
 
 jest.mock('@/services/firebase/firestore', () => ({
-  searchProfiles: (term: string) => mockSearchProfiles(term),
   // Perfil público de qualquer uid: o apelido é o próprio uid, menos o bloqueado do teste.
   getProfile: (uid: string) => Promise.resolve(mockProfileOf(uid)),
   subscribeFriends: (_uid: string, cb: (ids: { id: string }[]) => void) => {
@@ -274,17 +276,83 @@ describe('FriendsScreen — amigos', () => {
     expect(view.getByText('Na partida')).toBeTruthy();
   });
 
-  it('"Jogar" cria a sala, convida o amigo e vai para o lobby', async () => {
+  it('"Jogar" cria a sala com a vaga do amigo reservada e vai para o lobby', async () => {
     const view = await seed({ friends: ['zeh'], presence: { zeh: 'online' } });
 
     await act(async () => {
       fireEvent.press(view.getByTestId('friend-play-zeh'));
     });
 
-    expect(fns.createRoom).toHaveBeenCalled();
-    // Amigo: sem prova de agenda.
-    expect(fns.inviteFriendToRoom).toHaveBeenCalledWith('zeh', 'ZZZ999', undefined);
+    // Amigo: o servidor cria a sala, reserva a vaga e só então convida (sem prova de agenda).
+    expect(fns.createFriendRoom).toHaveBeenCalledWith(['zeh']);
+    expect(fns.createRoom).not.toHaveBeenCalled();
+    expect(fns.inviteFriendToRoom).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith('Lobby', { code: 'ZZZ999' });
+  });
+
+  it('"Jogar com amigos": seleciona até 3, trava o 4º e convida na ordem escolhida', async () => {
+    const view = await seed({
+      friends: ['ana1', 'bia2', 'caio', 'davi'],
+      presence: { ana1: 'online', bia2: 'offline', caio: 'in_match', davi: 'online' },
+    });
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('friends-select-start'));
+    });
+    expect(view.getByTestId('friends-select-counter').props.children).toBe('0 de 3 selecionados');
+    expect(view.getByTestId('friends-select-confirm').props.accessibilityState).toMatchObject({
+      disabled: true,
+    });
+    // Em partida continua selecionável, com indicação clara.
+    expect(view.getByText('Em partida agora')).toBeTruthy();
+
+    for (const uid of ['davi', 'ana1', 'bia2']) {
+      await act(async () => {
+        fireEvent.press(view.getByTestId(`friend-select-${uid}`));
+      });
+    }
+    expect(view.getByTestId('friends-select-counter').props.children).toBe('3 de 3 selecionados');
+    const locked = view.getByTestId('friend-select-caio');
+    expect(locked.props.accessibilityState).toMatchObject({ checked: false, disabled: true });
+    expect(view.getByTestId('friend-select-ana1').props.accessibilityLabel).toBe(
+      'ana1, online, selecionado para convite',
+    );
+
+    // Tentar o 4º não muda nada.
+    await act(async () => {
+      fireEvent.press(locked);
+    });
+    expect(view.getByTestId('friends-select-counter').props.children).toBe('3 de 3 selecionados');
+
+    // Desmarcar libera a vaga.
+    await act(async () => {
+      fireEvent.press(view.getByTestId('friend-select-bia2'));
+    });
+    expect(view.getByTestId('friends-select-counter').props.children).toBe('2 de 3 selecionados');
+    await act(async () => {
+      fireEvent.press(view.getByTestId('friend-select-caio'));
+    });
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('friends-select-confirm'));
+    });
+    expect(fns.createFriendRoom).toHaveBeenCalledWith(['davi', 'ana1', 'caio']);
+    expect(navigate).toHaveBeenCalledWith('Lobby', { code: 'ZZZ999' });
+    expect(view.queryByTestId('friends-select-bar')).toBeNull();
+  });
+
+  it('cancelar a seleção volta para a lista normal', async () => {
+    const view = await seed({ friends: ['zeh'], presence: { zeh: 'online' } });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('friends-select-start'));
+    });
+    expect(view.queryByTestId('friend-play-zeh')).toBeNull();
+    await act(async () => {
+      fireEvent.press(view.getByTestId('friends-select-cancel'));
+    });
+    expect(view.queryByTestId('friends-select-bar')).toBeNull();
+    expect(view.getByTestId('friend-play-zeh')).toBeTruthy();
+    expect(fns.createFriendRoom).not.toHaveBeenCalled();
   });
 
   it('amigo em partida também pode ser convidado (nada de botão sem ação)', async () => {
@@ -438,7 +506,7 @@ describe('FriendsScreen — convites de sala', () => {
     await act(async () => {
       fireEvent.press(view.getByTestId('room-invite-accept-ABC123'));
     });
-    expect(fns.joinRoom).toHaveBeenCalledWith('ABC123');
+    expect(fns.respondRoomInvite).toHaveBeenCalledWith('ABC123', true);
     expect(navigate).toHaveBeenCalledWith('Lobby', { code: 'ABC123' });
   });
 });

@@ -1,10 +1,9 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, icons, spacing } from '@/design-system';
+import { CardsIcon, colors, icons, spacing } from '@/design-system';
 import { AppText } from '@/components/AppText';
 import { haptic } from '@/utils/haptics';
 
@@ -26,7 +25,7 @@ function TabIcon({ route, active }: { route: string; active: boolean }) {
       );
     case 'Play':
       return (
-        <MaterialCommunityIcons
+        <CardsIcon
           name={active ? icons.tabPlay : icons.tabPlayOutline}
           size={size + 2}
           color={color}

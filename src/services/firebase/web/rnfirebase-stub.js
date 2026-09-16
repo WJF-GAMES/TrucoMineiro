@@ -195,7 +195,7 @@ export const connectFunctionsEmulator = noop;
  */
 export const httpsCallable = (_functions, name) => {
   const preview = PREVIEW_CALLABLES[name];
-  return async () => ({ data: preview ? preview() : {} });
+  return async (payload) => ({ data: preview ? preview(payload) : {} });
 };
 
 // --- messaging ---------------------------------------------------------------
@@ -211,6 +211,11 @@ export const requestPermission = async () => AuthorizationStatus.DENIED;
 export const getToken = async () => '';
 export const onMessage = unsubscribe;
 export const onTokenRefresh = unsubscribe;
+export const deleteToken = asyncNoop;
+/** Navegador não recebe push: nenhuma notificação abriu o app. */
+export const getInitialNotification = async () => null;
+export const onNotificationOpenedApp = unsubscribe;
+export const setBackgroundMessageHandler = noop;
 
 // --- performance -------------------------------------------------------------
 export const getPerformance = () => ({});

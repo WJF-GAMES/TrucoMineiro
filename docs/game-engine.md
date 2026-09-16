@@ -24,7 +24,8 @@ Pasta `src/domain/game/` — TypeScript puro, sem React/React Native/Firebase (r
   - Truco continua permitido no desempate pelas regras normais; o valor da mão não muda a resolução.
   - `tieBreak` volta a `null` quando a mão acaba (qualquer motivo) e em toda mão nova.
 - **Carta virada ("no escuro")**: ação `PLAY_CARD_COVERED` (liberada em `availableActions` em
-  qualquer vaza normal da vez; nunca no desempate). A carta sai da mão normalmente, mas vale
+  qualquer vaza normal da vez **a partir da segunda rodada da mão** — nunca na primeira rodada e
+  nunca no desempate). A carta sai da mão normalmente, mas vale
   `COVERED_CARD_STRENGTH = 0` (`playStrength`), abaixo de qualquer carta aberta — inclusive manilha
   virada perde para um 4 aberto. Viradas de times opostos como maiores forças cangam pela regra
   normal; a identidade real nunca desempata. O estado guarda a carta real (`PlayedCard.covered`);
@@ -56,7 +57,7 @@ applyAction(state, action): MatchState              // lança InvalidActionError
 viewForSeat(state, seat): SeatView                  // esconde as mãos dos outros; expõe dealerSeat
 seatsToAct(state): Seat[]
 playableCards(state, seat): Card[]                  // no desempate, só a(s) maior(es)
-canPlayCovered(state): boolean                       // carta virada liberada (fora do desempate)
+canPlayCovered(state): boolean                       // carta virada liberada (2ª rodada em diante, fora do desempate)
 playForSeat(play, seat) / eventsForSeat(events, seat) // redação da carta virada por assento
 resolveTrick(plays): { outcome: Team | 'TIE', winnerSeat, tieCausedBySeat }
 resolveHand(outcomes): CONTINUE (tieBreak?) | WINNER (decidedBy) | ALL_TIED

@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useFonts } from 'expo-font';
-import {
-  Nunito_400Regular,
-  Nunito_500Medium,
-  Nunito_600SemiBold,
-  Nunito_700Bold,
-  Nunito_800ExtraBold,
-  Nunito_900Black,
-} from '@expo-google-fonts/nunito';
-import { KaushanScript_400Regular } from '@expo-google-fonts/kaushan-script';
+// Um import por peso: o índice do pacote faz `require` dos 18 TTFs do Nunito (itálicos e pesos
+// finos inclusos) e o Metro empacotaria todos no APK, mesmo sem uso.
+import { Nunito_400Regular } from '@expo-google-fonts/nunito/400Regular';
+import { Nunito_500Medium } from '@expo-google-fonts/nunito/500Medium';
+import { Nunito_600SemiBold } from '@expo-google-fonts/nunito/600SemiBold';
+import { Nunito_700Bold } from '@expo-google-fonts/nunito/700Bold';
+import { Nunito_800ExtraBold } from '@expo-google-fonts/nunito/800ExtraBold';
+import { Nunito_900Black } from '@expo-google-fonts/nunito/900Black';
+import { KaushanScript_400Regular } from '@expo-google-fonts/kaushan-script/400Regular';
 import * as SplashScreen from 'expo-splash-screen';
 import { useAuthStore } from '@/stores/authStore';
 import { useProfileStore } from '@/stores/profileStore';

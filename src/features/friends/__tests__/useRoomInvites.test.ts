@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { useRoomInvites, INVITE_TTL_MS } from '../useRoomInvites';
 import type { RoomInvite } from '@/domain/model/types';
 
-const mockJoinRoom = jest.fn();
+const mockRespond = jest.fn();
 const mockDelete = jest.fn((..._args: unknown[]) => Promise.resolve());
 const mockLogEvent = jest.fn();
 const mockToastError = jest.fn();
@@ -28,7 +28,7 @@ jest.mock('@/services/firebase/functions', () => {
       this.code = code;
     }
   }
-  return { FunctionsError, joinRoom: (...args: unknown[]) => mockJoinRoom(...args) };
+  return { FunctionsError, respondRoomInvite: (...args: unknown[]) => mockRespond(...args) };
 });
 jest.mock('@/services/firebase/analytics', () => ({
   logEvent: (...a: unknown[]) => mockLogEvent(...a),
@@ -52,7 +52,7 @@ const invite = (over: Partial<RoomInvite> = {}): RoomInvite => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockJoinRoom.mockResolvedValue({ code: 'ABC123' });
+  mockRespond.mockResolvedValue({ code: 'ABC123' });
 });
 
 describe('useRoomInvites', () => {
@@ -72,7 +72,16 @@ describe('useRoomInvites', () => {
     expect(result.current.invites).toHaveLength(0);
   });
 
-  it('aceitar entra na sala, apaga o convite e avisa quem chamou o hook', async () => {
+  it('usa o prazo que o servidor mandou', async () => {
+    const { result } = await renderHook(() => useRoomInvites('me'));
+    await act(async () =>
+      emit?.([invite({ code: 'NEW123', createdAt: Date.now(), expiresAt: Date.now() - 1 })]),
+    );
+    await waitFor(() => expect(mockDelete).toHaveBeenCalledWith('me', 'NEW123'));
+    expect(result.current.invites).toHaveLength(0);
+  });
+
+  it('aceitar entra na sala (o servidor apaga o convite) e avisa quem chamou o hook', async () => {
     const onJoined = jest.fn();
     const { result } = await renderHook(() => useRoomInvites('me', onJoined));
     await act(async () => emit?.([invite()]));
@@ -82,14 +91,15 @@ describe('useRoomInvites', () => {
       await result.current.accept(result.current.invites[0]!);
     });
 
-    expect(mockJoinRoom).toHaveBeenCalledWith('ABC123');
-    expect(mockDelete).toHaveBeenCalledWith('me', 'ABC123');
+    expect(mockRespond).toHaveBeenCalledWith('ABC123', true);
     expect(onJoined).toHaveBeenCalledWith('ABC123');
     expect(mockLogEvent).toHaveBeenCalledWith('room_invite_accepted');
   });
 
   it('sala cheia: mostra o erro e limpa o convite que não serve mais', async () => {
-    mockJoinRoom.mockRejectedValue(new FunctionsError('resource-exhausted', 'cheia'));
+    mockRespond.mockRejectedValue(
+      new FunctionsError('resource-exhausted', 'A sala já está completa.'),
+    );
     const onJoined = jest.fn();
     const { result } = await renderHook(() => useRoomInvites('me', onJoined));
     await act(async () => emit?.([invite()]));
@@ -100,12 +110,15 @@ describe('useRoomInvites', () => {
     });
 
     expect(onJoined).not.toHaveBeenCalled();
-    expect(mockToastError).toHaveBeenCalledWith('Não foi possível entrar', 'A sala já está cheia.');
+    expect(mockToastError).toHaveBeenCalledWith(
+      'Não foi possível entrar',
+      'A sala já está completa.',
+    );
     expect(mockDelete).toHaveBeenCalledWith('me', 'ABC123');
   });
 
   it('sem conexão o convite continua lá para uma segunda tentativa', async () => {
-    mockJoinRoom.mockRejectedValue(new FunctionsError('unavailable', 'offline'));
+    mockRespond.mockRejectedValue(new FunctionsError('unavailable', 'offline'));
     const { result } = await renderHook(() => useRoomInvites('me'));
     await act(async () => emit?.([invite()]));
     await waitFor(() => expect(result.current.invites).toHaveLength(1));
@@ -118,7 +131,7 @@ describe('useRoomInvites', () => {
     expect(result.current.invites).toHaveLength(1);
   });
 
-  it('recusar só apaga o convite', async () => {
+  it('recusar avisa o servidor (o dono vê a recusa na hora)', async () => {
     const { result } = await renderHook(() => useRoomInvites('me'));
     await act(async () => emit?.([invite()]));
     await waitFor(() => expect(result.current.invites).toHaveLength(1));
@@ -127,9 +140,20 @@ describe('useRoomInvites', () => {
       await result.current.decline(result.current.invites[0]!);
     });
 
-    expect(mockJoinRoom).not.toHaveBeenCalled();
-    expect(mockDelete).toHaveBeenCalledWith('me', 'ABC123');
+    expect(mockRespond).toHaveBeenCalledWith('ABC123', false);
+    expect(mockDelete).not.toHaveBeenCalled();
     expect(mockLogEvent).toHaveBeenCalledWith('room_invite_declined');
+  });
+
+  it('recusar sem conexão pelo menos tira o convite da lista', async () => {
+    mockRespond.mockRejectedValue(new FunctionsError('unavailable', 'offline'));
+    const { result } = await renderHook(() => useRoomInvites('me'));
+    await act(async () => emit?.([invite()]));
+    await waitFor(() => expect(result.current.invites).toHaveLength(1));
+    await act(async () => {
+      await result.current.decline(result.current.invites[0]!);
+    });
+    expect(mockDelete).toHaveBeenCalledWith('me', 'ABC123');
   });
 
   it('sem usuário não escuta nada', async () => {

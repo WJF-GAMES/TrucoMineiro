@@ -1,23 +1,11 @@
 import { onValueWritten } from 'firebase-functions/v2/database';
 import { arr, authedCallable, HttpsError, bool, obj, str } from './lib/callable';
-import { db, DB_TRIGGER_REGION, messaging, now, rtdb } from './lib/admin';
-import { FriendRequest, Presence, Profile } from './domain/model/types';
+import { db, DB_TRIGGER_REGION, now, rtdb } from './lib/admin';
+import { FriendRequest, Presence, Profile, RoomInvite } from './domain/model/types';
 import { phoneHash } from './contacts';
-
-async function pushTo(uid: string, title: string, body: string, data: Record<string, string>) {
-  const user = (await db.doc(`users/${uid}`).get()).data() as
-    { fcmTokens?: Record<string, unknown> } | undefined;
-  const tokens = Object.keys(user?.fcmTokens ?? {});
-  if (tokens.length === 0) return;
-  await messaging
-    .sendEachForMulticast({
-      tokens,
-      notification: { title, body },
-      data,
-      android: { priority: 'high' },
-    })
-    .catch(() => undefined);
-}
+import { pushTo } from './lib/push';
+import { hitRateLimit, takeCooldown } from './lib/rateLimit';
+import { INVITE_TTL_MS, inviteIdOf, PUSH_COOLDOWN_MS } from './friendRoomConfig';
 
 /**
  * Id determinístico da solicitação A→B. Duas chamadas simultâneas gravam o MESMO documento,
@@ -78,6 +66,7 @@ export const sendFriendRequest = authedCallable<{ toUid: string }, { ok: true }>
       'Nova solicitação de amizade',
       `${p.nickname} quer jogar truco com você.`,
       { type: 'friend_invite', from: uid },
+      { collapseKey: `friend_${uid}` },
     );
     return { ok: true };
   },
@@ -203,15 +192,33 @@ export const inviteFriendToRoom = authedCallable<
     }
     const me = (await db.doc(`profiles/${uid}`).get()).data() as Profile | undefined;
     if (!me) throw new HttpsError('failed-precondition', 'Complete seu cadastro para continuar.');
-    await rtdb
-      .ref(`invites/${data.friendUid}/${data.code}`)
-      .set({ from: uid, fromNickname: me.nickname, code: data.code, createdAt: now() });
-    await pushTo(
-      data.friendUid,
-      'Convite para jogar',
-      `${me.nickname} te chamou para a sala ${data.code}.`,
-      { type: 'room_invite', code: data.code },
+    await hitRateLimit(
+      uid,
+      'room_invite',
+      20,
+      60_000,
+      'Muitos convites seguidos. Aguarde um pouco.',
     );
+    const inviteId = inviteIdOf(data.code, data.friendUid);
+    const invite: RoomInvite = {
+      from: uid,
+      fromNickname: me.nickname,
+      code: data.code,
+      createdAt: now(),
+      inviteId,
+      expiresAt: now() + INVITE_TTL_MS,
+    };
+    await rtdb.ref(`invites/${data.friendUid}/${data.code}`).set(invite);
+    // O mesmo convite repetido não vira uma rajada de pushes no aparelho do amigo.
+    if (await takeCooldown(uid, `push_${inviteId}`, PUSH_COOLDOWN_MS)) {
+      await pushTo(
+        data.friendUid,
+        `${me.nickname} te chamou para uma partida de Truco!`,
+        'Toque para entrar na sala.',
+        { type: 'room_invite', code: data.code, inviteId },
+        { collapseKey: inviteId, ttlMs: INVITE_TTL_MS },
+      );
+    }
     return { ok: true };
   },
   (d) => {

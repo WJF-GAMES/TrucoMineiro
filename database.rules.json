@@ -14,6 +14,7 @@
       "queue": { "$uid": { ".read": "auth != null && auth.uid == $uid" } }
     },
     "rooms": {
+      ".indexOn": ["status"],
       "$code": { ".read": "auth != null" }
     },
     "userRooms": { "$uid": { ".read": "auth != null && auth.uid == $uid" } },
@@ -25,7 +26,8 @@
           ".read": "auth != null && (root.child('gameSessions/' + $sessionId + '/meta/players/0/uid').val() == auth.uid || root.child('gameSessions/' + $sessionId + '/meta/players/1/uid').val() == auth.uid || root.child('gameSessions/' + $sessionId + '/meta/players/2/uid').val() == auth.uid || root.child('gameSessions/' + $sessionId + '/meta/players/3/uid').val() == auth.uid)",
           "players": {
             "$seat": {
-              "connected": { ".write": "auth != null && data.parent().child('uid').val() == auth.uid", ".validate": "newData.isBoolean()" }
+              "connected": { ".write": "auth != null && data.parent().child('uid').val() == auth.uid", ".validate": "newData.isBoolean()" },
+              "disconnectedAt": { ".write": "auth != null && data.parent().child('uid').val() == auth.uid", ".validate": "newData.isNumber() && newData.val() <= now" }
             }
           }
         },

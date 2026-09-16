@@ -7,6 +7,7 @@ import {
 } from '@react-native-firebase/auth';
 import type { ConfirmationResult, User } from '@react-native-firebase/auth';
 import { EMULATOR_HOST, EMULATOR_PORTS, USE_EMULATORS, firebaseApp } from './app';
+import { releasePushToken } from './messaging';
 
 const auth = getAuth(firebaseApp);
 
@@ -104,6 +105,8 @@ export function currentUser(): AuthUser | null {
 }
 
 export async function signOut(): Promise<void> {
+  // Antes de sair: com a sessão ainda válida, o aparelho deixa de receber push desta conta.
+  await releasePushToken();
   await rnSignOut(auth);
 }
 

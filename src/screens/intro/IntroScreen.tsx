@@ -19,7 +19,7 @@ const FEATURES: { icon: IoniconName; color: string; label: string }[] = [
   { icon: 'star', color: colors.gold, label: 'Conquiste\nrecompensas' },
 ];
 
-/** Natural aspect ratio of the artwork (assets/images/hero/intro_hero.png). */
+/** Natural aspect ratio of the artwork (assets/images/hero/intro_hero.webp). */
 const HERO_RATIO = 1419 / 1683;
 
 const CARD_GAP = 7;
