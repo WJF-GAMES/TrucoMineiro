@@ -1,6 +1,6 @@
 {
   "name": "trucox",
-  "version": "1.3.1",
+  "version": "1.3.4",
   "main": "index.ts",
   "dependencies": {
     "@expo-google-fonts/kaushan-script": "^0.4.1",
@@ -13,9 +13,6 @@
     "@react-native-firebase/app-check": "^26.4.0",
     "@react-native-firebase/auth": "^26.4.0",
     "@react-native-firebase/crashlytics": "^26.4.0",
-    "@react-native-firebase/database": "^26.4.0",
-    "@react-native-firebase/firestore": "^26.4.0",
-    "@react-native-firebase/functions": "^26.4.0",
     "@react-native-firebase/messaging": "^26.4.0",
     "@react-native-firebase/perf": "^26.4.0",
     "@react-native-firebase/remote-config": "^26.4.0",
@@ -50,6 +47,7 @@
     "react-native-svg": "15.15.4",
     "react-native-web": "^0.21.2",
     "react-native-worklets": "0.10.1",
+    "socket.io-client": "4.8.3",
     "zod": "^4.6.2",
     "zustand": "^5.0.15"
   },
@@ -74,16 +72,17 @@
     "ios": "expo run:ios",
     "prebuild": "expo prebuild",
     "lint": "eslint .",
-    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"functions/src/**/*.ts\"",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"backend/src/**/*.ts\" \"backend/test/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:engine": "jest src/domain",
     "test:sim": "tsx scripts/simulate-ai.ts",
-    "emulators": "firebase emulators:start --project truco-mineiro-wjf",
-    "typecheck:functions": "npm --prefix functions run build",
-    "test:functions": "npm --prefix functions test",
-    "check": "npm run lint && npm run typecheck && npm test && npm run typecheck:functions && npm run test:functions"
+    "emulators": "firebase emulators:start --only auth --project truco-mineiro-wjf",
+    "check": "npm run lint && npm run typecheck && npm test && npm run backend:check",
+    "backend:dev": "npm --prefix backend run start:dev",
+    "backend:check": "npm --prefix backend run check",
+    "backend:test:integration": "npm --prefix backend run test:integration"
   },
   "private": true
 }

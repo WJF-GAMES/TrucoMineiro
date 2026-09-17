@@ -30,6 +30,7 @@ import { setCrashContext } from '@/services/firebase/crashlytics';
 import { useFriendInviteLink } from '@/features/friends/useFriendInviteLink';
 import { useRoomInvitePrompt } from '@/features/friends/useRoomInvitePrompt';
 import { usePendingRoomInvite } from '@/features/friends/usePendingRoomInvite';
+import { useResumeActiveMatch } from '@/features/game/useResumeActiveMatch';
 import { navigationRef } from './navigationRef';
 import { useAdStore } from '@/ads/core/AdState';
 
@@ -60,10 +61,11 @@ export function RootNavigator() {
   const [routeName, setRouteName] = React.useState<string | null>(null);
   // Convite por QR Code / link: precisa valer em qualquer tela, não só em Amigos.
   useFriendInviteLink();
-  // Convite de sala de um amigo: o mesmo vale aqui — chega pelo Realtime Database a qualquer hora.
+  // Convite de sala de um amigo: o mesmo vale aqui — chega pelo WebSocket a qualquer hora.
   useRoomInvitePrompt(routeName);
   // Toque no push / link de sala: guardado até dar para entrar (login e cadastro no meio).
   usePendingRoomInvite(routeName);
+  useResumeActiveMatch(routeName);
 
   return (
     <NavigationContainer

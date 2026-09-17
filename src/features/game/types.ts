@@ -35,4 +35,9 @@ export interface TableController {
   setBotsPaused: (paused: boolean) => void;
   /** Rewards computed by the server (online only; the AI mode gets them from finalizeMatch). */
   progression?: ProgressionResult | null;
+  /**
+   * Online: prazo oficial da decisão atual, já convertido para o relógio do aparelho
+   * (`turnDeadlineAt - serverTime + recebido em`), amarrado à versão da view que o trouxe.
+   */
+  serverDeadline?: { version: number; at: number } | null;
 }

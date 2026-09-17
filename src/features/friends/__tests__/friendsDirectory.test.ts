@@ -71,3 +71,98 @@ describe('buildFriendsDirectory', () => {
     expect(keys(beto.invites)).toEqual(['i-c4']);
   });
 });
+
+describe('buildFriendsDirectory — seções e conexão automática', () => {
+  const withPresence = (id: string, state: 'online' | 'in_match' | 'offline'): FriendEntry => ({
+    profile: { id, nickname: id, avatarId: 'joao' } as Profile,
+    presence: { state, lastChanged: 0 } as FriendEntry['presence'],
+  });
+
+  it('separa ONLINE, AMIGOS e CONVIDAR, na ordem da tela', () => {
+    const friends = [withPresence('ana', 'online'), withPresence('rui', 'in_match'), friend('ze')];
+    const d = buildFriendsDirectory(friends, agenda, '', {
+      friendIds: new Set(['ana', 'rui', 'ze']),
+    });
+    expect(keys(d.online)).toEqual(['f-ana', 'f-rui']);
+    expect(keys(d.offline)).toEqual(['f-ze']);
+    // Bia só tem solicitação enviada: continua em "já jogam" até alguém aceitar.
+    expect(keys(d.players)).toEqual(['m-bia']);
+    expect(keys(d.invites)).toEqual(['i-c4', 'i-c7']);
+    expect(keys(d.people)).toEqual(['f-ana', 'f-rui', 'f-ze', 'm-bia']);
+  });
+
+  it('contato conectado automaticamente aparece só em Amigos, nunca em "já jogam"', () => {
+    const auto: AgendaMatchResult = {
+      matched: [
+        match({ contactId: 'c1', contactName: 'João Pedreiro', uid: 'joao', relation: 'friend' }),
+      ],
+      unmatched: [],
+    };
+    const d = buildFriendsDirectory([friend('joao', 'João Silva')], auto, '', {
+      friendIds: new Set(['joao']),
+    });
+    expect(keys(d.people)).toEqual(['f-joao']);
+    expect(d.players).toEqual([]);
+    // Apelido público na linha; o nome da agenda fica como detalhe.
+    expect(d.offline[0]).toMatchObject({ contactName: 'João Pedreiro' });
+    expect(d.offline[0]!.entry.profile.nickname).toBe('João Silva');
+  });
+
+  it('amizade recém-criada com perfil ainda carregando não pisca como "adicionar"', () => {
+    const auto: AgendaMatchResult = {
+      matched: [match({ contactId: 'c1', uid: 'novo', relation: 'friend' })],
+      unmatched: [],
+    };
+    const d = buildFriendsDirectory([], auto, '', { friendIds: new Set(['novo']) });
+    expect(d.people).toEqual([]);
+    const loading = buildFriendsDirectory([], auto, '', { friendIds: null });
+    expect(loading.people).toEqual([]);
+  });
+
+  it('cache dizendo "amigo" para quem não é mais amigo: volta para "já jogam" em vez de sumir', () => {
+    const stale: AgendaMatchResult = {
+      matched: [match({ contactId: 'c1', contactName: 'Zé', uid: 'ze', relation: 'friend' })],
+      unmatched: [],
+    };
+    const d = buildFriendsDirectory([], stale, '', { friendIds: new Set() });
+    expect(keys(d.players)).toEqual(['m-ze']);
+    expect(d.players[0]!.contact.relation).toBe('none');
+  });
+
+  it('removido manualmente (servidor devolve "none") fica em "já jogam" com a opção de adicionar', () => {
+    const removed: AgendaMatchResult = {
+      matched: [match({ contactId: 'c1', uid: 'bia', relation: 'none' })],
+      unmatched: [],
+    };
+    const d = buildFriendsDirectory([], removed, '', { friendIds: new Set() });
+    expect(d.players).toMatchObject([{ contact: { uid: 'bia', relation: 'none' } }]);
+  });
+
+  it('bloqueado não aparece em lugar nenhum', () => {
+    const d = buildFriendsDirectory([friend('ze')], agenda, '', {
+      friendIds: new Set(['ze']),
+      blockedIds: new Set(['ze', 'ana', 'bia']),
+    });
+    expect(keys(d.people)).toEqual([]);
+  });
+
+  it('o mesmo jogador em dois contatos vira uma linha só', () => {
+    const twice: AgendaMatchResult = {
+      matched: [
+        match({ contactId: 'c1', contactName: 'Ana', uid: 'ana', relation: 'friend' }),
+        match({ contactId: 'c2', contactName: 'Ana Trabalho', uid: 'ana', relation: 'friend' }),
+      ],
+      unmatched: [],
+    };
+    const d = buildFriendsDirectory([friend('ana')], twice, '', { friendIds: new Set(['ana']) });
+    expect(keys(d.people)).toEqual(['f-ana']);
+    expect(d.offline[0]!.contactName).toBe('Ana');
+  });
+
+  it('amigo manual fora da agenda continua na lista', () => {
+    const d = buildFriendsDirectory([friend('manual')], agenda, '', {
+      friendIds: new Set(['manual']),
+    });
+    expect(keys(d.offline)).toContain('f-manual');
+  });
+});

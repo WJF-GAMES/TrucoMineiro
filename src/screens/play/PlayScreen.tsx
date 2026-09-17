@@ -7,7 +7,7 @@ import { images } from '@/assets';
 import { AppText, GameHeader, GameModeCard, Screen, Surface } from '@/components';
 import { logEvent } from '@/services/firebase/analytics';
 import { flag } from '@/services/firebase/remoteConfig';
-import { subscribeOnlineCount } from '@/services/firebase/rtdb';
+import { subscribeOnlineCount } from '@/services/api';
 import { formatNumber } from '@/utils/format';
 import { haptic } from '@/utils/haptics';
 import { toast } from '@/stores/toastStore';

@@ -1,44 +1,6 @@
 {
   "rules": {
     ".read": false,
-    ".write": false,
-    "presence": {
-      ".read": "auth != null",
-      "$uid": {
-        ".write": "auth != null && auth.uid == $uid",
-        ".validate": "newData.hasChildren(['state', 'lastChanged']) && newData.child('state').val().matches(/^(online|in_match|offline)$/)"
-      }
-    },
-    "stats": { "onlineCount": { ".read": "auth != null" } },
-    "matchmaking": {
-      "queue": { "$uid": { ".read": "auth != null && auth.uid == $uid" } }
-    },
-    "rooms": {
-      ".indexOn": ["status"],
-      "$code": { ".read": "auth != null" }
-    },
-    "userRooms": { "$uid": { ".read": "auth != null && auth.uid == $uid" } },
-    "userSessions": { "$uid": { ".read": "auth != null && auth.uid == $uid" } },
-    "invites": { "$uid": { ".read": "auth != null && auth.uid == $uid", "$code": { ".write": "auth != null && auth.uid == $uid && !newData.exists()" } } },
-    "gameSessions": {
-      "$sessionId": {
-        "meta": {
-          ".read": "auth != null && (root.child('gameSessions/' + $sessionId + '/meta/players/0/uid').val() == auth.uid || root.child('gameSessions/' + $sessionId + '/meta/players/1/uid').val() == auth.uid || root.child('gameSessions/' + $sessionId + '/meta/players/2/uid').val() == auth.uid || root.child('gameSessions/' + $sessionId + '/meta/players/3/uid').val() == auth.uid)",
-          "players": {
-            "$seat": {
-              "connected": { ".write": "auth != null && data.parent().child('uid').val() == auth.uid", ".validate": "newData.isBoolean()" },
-              "disconnectedAt": { ".write": "auth != null && data.parent().child('uid').val() == auth.uid", ".validate": "newData.isNumber() && newData.val() <= now" }
-            }
-          }
-        },
-        "views": {
-          "$seat": { ".read": "auth != null && root.child('gameSessions/' + $sessionId + '/meta/players/' + $seat + '/uid').val() == auth.uid" }
-        },
-        "results": {
-          "$seat": { ".read": "auth != null && root.child('gameSessions/' + $sessionId + '/meta/players/' + $seat + '/uid').val() == auth.uid" }
-        },
-        "state": { ".read": false, ".write": false }
-      }
-    }
+    ".write": false
   }
 }

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
-import { getLeagueScreenSnapshot, FunctionsError } from '@/services/firebase/functions';
-import { subscribeGroupMembers } from '@/services/firebase/firestore';
+import { getLeagueScreenSnapshot, ApiError , subscribeGroupMembers } from '@/services/api';
+
 import { rankMembers } from '@/domain/model/leagueRanking';
 import type { LeagueRankingMember, LeagueScreenSnapshot } from '@/domain/model/types';
 
 /**
- * O snapshot chega de uma Cloud Function. Se a resposta vier incompleta (deploy antigo, payload
+ * O snapshot chega do backend (`GET /v1/leagues/me`). Se a resposta vier incompleta (deploy antigo, payload
  * truncado, stub da build web), a tela lia `snapshot.currentLeague.id` e caía inteira — tela
  * branca, sem mensagem e sem saída. Aqui a resposta é conferida antes de virar estado: o que não
  * tiver liga atual vale como falha de carregamento e cai no estado de erro, com "tentar novamente".
@@ -71,7 +71,7 @@ export function useLeagueScreen(): LeagueScreenState {
       })
       .catch((e: unknown) => {
         if (!mounted.current) return;
-        setError(e instanceof FunctionsError ? e.message : 'Não foi possível carregar sua liga.');
+        setError(e instanceof ApiError ? e.message : 'Não foi possível carregar sua liga.');
         setLoading(false);
       });
   }, [attempt]);

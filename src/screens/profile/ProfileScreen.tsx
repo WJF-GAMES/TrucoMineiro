@@ -19,7 +19,7 @@ import {
 } from '@/components';
 import { useProfileStore } from '@/stores/profileStore';
 import { useAuthStore } from '@/stores/authStore';
-import { getAchievements, subscribeUserAchievements } from '@/services/firebase/firestore';
+import { getAchievements, subscribeUserAchievements } from '@/services/api';
 import { leagueById } from '@/domain/model/leagues';
 import { formatNumber, pct } from '@/utils/format';
 import { traced } from '@/services/firebase/perf';

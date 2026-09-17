@@ -12,7 +12,7 @@ import {
 } from '@/components';
 import { useProfileStore } from '@/stores/profileStore';
 import type { AvatarId } from '@/domain/model/types';
-import { updateProfile, FunctionsError } from '@/services/firebase/functions';
+import { updateProfile, ApiError } from '@/services/api';
 import { NICKNAME_HINT, nicknameSchema } from '@/screens/auth/RegisterScreen';
 import { toast } from '@/stores/toastStore';
 import { haptic } from '@/utils/haptics';
@@ -38,7 +38,7 @@ export function EditProfileScreen({ navigation }: RootScreenProps<'EditProfile'>
       toast.success('Perfil atualizado');
       navigation.goBack();
     } catch (e) {
-      toast.error('Não foi possível salvar', e instanceof FunctionsError ? e.message : undefined);
+      toast.error('Não foi possível salvar', e instanceof ApiError ? e.message : undefined);
     } finally {
       setLoading(false);
     }

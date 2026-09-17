@@ -13,16 +13,19 @@ interface Options {
   /** Cerimônia, vaza sendo mostrada, reconexão: o relógio não corre. */
   paused: boolean;
   act: (action: GameAction) => Promise<void> | void;
+  /** Online: prazo oficial do servidor (relógio local) para a view `version`. */
+  serverDeadline?: { version: number; at: number } | null;
 }
 
 /**
  * Prazo absoluto (epoch ms) da jogada local, ou `null` quando não é a vez / está pausado.
  *
  * O prazo nasce uma vez por decisão (`view.version` muda a cada ação aceita) e sobrevive a
- * re-renders, a background/foreground e ao relógio do anel — tudo lê o mesmo instante. Quando o
- * tempo acaba, a jogada automática sai pelo mesmo `act` de um toque.
+ * re-renders, a background/foreground e ao relógio do anel — tudo lê o mesmo instante. Online,
+ * nunca passa do prazo enviado pelo servidor. Quando o tempo acaba, a jogada automática sai pelo
+ * mesmo `act` de um toque.
  */
-export function useTurnTimer({ view, mySeat, myMove, paused, act }: Options): number | null {
+export function useTurnTimer({ view, mySeat, myMove, paused, act, serverDeadline }: Options): number | null {
   // No embaralho/corte a decisão é o estágio inteiro: cada mistura muda `version`, mas o prazo
   // é um só ("tempo para embaralhar"). Nas outras fases cada ação aceita abre um prazo novo.
   const ceremonyPhase = view?.phase === 'SHUFFLING' || view?.phase === 'CUTTING';
@@ -34,10 +37,15 @@ export function useTurnTimer({ view, mySeat, myMove, paused, act }: Options): nu
       : null;
   // Derivado por decisão: nasce no mesmo render em que a vez chega e não muda até a próxima.
   const phase = view?.phase ?? 'PLAY';
-  const deadlineAt = useMemo(
+  const localDeadline = useMemo(
     () => (decisionKey === null ? null : nowMs() + turnDurationMs(phase)),
     [decisionKey, phase],
   );
+  // Online, o prazo que vale é o do servidor (ele joga pelo jogador depois dele + tolerância). A
+  // vez pode aparecer na tela depois (animações), então o relógio local nunca passa do oficial.
+  const serverAt = serverDeadline && view && serverDeadline.version === view.version ? serverDeadline.at : null;
+  const deadlineAt =
+    localDeadline === null ? null : serverAt === null ? localDeadline : Math.min(localDeadline, serverAt);
 
   // Chave viva: se o disparo chegar atrasado (JS travado numa animação pesada) depois de a
   // decisão já ter mudado, a jogada automática é descartada em vez de bater no motor.

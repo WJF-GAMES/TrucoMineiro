@@ -19,7 +19,7 @@ import {
 import { useProfileStore } from '@/stores/profileStore';
 import { logEvent } from '@/services/firebase/analytics';
 import { formatNumber, pct } from '@/utils/format';
-import { subscribeOnlineCount } from '@/services/firebase/rtdb';
+import { subscribeOnlineCount } from '@/services/api';
 import { leagueById } from '@/domain/model/leagues';
 import { NativeAdCard, SponsoredContentCard, usePreloadInterstitial } from '@/ads';
 import type { TabScreenProps } from '@/navigation/types';

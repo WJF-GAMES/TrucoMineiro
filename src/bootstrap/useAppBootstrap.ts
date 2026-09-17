@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 import { useFonts } from 'expo-font';
 // Um import por peso: o índice do pacote faz `require` dos 18 TTFs do Nunito (itálicos e pesos
 // finos inclusos) e o Metro empacotaria todos no APK, mesmo sem uso.
@@ -14,13 +15,14 @@ import { useAuthStore } from '@/stores/authStore';
 import { useProfileStore } from '@/stores/profileStore';
 import { useNetworkStore } from '@/stores/networkStore';
 import { onAuthStateChanged } from '@/services/firebase/auth';
-import { bootstrapUser, ensureUserLeagueAssignment } from '@/services/firebase/functions';
 import {
+  bootstrapUser,
+  connectPresence,
   getProfileFromServer,
-  subscribeProfile,
-  subscribeStats,
-} from '@/services/firebase/firestore';
-import { connectPresence, subscribeConnection } from '@/services/firebase/rtdb';
+  setAppForeground,
+  subscribeConnection,
+  subscribeMyProfile,
+} from '@/services/api';
 import { initRemoteConfig } from '@/services/firebase/remoteConfig';
 import { initAppCheck } from '@/services/firebase/appCheck';
 import { identifyUser, logEvent } from '@/services/firebase/analytics';
@@ -33,8 +35,8 @@ import { resolveOnboarding } from './resolveOnboarding';
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 /**
- * Boots the app: fonts, App Check, Remote Config, auth listener, profile subscriptions,
- * presence and push registration. Returns true when the UI can be shown.
+ * Boots the app: fonts, App Check, Remote Config, auth listener, bootstrap no backend, perfil ao
+ * vivo, tempo real (presença) e push. Returns true when the UI can be shown.
  */
 export function useAppBootstrap(): boolean {
   const [fontsLoaded] = useFonts({
@@ -86,7 +88,7 @@ export function useAppBootstrap(): boolean {
       // "chuta": usuário novo não cai na Home sem apelido, e quem já tem cadastro não refaz o cadastro
       // só porque o cache local do aparelho ainda está vazio.
       const onboarded = await resolveOnboarding({
-        bootstrap: bootstrapUser,
+        bootstrap: () => bootstrapUser(),
         serverProfile: () => getProfileFromServer(user.uid),
         report: reportError,
       });
@@ -95,20 +97,19 @@ export function useAppBootstrap(): boolean {
         auth.setUser(user, complete);
       };
       if (onboarded !== null) decide(onboarded);
+      // Tempo real (presença, convites, partida) — a conexão autentica com o mesmo ID Token.
+      cleanups.push(connectPresence(user.uid));
       cleanups.push(
-        subscribeProfile(
-          user.uid,
-          (p, fromCache) => {
+        subscribeMyProfile(
+          ({ profile: p, stats }) => {
             profileStore.setProfile(p);
+            profileStore.setStats(stats);
             const complete = Boolean(p?.nickname);
-            // Servidor fora: um perfil completo (mesmo do cache) basta para entrar; "sem perfil" só
-            // vale quando confirmado pelo servidor.
-            if (onboarded === null && (complete || !fromCache)) decide(complete);
+            if (onboarded === null) decide(complete);
             const store = useAuthStore.getState();
             if (complete && store.status === 'onboarding') store.setOnboarded();
             // Perfil que existe sem apelido (cadastro interrompido): volta para o cadastro.
-            else if (p && !complete && !fromCache && store.status === 'signed_in')
-              store.setNeedsOnboarding();
+            else if (p && !complete && store.status === 'signed_in') store.setNeedsOnboarding();
           },
           (err) => {
             profileStore.setError(err.message);
@@ -117,15 +118,16 @@ export function useAppBootstrap(): boolean {
             if (onboarded === null) decide(false);
           },
         ),
-        subscribeStats(user.uid, (s) => profileStore.setStats(s)),
-        connectPresence(user.uid),
       );
       setupPushNotifications().then((u) => cleanups.push(u));
     });
     const unsubConn = subscribeConnection((c) => useNetworkStore.getState().setConnected(c));
+    // Segundo plano: presença "em segundo plano"; de volta: reconecta e reafirma o estado.
+    const appState = AppState.addEventListener('change', (next) => setAppForeground(next === 'active'));
     return () => {
       unsubAuth();
       unsubConn();
+      appState.remove();
       cleanups.forEach((c) => c());
     };
   }, []);
@@ -143,9 +145,8 @@ export function useAppBootstrap(): boolean {
   const authStatus = useAuthStore((s) => s.status);
   useEffect(() => {
     if (!ready || authStatus !== 'signed_in') return;
+    // A liga já foi garantida pelo bootstrap (uma chamada só depois do login).
     AdService.initialize().catch((e) => reportError(e, 'ads.initialize'));
-    // Garantia de liga a cada entrada no app: idempotente e barata quando já está tudo certo.
-    ensureUserLeagueAssignment().catch((e) => reportError(e, 'ensureUserLeagueAssignment'));
   }, [ready, authStatus]);
 
   return ready;

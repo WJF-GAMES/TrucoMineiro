@@ -1,61 +1,83 @@
 # Firebase — configuração e uso
 
-Projeto: `truco-mineiro-wjf` · RTDB `https://truco-mineiro-wjf-default-rtdb.firebaseio.com` · Storage `gs://truco-mineiro-wjf.firebasestorage.app`.
+Projeto: `truco-mineiro-wjf`.
+
+Desde a migração para o backend NestJS (docs/migration.md), o Firebase **não guarda dados de domínio
+nem executa regra de jogo**. Ele continua responsável por identidade, push, telemetria, flags,
+anúncios e atestado do app. Perfis, amigos, salas, partidas, ligas e presença estão no PostgreSQL
+(docs/data-model.md).
+
+## O que continua em uso
 
 | Serviço | Onde | Uso |
 |---|---|---|
-| Authentication | `services/firebase/auth.ts` | Somente telefone (E.164) + OTP. Número de teste: `+5561996289726 / 123456` (configurado no Console; nunca há bypass local). |
-| Firestore | `services/firebase/firestore.ts` | Dados persistentes (ver docs/data-model.md). Cliente só lê. |
-| Realtime Database | `services/firebase/rtdb.ts` | Presença, matchmaking, salas, sessões, views por assento, conexão. |
-| Cloud Functions | `functions/src` | Toda escrita crítica (ver lista em docs/multiplayer.md e docs/security.md). Região `southamerica-east1`. |
-| Storage | `storage.rules` | Reservado para upload de avatar (futuro). O SDK cliente (`@react-native-firebase/storage`) não está instalado — adicionar junto com a feature. |
-| Cloud Messaging | `services/firebase/messaging.ts` + `registerDevice` | Convites de amigos/salas, recompensas, liga, temporada, novidades. |
-| Remote Config | `services/firebase/remoteConfig.ts` + `remoteconfig.template.json` | Flags: maintenance_mode, minimum_supported_version, ai_*_enabled, online_enabled, matchmaking_enabled, friends_enabled, league_enabled, store_enabled, daily_reward_enabled, xp_multiplier, matchmaking_bot_fill_seconds, matchmaking_timeout_seconds. |
-| App Check | `services/firebase/appCheck.ts` | Play Integrity / App Attest em produção; Debug Provider em `__DEV__` (`EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN`). Functions exigem token fora do emulador. |
-| Analytics | `services/firebase/analytics.ts` | Taxonomia em docs/analytics.md. |
-| Crashlytics | `services/firebase/crashlytics.ts` | Contexto permitido: matchId, screen, gameMode, appVersion, state. |
+| Authentication | `services/firebase/auth.ts` (app) · `backend/src/firebase/firebase-admin.service.ts` | Somente telefone (E.164) + OTP. O app manda o ID Token ao backend (`Authorization: Bearer`), que verifica com o Admin SDK. O backend também consulta contas (`getUsers`, telefone verificado na agenda e reconciliação) e apaga a conta na exclusão. Número de teste: `+5561996289726 / 123456` (configurado no Console; nunca há bypass no app). Ver docs/authentication.md. |
+| Cloud Messaging | `services/firebase/messaging.ts` (token do aparelho → `POST /v1/me/devices`) · `backend/src/notifications/push.service.ts` | Só o backend envia push (Admin SDK): convites de sala, amizade, liga. Tokens recusados pelo FCM são apagados de `UserDevice`. |
+| App Check | `services/firebase/appCheck.ts` | Play Integrity / App Attest em produção; Debug Provider em `__DEV__` (`EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN`). O token vai no cabeçalho `x-firebase-appcheck` (REST) e em `auth.appCheck` (WebSocket); o backend exige quando `ENFORCE_APP_CHECK=true`. |
+| Remote Config | `services/firebase/remoteConfig.ts` + `remoteconfig.template.json` | Sem mudança. Flags do jogo: maintenance_mode, minimum_supported_version, ai_easy/normal/hard_enabled, online_enabled, matchmaking_enabled, friends_enabled, league_enabled, xp_multiplier, matchmaking_bot_fill_seconds, matchmaking_timeout_seconds; e as de anúncios (`ads_enabled`, `interstitial_*`, `rewarded_*`, `native_*`, `app_open_*` — ver docs/ADMOB_MONETIZATION.md). |
+| Analytics | `services/firebase/analytics.ts` | Sem mudança. Taxonomia em docs/analytics.md. |
+| Crashlytics | `services/firebase/crashlytics.ts` | Sem mudança. Contexto permitido: matchId, screen, gameMode, appVersion, state. |
 | Performance | `services/firebase/perf.ts` | Traces: app_startup, login_flow, home_load, matchmaking, room_join, match_start, profile_load, match_result. |
+| AdMob | `src/ads` (Google Mobile Ads) | Sem mudança (docs/ADMOB_MONETIZATION.md). |
+
+Pacotes nativos no app: `@react-native-firebase/{app, auth, app-check, messaging, analytics,
+crashlytics, perf, remote-config}`.
+
+## O que foi removido
+
+| Antes | Agora |
+|---|---|
+| Cloud Functions (`functions/`, callables, triggers de RTDB/Auth, agendadas) | Backend NestJS: REST `/v1`, WebSocket `/rt`, jobs (`backend/src/jobs`) e webhooks. `seedCatalog`/`leagueAdmin`/`diagnostics` viraram `/v1/admin/*`. O trigger `onAuthUserDeleted` virou o job `accounts.reconcile`. |
+| Firestore | PostgreSQL. `firestore.rules` nega tudo; `firestore.indexes.json` foi apagado. |
+| Realtime Database (presença, salas, sessões, views por assento, convites) | PostgreSQL + Socket.IO. `database.rules.json` nega tudo. |
+| `@react-native-firebase/firestore`, `database`, `functions` | Removidos do app; a CI falha se voltarem (ou se `httpsCallable` reaparecer). No lugar: `socket.io-client` e `src/services/api`. |
+
+As Cloud Functions antigas e os dados do Firestore/RTDB só são apagados no Console depois do período
+de rollback (docs/production-runbook.md).
+
+## Storage
+Não é usado. Nenhum código do app nem do backend fala com o Cloud Storage: o SDK
+`@react-native-firebase/storage` não está instalado e o backend não usa `firebase-admin/storage`
+(as ocorrências de "storage" em `src/` são armazenamento local com AsyncStorage — configurações,
+cache de contatos, convite pendente e frequência de anúncios; no backend, só `AsyncLocalStorage` do
+Node para o contexto da requisição). `storage.rules` continua no repositório
+com *deny by default* e uma exceção reservada para um futuro upload de avatar (`avatars/{uid}/…`,
+só o dono, imagem até 2 MB); essa exceção não é usada por nenhuma tela.
+
+## Regras (deny-all)
+`firestore.rules` e `database.rules.json` negam **qualquer** leitura e escrita. Elas só são
+publicadas na virada para o backend novo, junto com a versão do app que não usa mais esses bancos:
+```
+ENVIRONMENT=production ./scripts/deploy.sh --confirm-production --lockdown-firebase-rules
+# (equivale a: firebase deploy --only firestore:rules,database)
+```
+Publicar antes da virada quebra as versões antigas do app ainda instaladas — ver
+docs/production-runbook.md.
 
 ## Arquivos nativos
 - `google-services.json` (Android) e `GoogleService-Info.plist` (iOS) foram gerados a partir do config fornecido.
   **Pendência**: o `mobilesdk_app_id`/`GOOGLE_APP_ID` são placeholders — registre os apps Android (`com.mooby.trucomineiro`, com SHA-1/SHA-256)
   e iOS no Console e substitua os arquivos pelos baixados. Sem isso, Phone Auth em dispositivo real (Play Integrity/reCAPTCHA) não funciona.
-- Nunca há Service Account no app.
+- Nunca há Service Account no app. O backend usa a identidade do serviço no Cloud Run
+  (`FIREBASE_SERVICE_ACCOUNT_JSON` só fora dele, vindo do ambiente — nunca do repositório).
 
 ## Emuladores
+Só o **Auth Emulator** (`firebase.json`: `auth` 9099 + UI 4000, `singleProjectMode`).
 ```
-npm run emulators                 # auth 9099, functions 5001, firestore 8080, database 9000, storage 9199, UI 4000
+npm run emulators                                    # firebase emulators:start --only auth
 EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --dev-client
-curl http://127.0.0.1:5001/truco-mineiro-wjf/southamerica-east1/seedCatalog   # seed ligas/conquistas/temporada
+npm run backend:dev                                  # backend com FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 no backend/.env
+npm --prefix backend run seed                        # ligas + conquistas no banco local
 ```
-No emulador de Auth, o código OTP aparece no log do emulador (`http://127.0.0.1:4000/auth`).
+No emulador de Auth, o código OTP aparece em `http://127.0.0.1:4000/auth` ou em
+`curl http://127.0.0.1:9099/emulator/v1/projects/truco-mineiro-wjf/verificationCodes`. A tela de OTP
+mostra esse aviso automaticamente quando está em modo emulador. O número de teste do Console **não**
+vale no emulador. `FIREBASE_AUTH_EMULATOR_HOST` é proibido em staging/produção (o backend não sobe).
 
-## Deploy (requer `firebase login`)
-```
-firebase deploy --only firestore:rules,database,storage,functions,remoteconfig
-```
-
-## Estado do projeto em produção (12/09)
-
-Publicado com `firebase deploy` (CLI autenticada):
-
-| Item | Estado |
-|---|---|
-| Firestore (default, FIRESTORE_NATIVE) | criado; **rules e índices publicados** |
-| Realtime Database rules | publicadas |
-| Storage rules | publicadas |
-| Cloud Functions | **28 funções ativas** — 26 callables/HTTP em `southamerica-east1` + `onMatchmakingJoin` e `onPresenceWritten` em `us-central1` |
-| Remote Config | template publicado (14 parâmetros) |
-| Catálogo (leagues, achievements, seasons/current) | semeado via `seedCatalog` |
-
-> Triggers de Realtime Database (Eventarc) ainda **não existem em southamerica-east1** — o deploy falha com
-> `cannot create a trigger in region southamerica-east1 (not yet revealed)`. Por isso as duas funções
-> disparadas por banco rodam em `us-central1` (`DB_TRIGGER_REGION` em `functions/src/lib/admin.ts`).
-
-O segredo do `seedCatalog` fica em `functions/.env` (`SEED_SECRET`, fora do Git). Para rodar de novo:
-```
-curl -H "x-seed-secret: <segredo>" https://southamerica-east1-truco-mineiro-wjf.cloudfunctions.net/seedCatalog
-```
+## Deploy
+`scripts/deploy.sh` publica o backend no Cloud Run e o template do Remote Config
+(`firebase deploy --only remoteconfig`, requer `firebase login`); regras só com
+`--lockdown-firebase-rules`. Passo a passo em docs/deployment.md.
 
 ## Pendências no Console (bloqueio externo — exigem acesso do dono do projeto)
 
@@ -90,10 +112,5 @@ Para o login por telefone funcionar em produção (inclusive com o número de te
      ser cadastrado aqui, senão o Phone Auth quebra nas instalações vindas da loja.
 3. Baixar de novo o `google-services.json` depois de adicionar os SHA e substituir o da raiz.
 4. **Authentication → Sign-in method → Phone numbers for testing**: confirmar `+55 61 99628-9726 → 123456`.
-5. (Opcional agora) Habilitar a **Firebase App Check API** e registrar o debug token impresso no logcat.
-
-Enquanto isso, o desenvolvimento usa o **Emulator Suite**: `EXPO_PUBLIC_USE_EMULATORS=1`. Nele o número de teste
-do Console **não** vale — o Auth Emulator gera um código próprio, visível em
-`http://127.0.0.1:4000/auth` ou via
-`curl http://127.0.0.1:9099/emulator/v1/projects/truco-mineiro-wjf/verificationCodes`.
-A tela de OTP mostra esse aviso automaticamente quando está em modo emulador.
+5. Habilitar a **Firebase App Check API** e registrar o debug token impresso no logcat — necessário
+   antes de subir o backend com `ENFORCE_APP_CHECK=true` (padrão do `deploy.sh`).

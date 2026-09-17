@@ -4,7 +4,7 @@ import type { GameEvent, MatchState, Team } from '@/domain/game';
 import { teamOf } from '@/domain/game';
 import { useAiGame, AiMatchRecord } from '@/features/game/useAiGame';
 import { useOnlineGame } from '@/features/game/useOnlineGame';
-import { finalizeAiMatch, FunctionsError } from '@/services/firebase/functions';
+import { finalizeAiMatch, ApiError } from '@/services/api';
 import { logEvent } from '@/services/firebase/analytics';
 import { reportError } from '@/services/firebase/crashlytics';
 import { traced } from '@/services/firebase/perf';
@@ -90,7 +90,7 @@ function AiGame({
         reportError(e, 'finalizeAiMatch');
         toast.error(
           'Resultado não sincronizado',
-          e instanceof FunctionsError
+          e instanceof ApiError
             ? e.message
             : 'Sua progressão será atualizada quando a conexão voltar.',
         );

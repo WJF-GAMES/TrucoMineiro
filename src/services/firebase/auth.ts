@@ -110,6 +110,10 @@ export async function signOut(): Promise<void> {
   await rnSignOut(auth);
 }
 
-export async function getIdToken(): Promise<string | null> {
-  return auth.currentUser ? auth.currentUser.getIdToken() : null;
+/**
+ * ID Token da sessão atual para o backend. O SDK renova sozinho quando vence; `forceRefresh`
+ * obriga a renovação (o backend respondeu 401 com token vencido/revogado).
+ */
+export async function getIdToken(forceRefresh = false): Promise<string | null> {
+  return auth.currentUser ? auth.currentUser.getIdToken(forceRefresh) : null;
 }

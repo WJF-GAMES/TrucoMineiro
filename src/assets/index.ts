@@ -39,7 +39,7 @@ export const avatarNames: Record<AvatarId, string> = {
 };
 
 /**
- * Fonte única dos brasões das 20 ligas. A chave é o `LeagueId` do backend; o Firestore guarda só
+ * Fonte única dos brasões das 20 ligas. A chave é o `LeagueId` do backend; o banco guarda só
  * `assetKey` ("shield_gold") e nunca um caminho local. Os arquivos já existem em
  * `assets/images/icons/` — não gerar arte nova nem substituir os brasões.
  */

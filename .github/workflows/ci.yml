@@ -1,0 +1,107 @@
+# CI do Truco Mineiro: app (lint, tipos, testes) e backend (lint, tipos, unitários, integração
+# com PostgreSQL real, migrations, build e imagem Docker). Nenhum segredo é necessário.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, backend]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: App (Expo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test -- --ci
+      - name: Nenhum SDK de Firestore/RTDB/Functions no app
+        run: |
+          if grep -rnE "@react-native-firebase/(firestore|database|functions)|httpsCallable" src app.config.js package.json; then
+            echo "Dependência de Firebase removida voltou ao app." && exit 1
+          fi
+
+  backend:
+    name: Backend (NestJS + PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: truco
+          POSTGRES_PASSWORD: truco_ci
+          POSTGRES_DB: truco_ci
+          # Fuso diferente de UTC de propósito: pega data gravada/comparada sem fuso.
+          TZ: America/Sao_Paulo
+          PGTZ: America/Sao_Paulo
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U truco -d truco_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://truco:truco_ci@localhost:5432/truco_ci?schema=public
+      SHADOW_DATABASE_URL: postgresql://truco:truco_ci@localhost:5432/truco_ci_shadow?schema=public
+      TEST_DATABASE_URL: postgresql://truco:truco_ci@localhost:5432/truco_ci?schema=integration_test&connection_limit=15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Cópia do domínio (backend/src/domain) igual a src/domain
+        run: |
+          npm run sync-domain
+          git diff --exit-code -- src/domain || (echo "Rode 'npm --prefix backend run sync-domain' e versione a cópia." && exit 1)
+          test -z "$(git status --porcelain -- src/domain)"
+      - run: npx prisma generate
+      - run: npx prisma validate
+      - name: Migrations aplicam do zero e batem com o schema
+        run: |
+          PGPASSWORD=truco_ci psql -h localhost -U truco -d truco_ci -c "CREATE DATABASE truco_ci_shadow"
+          npx prisma migrate deploy
+          npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma \
+            --shadow-database-url "$SHADOW_DATABASE_URL" --exit-code
+      - run: npm run seed
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test -- --ci
+      - run: npm run test:integration -- --ci
+      - run: npm run build
+      - name: Boot falha sem segredos de produção
+        run: |
+          if NODE_ENV=production DATABASE_URL="$DATABASE_URL" timeout 20 node dist/main.js; then
+            echo "O backend subiu em produção sem segredos." && exit 1
+          fi
+
+  docker:
+    name: Imagem do backend
+    runs-on: ubuntu-latest
+    needs: backend
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - run: node backend/scripts/sync-domain.js
+      - name: Build (runtime e job de migração)
+        run: |
+          docker buildx build backend --target runtime -t truco-backend:ci --load
+          docker buildx build backend --target migrate -t truco-backend-migrate:ci
+      - name: Contêiner roda como usuário sem privilégio
+        run: test "$(docker run --rm --entrypoint id truco-backend:ci -u)" != "0"

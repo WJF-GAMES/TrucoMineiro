@@ -1,0 +1,43 @@
+# O que NÃO sobe para o EAS Build. Este arquivo substitui o .gitignore no upload, então repete
+# as regras dele e acrescenta o que só serve ao desenvolvimento (referências visuais, QA, backend).
+
+# --- mesmas regras do .gitignore ---
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
+*.pem
+.env
+.env.*
+!.env.example
+.env*.local
+*.tsbuildinfo
+/ios
+/android
+.firebase/
+*-debug.log
+
+# --- só desenvolvimento: não entram no app ---
+/references/
+/referencia.png
+/artifacts/
+/docs/
+/functions/
+/versions/
+/.idea/
+/.claude/
+/scripts/
+google-service-account*.json

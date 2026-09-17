@@ -5,7 +5,7 @@ import { colors, icons, IoniconName, spacing } from '@/design-system';
 import { AppText, GameHeader, ProgressBar, Screen, StateView, Surface } from '@/components';
 import { useAuthStore } from '@/stores/authStore';
 import { useProfileStore } from '@/stores/profileStore';
-import { getAchievements, subscribeUserAchievements } from '@/services/firebase/firestore';
+import { getAchievements, subscribeUserAchievements } from '@/services/api';
 import type { Achievement } from '@/domain/model/types';
 
 export function AchievementsScreen() {

@@ -1,0 +1,14 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Expo: Android" type="js.build_tools.npm" nameIsGenerated="false">
+    <package-json value="$PROJECT_DIR$/package.json" />
+    <command value="run" />
+    <scripts>
+      <script value="android" />
+    </scripts>
+    <node-interpreter value="project" />
+    <envs>
+      <env name="ANDROID_HOME" value="$USER_HOME$/AppData/Local/Android/Sdk" />
+    </envs>
+    <method v="2" />
+  </configuration>
+</component>

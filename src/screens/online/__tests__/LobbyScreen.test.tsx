@@ -10,8 +10,9 @@ import type { Room, RoomPlayer, RoomSeatInvite } from '@/domain/model/types';
  * troca de convidado, cancelamento e o convidado atrasado aguardando a vaga da IA.
  */
 
-jest.mock('@/services/firebase/functions', () => {
-  class FunctionsError extends Error {
+jest.mock('@/services/api', () => ({
+  ...(() => {
+  class ApiError extends Error {
     code: string;
     constructor(code: string, message: string) {
       super(message);
@@ -20,7 +21,7 @@ jest.mock('@/services/firebase/functions', () => {
   }
   const ok = () => Promise.resolve({ ok: true });
   return {
-    FunctionsError,
+    ApiError,
     claimReservedSeat: jest.fn(() => Promise.resolve({ status: 'pending' })),
     fillRoomWithBots: jest.fn(ok),
     inviteToRoom: jest.fn(ok),
@@ -30,16 +31,18 @@ jest.mock('@/services/firebase/functions', () => {
     setReady: jest.fn(ok),
     startMatch: jest.fn(() => Promise.resolve({ sessionId: 's1' })),
   };
-});
-const fns = jest.requireMock<Record<string, jest.Mock>>('@/services/firebase/functions');
-
-let mockEmitRoom: ((r: Room | null) => void) | null = null;
-jest.mock('@/services/firebase/rtdb', () => ({
+})(),
+  ...(() => ({
   subscribeRoom: (_code: string, cb: (r: Room | null) => void) => {
     mockEmitRoom = cb;
     return () => undefined;
   },
+}))(),
 }));
+const fns = jest.requireMock<Record<string, jest.Mock>>('@/services/api');
+
+let mockEmitRoom: ((r: Room | null) => void) | null = null;
+
 jest.mock('@/services/firebase/perf', () => ({ traced: (_n: string, fn: () => unknown) => fn() }));
 jest.mock('@/services/firebase/analytics', () => ({ logEvent: jest.fn() }));
 jest.mock('@/ads', () => ({ useMatchmakingGuard: () => undefined }));

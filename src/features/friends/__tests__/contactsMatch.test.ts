@@ -4,6 +4,7 @@ import {
   filterAgenda,
   mergeMatches,
   normalizeAgenda,
+  syncFeedback,
   type DeviceContact,
 } from '../contactsMatch';
 import type { ContactMatch } from '@/domain/model/types';
@@ -236,5 +237,39 @@ describe('filterAgenda', () => {
 
   it('devolve tudo quando a busca está vazia', () => {
     expect(filterAgenda(result, '   ')).toBe(result);
+  });
+});
+
+describe('syncFeedback', () => {
+  it('um aviso só para o lote, no singular e no plural', () => {
+    expect(syncFeedback(1, false)).toBe('1 contato que já joga foi adicionado aos seus amigos.');
+    expect(syncFeedback(3, true)).toBe(
+      '3 contatos que já jogam foram adicionados aos seus amigos.',
+    );
+  });
+
+  it('sem novidade: "Contatos atualizados." só quando o usuário pediu; automático fica quieto', () => {
+    expect(syncFeedback(0, true)).toBe('Contatos atualizados.');
+    expect(syncFeedback(0, false)).toBeNull();
+  });
+});
+
+describe('mergeMatches — conexão automática', () => {
+  it('contato com dois números, um deles com conta: um match e nenhum convite', () => {
+    const agenda = normalizeAgenda([contact('1', 'João', '(61) 3333-4444', '+55 61 99999-9999')]);
+    const index = agenda.phones.indexOf('+5561999999999');
+    const r = mergeMatches(agenda, [match(index, { uid: 'joao', relation: 'friend' })]);
+    expect(r.matched).toHaveLength(1);
+    expect(r.unmatched).toEqual([]);
+  });
+
+  it('mesmo telefone salvo duas vezes: um envio só ao servidor', () => {
+    const agenda = normalizeAgenda([
+      contact('1', 'João', '61999999999'),
+      contact('2', 'João Pedreiro', '+55 (61) 99999-9999'),
+    ]);
+    expect(agenda.phones).toEqual(['+5561999999999']);
+    const r = mergeMatches(agenda, [match(0, { uid: 'joao', relation: 'friend' })]);
+    expect(new Set(r.matched.map((m) => m.uid))).toEqual(new Set(['joao']));
   });
 });

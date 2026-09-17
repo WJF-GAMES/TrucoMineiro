@@ -2,10 +2,10 @@ import { useEffect } from 'react';
 import { Alert, Linking } from 'react-native';
 import { useAuthStore } from '@/stores/authStore';
 import {
-  FunctionsError,
+  ApiError,
   resolveFriendInviteToken,
   sendFriendRequest,
-} from '@/services/firebase/functions';
+} from '@/services/api';
 import { logEvent } from '@/services/firebase/analytics';
 import { toast } from '@/stores/toastStore';
 
@@ -53,7 +53,7 @@ export function useFriendInviteLink() {
                   .catch((e) =>
                     toast.error(
                       'Não deu certo',
-                      e instanceof FunctionsError ? e.message : undefined,
+                      e instanceof ApiError ? e.message : undefined,
                     ),
                   ),
             },
@@ -62,7 +62,7 @@ export function useFriendInviteLink() {
       } catch (e) {
         toast.error(
           'Convite inválido',
-          e instanceof FunctionsError ? e.message : 'Esse convite expirou.',
+          e instanceof ApiError ? e.message : 'Esse convite expirou.',
         );
       }
     };

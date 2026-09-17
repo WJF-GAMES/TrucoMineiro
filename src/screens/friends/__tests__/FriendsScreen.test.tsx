@@ -7,7 +7,7 @@ import type { FriendRequest, Presence, Profile, RoomInvite } from '@/domain/mode
 
 /**
  * A tela Amigos é onde toda ação social do app acontece, e nenhuma delas pode ser decorativa:
- * cada botão aqui tem que chamar a Cloud Function certa (ou o RTDB certo) e refletir o resultado.
+ * cada botão aqui tem que chamar a operação certa do backend e refletir o resultado.
  * Estes testes cobrem exatamente isso, incluindo os caminhos que antes não existiam —
  * convite de sala recebido, ficha do amigo, bloqueio e desbloqueio.
  */
@@ -16,8 +16,9 @@ import type { FriendRequest, Presence, Profile, RoomInvite } from '@/domain/mode
 
 // As fábricas de `jest.mock` rodam antes do corpo do arquivo, então os mocks nascem dentro
 // delas e são recuperados com `requireMock` — nunca por variável de fora.
-jest.mock('@/services/firebase/functions', () => {
-  class FunctionsError extends Error {
+jest.mock('@/services/api', () => ({
+  ...(() => {
+  class ApiError extends Error {
     code: string;
     constructor(code: string, message: string) {
       super(message);
@@ -26,7 +27,7 @@ jest.mock('@/services/firebase/functions', () => {
   }
   const ok = () => Promise.resolve({ ok: true });
   return {
-    FunctionsError,
+    ApiError,
     sendFriendRequest: jest.fn(ok),
     respondFriendRequest: jest.fn(ok),
     cancelFriendRequest: jest.fn(ok),
@@ -44,28 +45,24 @@ jest.mock('@/services/firebase/functions', () => {
     respondRoomInvite: jest.fn(() => Promise.resolve({ code: 'ABC123' })),
     searchPlayers: (term: string) => mockSearchProfiles(term),
   };
-});
-
-const fns = jest.requireMock<Record<string, jest.Mock>>('@/services/firebase/functions');
-
-const mockSearchProfiles = jest.fn<Promise<Profile[]>, [string]>();
-
-/** Prefixo `mock` é o que libera o uso dentro das fábricas de `jest.mock`. */
-function mockProfileOf(uid: string) {
-  return { ...baseProfile(uid), nickname: uid === 'blk' ? 'Chatão' : uid };
-}
-const mockEmit = {
-  friends: null as ((ids: { id: string }[]) => void) | null,
-  blocked: null as ((ids: string[]) => void) | null,
-  incoming: null as ((r: FriendRequest[]) => void) | null,
-  outgoing: null as ((r: FriendRequest[]) => void) | null,
-  invites: null as ((i: RoomInvite[]) => void) | null,
-  presence: {} as Record<string, (p: Presence | null) => void>,
-};
-
-jest.mock('@/services/firebase/firestore', () => ({
+})(),
+  ...(() => ({
   // Perfil público de qualquer uid: o apelido é o próprio uid, menos o bloqueado do teste.
   getProfile: (uid: string) => Promise.resolve(mockProfileOf(uid)),
+  // A lista vem do backend já com perfil e presença; o teste emite só os uids.
+  subscribeFriendRows: (_uid: string, cb: (rows: unknown[]) => void) => {
+    mockEmit.friends = (ids: { id: string }[]) =>
+      cb(
+        ids.map(({ id }) => ({
+          uid: id,
+          since: 1,
+          source: 'manual',
+          profile: mockProfileOf(id),
+          presence: { state: 'offline', lastChanged: 0 },
+        })),
+      );
+    return () => undefined;
+  },
   subscribeFriends: (_uid: string, cb: (ids: { id: string }[]) => void) => {
     mockEmit.friends = cb;
     return () => undefined;
@@ -86,9 +83,8 @@ jest.mock('@/services/firebase/firestore', () => ({
     cb({ id: _uid, matches: 10, wins: 7, losses: 3, winRate: 70 });
     return () => undefined;
   },
-}));
-
-jest.mock('@/services/firebase/rtdb', () => ({
+}))(),
+  ...(() => ({
   subscribePresence: (uid: string, cb: (p: Presence | null) => void) => {
     mockEmit.presence[uid] = cb;
     return () => undefined;
@@ -98,7 +94,29 @@ jest.mock('@/services/firebase/rtdb', () => ({
     return () => undefined;
   },
   deleteRoomInvite: jest.fn(() => Promise.resolve()),
+}))(),
 }));
+
+const fns = jest.requireMock<Record<string, jest.Mock>>('@/services/api');
+
+const mockSearchProfiles = jest.fn<Promise<Profile[]>, [string]>();
+
+/** Prefixo `mock` é o que libera o uso dentro das fábricas de `jest.mock`. */
+function mockProfileOf(uid: string) {
+  return { ...baseProfile(uid), nickname: uid === 'blk' ? 'Chatão' : uid };
+}
+const mockEmit = {
+  friends: null as ((ids: { id: string }[]) => void) | null,
+  blocked: null as ((ids: string[]) => void) | null,
+  incoming: null as ((r: FriendRequest[]) => void) | null,
+  outgoing: null as ((r: FriendRequest[]) => void) | null,
+  invites: null as ((i: RoomInvite[]) => void) | null,
+  presence: {} as Record<string, (p: Presence | null) => void>,
+};
+
+
+
+
 
 // O GameHeader chama `useNavigation`; a tela recebe a navegação por prop, então basta o mínimo.
 // `useFocusEffect` roda como um efeito de montagem: a tela "ganha foco" ao aparecer.
@@ -139,7 +157,9 @@ jest.mock('@/stores/profileStore', () => ({
 // A agenda tem o seu próprio conjunto de testes; aqui ela fica parada para não competir
 // com o que está sendo verificado.
 const mockSetRelation = jest.fn();
-const mockSync = jest.fn(() => Promise.resolve());
+const mockSync = jest.fn((..._args: unknown[]) =>
+  Promise.resolve<{ skipped: boolean; connected: number } | null>(null),
+);
 /** Estado da agenda que cada teste pode trocar (por padrão: nunca sincronizada). */
 const mockAgenda = {
   permission: 'undetermined' as string,
@@ -154,7 +174,7 @@ jest.mock('@/features/friends/useContactsSync', () => ({
     syncing: false,
     progress: { phase: 'idle', ratio: null },
     error: null,
-    sync: (...args: unknown[]) => mockSync(...(args as [])),
+    sync: (...args: unknown[]) => mockSync(...args),
     refreshPermission: jest.fn(),
     setRelation: (...args: unknown[]) => mockSetRelation(...args),
     forget: jest.fn(),
@@ -265,14 +285,15 @@ afterEach(() => jest.restoreAllMocks());
 // --- Testes -----------------------------------------------------------------
 
 describe('FriendsScreen — amigos', () => {
-  it('lista amigos com a presença que veio do RTDB', async () => {
+  it('lista amigos com a presença que veio do backend', async () => {
     const view = await seed({
       friends: ['zeh', 'maria'],
       presence: { zeh: 'online', maria: 'in_match' },
     });
 
     expect(await view.findByText('zeh')).toBeTruthy();
-    expect(view.getByText('Online')).toBeTruthy();
+    // "Online" é o título da seção e o status do Zé.
+    expect(view.getAllByText('Online')).toHaveLength(2);
     expect(view.getByText('Na partida')).toBeTruthy();
   });
 
@@ -545,6 +566,10 @@ describe('FriendsScreen — flag desligada', () => {
   });
 });
 
+/** Seções da aba, na ordem em que aparecem. */
+const sections = (view: { queryAllByTestId: (id: RegExp) => { props: { testID?: string } }[] }) =>
+  view.queryAllByTestId(/^section-s-/).map((n) => n.props.testID!.replace('section-', ''));
+
 describe('FriendsScreen — lista única de amigos e contatos', () => {
   const syncedAgenda = () => {
     mockAgenda.permission = 'granted';
@@ -586,14 +611,12 @@ describe('FriendsScreen — lista única de amigos e contatos', () => {
     };
   };
 
-  it('mostra amigos, contatos que jogam e contatos para convidar numa listagem só', async () => {
+  it('separa Amigos, contatos que já jogam e Convidar, sem repetir ninguém', async () => {
     syncedAgenda();
     const view = await seed({ friends: ['ze'] });
-    expect(view.getByText('Amigos e contatos')).toBeTruthy();
-    expect(view.queryByText('Contatos da sua agenda')).toBeNull();
-    expect(view.queryByText('Convide para jogar')).toBeNull();
-    // Três pessoas: o amigo (uma vez), a Ana (uma vez) e o Tio Beto.
-    expect(view.getByText('3')).toBeTruthy();
+    expect(sections(view)).toEqual(['s-friends', 's-players', 's-invites']);
+    // Uma pessoa por seção: o amigo (uma vez), a Ana (uma vez) e o Tio Beto.
+    expect(view.getAllByText('1')).toHaveLength(3);
     expect(view.getAllByTestId(/^friend-ze$/)).toHaveLength(1);
     expect(view.getByText('· Zé da Padaria')).toBeTruthy();
     expect(view.queryByTestId('contact-match-c1')).toBeNull();
@@ -614,8 +637,74 @@ describe('FriendsScreen — lista única de amigos e contatos', () => {
 
   it('sem agenda sincronizada a lista mostra só os amigos', async () => {
     const view = await seed({ friends: ['ze'] });
-    expect(view.getByText('Meus amigos')).toBeTruthy();
+    expect(sections(view)).toEqual(['s-friends']);
     expect(view.getByTestId('friend-ze')).toBeTruthy();
+  });
+
+  it('online primeiro: amigos online e offline em seções separadas', async () => {
+    const view = await seed({ friends: ['ze', 'bia'], presence: { bia: 'online' } });
+    expect(sections(view)).toEqual(['s-online', 's-friends']);
+    // "Jogar com amigos" fica na primeira seção de amigos.
+    expect(view.getAllByTestId('friends-select-start')).toHaveLength(1);
+  });
+
+  it('contato conectado pela agenda aparece em Amigos, sem "Adicionar"', async () => {
+    mockAgenda.permission = 'granted';
+    mockAgenda.syncedAt = 1;
+    mockAgenda.result = {
+      matched: [
+        {
+          contactId: 'c9',
+          contactName: 'João Pedreiro',
+          uid: 'joao',
+          nickname: 'joao',
+          avatarId: 'joao',
+          level: 3,
+          relation: 'friend',
+          autoConnected: true,
+        },
+      ],
+      unmatched: [],
+    };
+    const view = await seed({ friends: ['joao'] });
+    expect(view.getByTestId('friend-joao')).toBeTruthy();
+    expect(view.getByText('· João Pedreiro')).toBeTruthy();
+    expect(view.queryByTestId('contact-match-c9')).toBeNull();
+    expect(view.queryByText('Contatos que já jogam')).toBeNull();
+  });
+
+  it('amigo conectado pela agenda entra na seleção de até 3 amigos', async () => {
+    const view = await seed({ friends: ['joao'] });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('friends-select-start'));
+    });
+    expect(view.getByTestId('friend-select-joao')).toBeTruthy();
+  });
+
+  it('um aviso só quando a sincronização conecta amigos novos', async () => {
+    const { toast } = jest.requireMock<{
+      toast: Record<'info' | 'success' | 'error', jest.Mock>;
+    }>('@/stores/toastStore');
+    mockSync.mockResolvedValueOnce({ skipped: false, connected: 3 });
+    await seed();
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        'Amigos da agenda',
+        '3 contatos que já jogam foram adicionados aos seus amigos.',
+      ),
+    );
+    expect(toast.success).toHaveBeenCalledTimes(1);
+  });
+
+  it('sincronização automática sem novidade não mostra nada', async () => {
+    const { toast } = jest.requireMock<{
+      toast: Record<'info' | 'success' | 'error', jest.Mock>;
+    }>('@/stores/toastStore');
+    mockSync.mockResolvedValueOnce({ skipped: false, connected: 0 });
+    await seed();
+    await waitFor(() => expect(mockSync).toHaveBeenCalled());
+    expect(toast.info).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
   it('sincroniza a agenda sozinho toda vez que a tela abre (e ela pede a permissão)', async () => {

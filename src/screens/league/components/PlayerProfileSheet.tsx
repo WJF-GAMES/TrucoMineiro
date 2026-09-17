@@ -4,8 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, icons, spacing, type IoniconName } from '@/design-system';
 import { AppText, PrimaryButton, Sheet } from '@/components';
 import { PlayerProfileSummary, type PlayerSummaryData } from '@/components/PlayerProfileSummary';
-import { getProfile } from '@/services/firebase/firestore';
-import { FunctionsError, sendFriendRequest } from '@/services/firebase/functions';
+import { getProfile , ApiError, sendFriendRequest } from '@/services/api';
 import { logEvent } from '@/services/firebase/analytics';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from '@/stores/toastStore';
@@ -84,7 +83,7 @@ export function PlayerProfileSheet({
         toast.success('Solicitação enviada', `${player.nickname} vai receber seu convite.`);
       }
     } catch (e) {
-      toast.error('Não foi possível enviar', e instanceof FunctionsError ? e.message : undefined);
+      toast.error('Não foi possível enviar', e instanceof ApiError ? e.message : undefined);
     } finally {
       setBusy(false);
     }

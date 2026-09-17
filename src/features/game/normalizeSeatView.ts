@@ -6,7 +6,7 @@ export interface RemoteSeatView extends SeatView {
 }
 
 /**
- * Realtime Database drops empty arrays and null values, so a seat view written as
+ * Defensivo: payloads antigos (backend Firebase) chegavam sem arrays vazios e sem nulls, então uma view gravada como
  * `{ currentRound: [], rounds: [], myCards: [] }` comes back with those keys missing — and the
  * table would crash reading them. Everything the UI iterates over is restored here.
  */
@@ -15,7 +15,7 @@ export function normalizeSeatView(raw: unknown): RemoteSeatView | null {
   const v = raw as Partial<RemoteSeatView> & Record<string, unknown>;
   if (typeof v.seat !== 'number' || typeof v.phase !== 'string') return null;
 
-  // Carta virada de outro assento chega sem `card` (o RTDB apaga o null): ela continua na mesa.
+  // Carta virada de outro assento pode chegar sem `card` (null omitido): ela continua na mesa.
   const plays = (list: unknown): TablePlay[] =>
     Array.isArray(list)
       ? list
@@ -91,6 +91,7 @@ export function normalizeSessionMeta(raw: unknown): SessionMeta | null {
       avatarId: p.avatarId ?? 'joao',
       bot: Boolean(p.bot),
       connected: p.connected !== false,
+      ...(p.controller ? { controller: p.controller } : {}),
     };
   }
   return {

@@ -20,8 +20,8 @@ import {
 } from '@/components';
 import { useAuthStore } from '@/stores/authStore';
 import { useProfileStore } from '@/stores/profileStore';
-import { cancelMatchmaking, startMatchmaking, FunctionsError } from '@/services/firebase/functions';
-import { subscribeMatchmaking } from '@/services/firebase/rtdb';
+import { cancelMatchmaking, startMatchmaking, ApiError , subscribeMatchmaking } from '@/services/api';
+
 import { flag } from '@/services/firebase/remoteConfig';
 import { logEvent } from '@/services/firebase/analytics';
 import { useMatchmakingGuard } from '@/ads';
@@ -102,7 +102,7 @@ export function MatchmakingScreen({ navigation }: RootScreenProps<'Matchmaking'>
       await startMatchmaking();
     } catch (e) {
       setUi('error');
-      setMessage(e instanceof FunctionsError ? e.message : null);
+      setMessage(e instanceof ApiError ? e.message : null);
     }
   }, []);
 

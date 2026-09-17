@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  getProfile,
   subscribeBlockedUsers,
-  subscribeFriends,
+  subscribeFriendRows,
   subscribeIncomingRequests,
   subscribeOutgoingRequests,
-} from '@/services/firebase/firestore';
-import { subscribePresence } from '@/services/firebase/rtdb';
+  subscribePresence,
+} from '@/services/api';
 import type { FriendRequest, Presence, PresenceState, Profile } from '@/domain/model/types';
 
 export interface FriendEntry {
@@ -20,8 +19,8 @@ const PRESENCE_RANK: Record<PresenceState, number> = { online: 0, in_match: 1, o
 export function useFriends(uid: string | undefined) {
   const [friendIds, setFriendIds] = useState<string[] | null>(null);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
-  // Separada do perfil: a presença costuma chegar antes do `getProfile` (já está em cache quando o
-  // contato vira amigo) e, guardada junto dele, era descartada — o amigo ficava "Offline".
+  // Separada do perfil: a presença ao vivo chega por outro canal e não pode ser descartada quando
+  // a lista é relida.
   const [presences, setPresences] = useState<Record<string, Presence | null>>({});
   const [blockedIds, setBlockedIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -40,9 +39,18 @@ export function useFriends(uid: string | undefined) {
 
   useEffect(() => {
     if (!uid) return;
-    const unsubFriends = subscribeFriends(
+    // Uma chamada traz amigos com perfil e presença; a lista é relida quando o servidor avisa.
+    const unsubFriends = subscribeFriendRows(
       uid,
-      (list) => setFriendIds(list.map((f) => f.id)),
+      (rows) => {
+        setProfiles(Object.fromEntries(rows.map((r) => [r.uid, r.profile])));
+        setPresences((prev) => {
+          const next = { ...prev };
+          for (const r of rows) if (!(r.uid in next)) next[r.uid] = r.presence;
+          return next;
+        });
+        setFriendIds(rows.map((r) => r.uid));
+      },
       (e) => setError(e.message),
     );
     const unsubBlocked = subscribeBlockedUsers(uid, setBlockedIds);
@@ -54,20 +62,11 @@ export function useFriends(uid: string | undefined) {
 
   useEffect(() => {
     if (!friendIds) return;
-    let active = true;
-    const unsubs = friendIds.map((id) => {
-      getProfile(id).then((p) => {
-        if (!active || !p) return;
-        setProfiles((prev) => ({ ...prev, [id]: p }));
-      });
-      return subscribePresence(id, (presence) =>
-        setPresences((prev) => ({ ...prev, [id]: presence })),
-      );
-    });
-    return () => {
-      active = false;
-      unsubs.forEach((u) => u());
-    };
+    // Presença ao vivo (online / na partida / offline) de cada amigo.
+    const unsubs = friendIds.map((id) =>
+      subscribePresence(id, (presence) => setPresences((prev) => ({ ...prev, [id]: presence }))),
+    );
+    return () => unsubs.forEach((u) => u());
   }, [friendIds]);
 
   const friends = useMemo(

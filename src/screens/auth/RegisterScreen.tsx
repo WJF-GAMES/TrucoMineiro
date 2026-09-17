@@ -15,7 +15,7 @@ import {
   TextField,
 } from '@/components';
 import type { AvatarId } from '@/domain/model/types';
-import { updateProfile, FunctionsError } from '@/services/firebase/functions';
+import { updateProfile, ApiError } from '@/services/api';
 import { signOut } from '@/services/firebase/auth';
 import { useAuthStore } from '@/stores/authStore';
 import { logEvent } from '@/services/firebase/analytics';
@@ -69,7 +69,7 @@ export function RegisterScreen() {
       haptic.success();
       setOnboarded();
     } catch (e) {
-      const msg = e instanceof FunctionsError ? e.message : 'Não foi possível criar a conta.';
+      const msg = e instanceof ApiError ? e.message : 'Não foi possível criar a conta.';
       setError(msg);
       toast.error('Ops', msg);
       setLoading(false);

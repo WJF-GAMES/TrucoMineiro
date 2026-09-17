@@ -9,7 +9,8 @@ const mockToastError = jest.fn();
 
 let emit: ((invites: RoomInvite[]) => void) | null = null;
 
-jest.mock('@/services/firebase/rtdb', () => ({
+jest.mock('@/services/api', () => ({
+  ...(() => ({
   subscribeRoomInvites: (_uid: string, cb: (invites: RoomInvite[]) => void) => {
     emit = cb;
     return () => {
@@ -17,19 +18,21 @@ jest.mock('@/services/firebase/rtdb', () => ({
     };
   },
   deleteRoomInvite: (...args: unknown[]) => mockDelete(...args),
-}));
-jest.mock('@/services/firebase/functions', () => {
+}))(),
+  ...(() => {
   // Sem "parameter property" (`public code`): o Babel proíbe isso dentro da fábrica do mock,
   // e a classe precisa nascer aqui — a fábrica roda antes do corpo do arquivo de teste.
-  class FunctionsError extends Error {
+  class ApiError extends Error {
     code: string;
     constructor(code: string, message: string) {
       super(message);
       this.code = code;
     }
   }
-  return { FunctionsError, respondRoomInvite: (...args: unknown[]) => mockRespond(...args) };
-});
+  return { ApiError, respondRoomInvite: (...args: unknown[]) => mockRespond(...args) };
+})(),
+}));
+
 jest.mock('@/services/firebase/analytics', () => ({
   logEvent: (...a: unknown[]) => mockLogEvent(...a),
 }));
@@ -38,9 +41,9 @@ jest.mock('@/stores/toastStore', () => ({
 }));
 
 // `renderHook` da v14 devolve Promise: sem o await, `result` vem indefinido.
-const { FunctionsError } = jest.requireMock<{
-  FunctionsError: new (code: string, message: string) => Error;
-}>('@/services/firebase/functions');
+const { ApiError } = jest.requireMock<{
+  ApiError: new (code: string, message: string) => Error;
+}>('@/services/api');
 
 const invite = (over: Partial<RoomInvite> = {}): RoomInvite => ({
   code: 'ABC123',
@@ -98,7 +101,7 @@ describe('useRoomInvites', () => {
 
   it('sala cheia: mostra o erro e limpa o convite que não serve mais', async () => {
     mockRespond.mockRejectedValue(
-      new FunctionsError('resource-exhausted', 'A sala já está completa.'),
+      new ApiError('resource-exhausted', 'A sala já está completa.'),
     );
     const onJoined = jest.fn();
     const { result } = await renderHook(() => useRoomInvites('me', onJoined));
@@ -118,7 +121,7 @@ describe('useRoomInvites', () => {
   });
 
   it('sem conexão o convite continua lá para uma segunda tentativa', async () => {
-    mockRespond.mockRejectedValue(new FunctionsError('unavailable', 'offline'));
+    mockRespond.mockRejectedValue(new ApiError('unavailable', 'offline'));
     const { result } = await renderHook(() => useRoomInvites('me'));
     await act(async () => emit?.([invite()]));
     await waitFor(() => expect(result.current.invites).toHaveLength(1));
@@ -146,7 +149,7 @@ describe('useRoomInvites', () => {
   });
 
   it('recusar sem conexão pelo menos tira o convite da lista', async () => {
-    mockRespond.mockRejectedValue(new FunctionsError('unavailable', 'offline'));
+    mockRespond.mockRejectedValue(new ApiError('unavailable', 'offline'));
     const { result } = await renderHook(() => useRoomInvites('me'));
     await act(async () => emit?.([invite()]));
     await waitFor(() => expect(result.current.invites).toHaveLength(1));

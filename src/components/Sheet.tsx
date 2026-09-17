@@ -1,4 +1,4 @@
-import React, { PropsWithChildren } from 'react';
+import React, { PropsWithChildren, useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -21,6 +21,14 @@ interface Props {
   testID?: string;
 }
 
+/**
+ * Tempo em que a folha ainda está subindo (animação `slide` do Modal) e ignora toques — nela e no
+ * fundo escuro (que fecharia a folha). Sem isto, um segundo toque na linha que abriu a folha caía
+ * no botão que passava por baixo do dedo — a ficha do amigo abria direto na confirmação de
+ * "Remover amizade".
+ */
+const OPEN_GUARD_MS = 600;
+
 /** Folha inferior translúcida — mesma linguagem dos cards, ancorada na base da tela. */
 export function Sheet({
   visible,
@@ -31,6 +39,17 @@ export function Sheet({
   testID,
 }: PropsWithChildren<Props>) {
   const insets = useSafeAreaInsets();
+  const [armed, setArmed] = useState(false);
+  const [prevVisible, setPrevVisible] = useState(visible);
+  if (visible !== prevVisible) {
+    setPrevVisible(visible);
+    setArmed(false);
+  }
+  useEffect(() => {
+    if (!visible || armed) return;
+    const t = setTimeout(() => setArmed(true), OPEN_GUARD_MS);
+    return () => clearTimeout(t);
+  }, [visible, armed]);
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       {/* Dentro de um Modal o Android não redimensiona a janela e o iOS nunca redimensiona:
@@ -43,7 +62,7 @@ export function Sheet({
           style={StyleSheet.absoluteFill}
           accessibilityRole="button"
           accessibilityLabel="Fechar"
-          onPress={onClose}
+          onPress={armed ? onClose : undefined}
         />
         <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.xl }]} testID={testID}>
           <View style={styles.grabber} />
@@ -70,6 +89,14 @@ export function Sheet({
           >
             {children}
           </ScrollView>
+          {/* Engole os toques enquanto a folha sobe: nem aciona botão, nem cai no fundo (fechar). */}
+          {armed ? null : (
+            <View
+              style={StyleSheet.absoluteFill}
+              onStartShouldSetResponder={() => true}
+              testID={testID ? `${testID}-opening` : undefined}
+            />
+          )}
         </View>
       </KeyboardAvoidingView>
     </Modal>

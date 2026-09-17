@@ -1,0 +1,68 @@
+import type { Achievement } from '../domain/model/types';
+
+/** Catálogo de conquistas (seed estrutural). */
+export const ACHIEVEMENTS: Achievement[] = [
+  {
+    id: 'first_win',
+    order: 0,
+    title: 'Primeira vitória',
+    description: 'Vença sua primeira partida.',
+    icon: 'trophy',
+    target: 1,
+    stat: 'wins',
+  },
+  {
+    id: 'ten_wins',
+    order: 1,
+    title: 'Trucador',
+    description: 'Vença 10 partidas.',
+    icon: 'ribbon',
+    target: 10,
+    stat: 'wins',
+  },
+  {
+    id: 'fifty_matches',
+    order: 2,
+    title: 'Frequentador da venda',
+    description: 'Jogue 50 partidas.',
+    icon: 'cafe',
+    target: 50,
+    stat: 'matches',
+  },
+  {
+    id: 'truco_master',
+    order: 3,
+    title: 'Mestre do Truco',
+    description: 'Peça truco 50 vezes.',
+    icon: 'flame',
+    target: 50,
+    stat: 'trucosCalled',
+  },
+  {
+    id: 'streak_5',
+    order: 4,
+    title: 'Embalado',
+    description: 'Vença 5 partidas seguidas.',
+    icon: 'flash',
+    target: 5,
+    stat: 'bestStreak',
+  },
+  {
+    id: 'hard_win',
+    order: 5,
+    title: 'Sem medo',
+    description: 'Vença a IA no modo Difícil.',
+    icon: 'skull',
+    target: 1,
+    stat: 'hardWins',
+  },
+  {
+    id: 'online_10',
+    order: 6,
+    title: 'Gente de verdade',
+    description: 'Jogue 10 partidas online.',
+    icon: 'people',
+    target: 10,
+    stat: 'onlineMatches',
+  },
+];

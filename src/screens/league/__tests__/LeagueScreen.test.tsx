@@ -26,13 +26,14 @@ const mockSocial = {
   incoming: [] as { from: string; to: string; createdAt: number }[],
   outgoing: [] as { from: string; to: string; createdAt: number }[],
 };
-jest.mock('@/services/firebase/functions', () => ({
+jest.mock('@/services/api', () => ({
+  ...(() => ({
   getLeagueScreenSnapshot: (...args: unknown[]) => mockSnapshot(...args),
   getGlobalLeagueRanking: jest.fn(() => Promise.resolve({ entries: [] })),
   sendFriendRequest: (...args: unknown[]) => mockSendFriendRequest(...args),
-  FunctionsError: class extends Error {},
-}));
-jest.mock('@/services/firebase/firestore', () => ({
+  ApiError: class extends Error {},
+}))(),
+  ...(() => ({
   subscribeGroupMembers: (groupId: string, cb: unknown, onError: unknown) =>
     mockSubscribe(groupId, cb, onError),
   getLeagueHistory: jest.fn(() => Promise.resolve([])),
@@ -51,6 +52,18 @@ jest.mock('@/services/firebase/firestore', () => ({
     cb({ matches: 10, wins: 6 });
     return () => undefined;
   },
+  subscribeFriendRows: (_uid: string, cb: (rows: unknown[]) => void) => {
+    cb(
+      mockSocial.friends.map(({ id }) => ({
+        uid: id,
+        since: 1,
+        source: 'manual',
+        profile: { id, nickname: `Perfil ${id}`, avatarId: 'galo', countryCode: 'BR', level: 7 },
+        presence: { state: 'offline', lastChanged: 0 },
+      })),
+    );
+    return () => undefined;
+  },
   subscribeFriends: (_uid: string, cb: (list: { id: string }[]) => void) => {
     cb(mockSocial.friends);
     return () => undefined;
@@ -67,10 +80,13 @@ jest.mock('@/services/firebase/firestore', () => ({
     cb(mockSocial.outgoing);
     return () => undefined;
   },
-}));
-jest.mock('@/services/firebase/rtdb', () => ({
+}))(),
+  ...(() => ({
   subscribePresence: () => () => undefined,
+}))(),
 }));
+
+
 jest.mock('@/stores/toastStore', () => ({
   toast: { info: jest.fn(), success: jest.fn(), error: jest.fn() },
 }));

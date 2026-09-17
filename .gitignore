@@ -54,3 +54,6 @@ functions/lib/
 functions/node_modules/
 functions/.env
 dist
+
+# Backup local da migração Firebase -> NestJS (não versionar)
+.migration-backup/

@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { colors, spacing } from '@/design-system';
 import { AppText, Chips, PrimaryButton, Sheet, TextField } from '@/components';
-import { getProfile } from '@/services/firebase/firestore';
-import {
-  FunctionsError,
+import { getProfile ,
+  ApiError,
   resolveFriendInviteToken,
   searchPlayers,
-} from '@/services/firebase/functions';
+} from '@/services/api';
+
 
 type Mode = 'nickname' | 'link';
 
@@ -65,7 +65,7 @@ export function AddManuallySheet({
       reset();
       onClose();
     } catch (e) {
-      setError(e instanceof FunctionsError ? e.message : 'Não deu certo. Tente de novo.');
+      setError(e instanceof ApiError ? e.message : 'Não deu certo. Tente de novo.');
     } finally {
       setBusy(false);
     }

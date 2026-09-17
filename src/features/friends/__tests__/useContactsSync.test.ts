@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-import { useContactsSync } from '../useContactsSync';
+import { RECHECK_MS, useContactsSync } from '../useContactsSync';
 import { ContactsReadError, type ContactsPermission } from '@/services/contacts';
-import { FunctionsError } from '@/services/firebase/functions';
+import { ApiError } from '@/services/api';
 import type { DeviceContact } from '../contactsMatch';
 
 jest.mock('@/services/contacts', () => {
@@ -16,16 +16,16 @@ jest.mock('@/services/contacts', () => {
   };
 });
 
-jest.mock('@/services/firebase/functions', () => {
+jest.mock('@/services/api', () => {
   // Sem "parameter property" (`public code`): o Babel proíbe isso dentro da fábrica do mock.
-  class FunctionsError extends Error {
+  class ApiError extends Error {
     code: string;
     constructor(code: string, message: string) {
       super(message);
       this.code = code;
     }
   }
-  return { FunctionsError, matchPhoneContacts: jest.fn() };
+  return { ApiError, syncPhoneContacts: jest.fn() };
 });
 
 jest.mock('@/services/firebase/analytics', () => ({ logEvent: jest.fn() }));
@@ -40,7 +40,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 const contactsService = jest.requireMock('@/services/contacts');
-const functionsService = jest.requireMock('@/services/firebase/functions');
+const functionsService = jest.requireMock('@/services/api');
 const analytics = jest.requireMock('@/services/firebase/analytics');
 
 const setPermission = (p: ContactsPermission) => {
@@ -59,7 +59,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockStore.clear();
   contactsService.readDeviceContacts.mockResolvedValue([]);
-  functionsService.matchPhoneContacts.mockResolvedValue({ matches: [], remainingQuota: 3000 });
+  functionsService.syncPhoneContacts.mockResolvedValue({ matches: [], remainingQuota: 3000 });
 });
 
 // `renderHook` da v14 devolve Promise: sem o await, `result` vem indefinido.
@@ -134,10 +134,8 @@ describe('useContactsSync — lotes', () => {
     await act(async () => {
       await result.current.sync();
     });
-    expect(functionsService.matchPhoneContacts).toHaveBeenCalledTimes(3); // 200 + 200 + 50
-    const sizes = functionsService.matchPhoneContacts.mock.calls.map(
-      (c: [string[]]) => c[0].length,
-    );
+    expect(functionsService.syncPhoneContacts).toHaveBeenCalledTimes(3); // 200 + 200 + 50
+    const sizes = functionsService.syncPhoneContacts.mock.calls.map((c: [string[]]) => c[0].length);
     expect(sizes).toEqual([200, 200, 50]);
   });
 
@@ -149,7 +147,7 @@ describe('useContactsSync — lotes', () => {
     await act(async () => {
       await result.current.sync();
     });
-    const [payload] = functionsService.matchPhoneContacts.mock.calls[0] as [string[]];
+    const [payload] = functionsService.syncPhoneContacts.mock.calls[0] as [string[]];
     expect(payload).toEqual(['+5561996289726']);
     expect(JSON.stringify(payload)).not.toContain('João');
   });
@@ -157,7 +155,7 @@ describe('useContactsSync — lotes', () => {
   it('reposiciona os índices de cada lote na agenda inteira', async () => {
     contactsService.readDeviceContacts.mockResolvedValue(agendaOf(250));
     // O servidor responde com o índice DENTRO do lote; o segundo lote começa do zero de novo.
-    functionsService.matchPhoneContacts
+    functionsService.syncPhoneContacts
       .mockResolvedValueOnce({ matches: [], remainingQuota: 3000 })
       .mockResolvedValueOnce({
         matches: [
@@ -180,11 +178,11 @@ describe('useContactsSync — lotes', () => {
     await act(async () => {
       await result.current.sync();
     });
-    expect(functionsService.matchPhoneContacts).toHaveBeenCalledTimes(1);
+    expect(functionsService.syncPhoneContacts).toHaveBeenCalledTimes(1);
     await act(async () => {
       await result.current.sync();
     });
-    expect(functionsService.matchPhoneContacts).toHaveBeenCalledTimes(1);
+    expect(functionsService.syncPhoneContacts).toHaveBeenCalledTimes(1);
   });
 
   it('ao reabrir a tela, a sincronização automática usa o cache e não vai ao servidor', async () => {
@@ -193,7 +191,7 @@ describe('useContactsSync — lotes', () => {
     await act(async () => {
       await first.result.current.sync();
     });
-    expect(functionsService.matchPhoneContacts).toHaveBeenCalledTimes(1);
+    expect(functionsService.syncPhoneContacts).toHaveBeenCalledTimes(1);
     await first.unmount();
 
     // Tela montada de novo e sincronização disparada logo no foco, antes do cache terminar de
@@ -202,7 +200,7 @@ describe('useContactsSync — lotes', () => {
     await act(async () => {
       await second.result.current.sync();
     });
-    expect(functionsService.matchPhoneContacts).toHaveBeenCalledTimes(1);
+    expect(functionsService.syncPhoneContacts).toHaveBeenCalledTimes(1);
     expect(second.result.current.syncedAt).not.toBeNull();
   });
 
@@ -216,7 +214,7 @@ describe('useContactsSync — lotes', () => {
     await act(async () => {
       await result.current.sync();
     });
-    expect(functionsService.matchPhoneContacts).toHaveBeenCalledTimes(2);
+    expect(functionsService.syncPhoneContacts).toHaveBeenCalledTimes(2);
   });
 
   it('ignora uma segunda sincronização enquanto a primeira está rodando', async () => {
@@ -227,7 +225,7 @@ describe('useContactsSync — lotes', () => {
       }),
     );
     const { result } = await setup();
-    let first: Promise<void>;
+    let first: Promise<unknown>;
     await act(async () => {
       first = result.current.sync();
       await act(async () => {
@@ -263,7 +261,7 @@ describe('useContactsSync — erros', () => {
     ['internal', 'unknown'],
   ])('traduz o erro "%s" do servidor em "%s"', async (code, expected) => {
     contactsService.readDeviceContacts.mockResolvedValue(agendaOf(2));
-    functionsService.matchPhoneContacts.mockRejectedValue(new FunctionsError(code, 'falhou'));
+    functionsService.syncPhoneContacts.mockRejectedValue(new ApiError(code as never, 'falhou'));
     const { result } = await setup();
     await act(async () => {
       await result.current.sync();
@@ -288,7 +286,7 @@ describe('useContactsSync — estado local', () => {
 
   it('atualiza a relação de um contato sem re-sincronizar', async () => {
     contactsService.readDeviceContacts.mockResolvedValue(agendaOf(1));
-    functionsService.matchPhoneContacts.mockResolvedValue({
+    functionsService.syncPhoneContacts.mockResolvedValue({
       matches: [
         { index: 0, uid: 'alvo', nickname: 'Nick', avatarId: 'joao', level: 1, relation: 'none' },
       ],
@@ -301,7 +299,7 @@ describe('useContactsSync — estado local', () => {
     expect(result.current.result.matched[0]!.relation).toBe('none');
     await act(async () => result.current.setRelation('alvo', 'request_sent'));
     expect(result.current.result.matched[0]!.relation).toBe('request_sent');
-    expect(functionsService.matchPhoneContacts).toHaveBeenCalledTimes(1);
+    expect(functionsService.syncPhoneContacts).toHaveBeenCalledTimes(1);
   });
 
   it('limpa tudo que foi guardado no aparelho', async () => {
@@ -352,5 +350,162 @@ describe('useContactsSync — apagado em Configurações', () => {
     });
     expect(result.current.syncedAt).toBeNull();
     expect(result.current.result.unmatched).toHaveLength(0);
+  });
+});
+
+describe('useContactsSync — conexão automática', () => {
+  beforeEach(() => setPermission('granted'));
+
+  const player = (index: number, uid: string, over: object = {}) => ({
+    index,
+    uid,
+    nickname: uid,
+    avatarId: 'joao',
+    level: 1,
+    relation: 'friend',
+    ...over,
+  });
+
+  it('quem tem conta volta como amigo e só quem não tem fica para convidar', async () => {
+    contactsService.readDeviceContacts.mockResolvedValue(agendaOf(3));
+    functionsService.syncPhoneContacts.mockResolvedValue({
+      matches: [player(0, 'b', { autoConnected: true })],
+      remainingQuota: 3000,
+      connected: 1,
+    });
+    const { result } = await setup();
+    let outcome: unknown;
+    await act(async () => {
+      outcome = await result.current.sync();
+    });
+    expect(outcome).toEqual({ skipped: false, connected: 1 });
+    expect(result.current.result.matched).toMatchObject([{ uid: 'b', relation: 'friend' }]);
+    expect(result.current.result.unmatched.map((u) => u.contactId)).toEqual(['c1', 'c2']);
+    expect(analytics.logEvent).toHaveBeenCalledWith('auto_friend_connected', { count: 1 });
+    expect(analytics.logEvent).toHaveBeenCalledWith('contact_without_account', { count: 2 });
+  });
+
+  it('soma as conexões de todos os lotes num único resultado (um aviso só)', async () => {
+    contactsService.readDeviceContacts.mockResolvedValue(agendaOf(450));
+    functionsService.syncPhoneContacts.mockResolvedValue({
+      matches: [],
+      remainingQuota: 3000,
+      connected: 2,
+    });
+    const { result } = await setup();
+    let outcome: unknown;
+    await act(async () => {
+      outcome = await result.current.sync();
+    });
+    expect(outcome).toEqual({ skipped: false, connected: 6 });
+  });
+
+  it('com a agenda igual, volta ao servidor depois de um dia (quem instalou depois vira amigo)', async () => {
+    contactsService.readDeviceContacts.mockResolvedValue(agendaOf(2));
+    const realNow = Date.now;
+    const { result } = await setup();
+    await act(async () => {
+      await result.current.sync();
+    });
+    expect(functionsService.syncPhoneContacts).toHaveBeenCalledTimes(1);
+
+    functionsService.syncPhoneContacts.mockResolvedValue({
+      matches: [player(1, 'carlos', { autoConnected: true })],
+      remainingQuota: 3000,
+      connected: 1,
+    });
+    const later = realNow() + RECHECK_MS + 1;
+    Date.now = () => later;
+    try {
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await result.current.sync();
+      });
+      expect(functionsService.syncPhoneContacts).toHaveBeenCalledTimes(2);
+      expect(outcome).toEqual({ skipped: false, connected: 1 });
+      // Carlos saiu de "convidar" e entrou nos matches como amigo.
+      expect(result.current.result.unmatched.map((u) => u.contactId)).toEqual(['c0']);
+      expect(result.current.result.matched[0]).toMatchObject({ uid: 'carlos', relation: 'friend' });
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  it('agenda igual e consulta recente: não vai ao servidor e avisa que pulou', async () => {
+    contactsService.readDeviceContacts.mockResolvedValue(agendaOf(2));
+    const { result } = await setup();
+    await act(async () => {
+      await result.current.sync();
+    });
+    let outcome: unknown;
+    await act(async () => {
+      outcome = await result.current.sync();
+    });
+    expect(outcome).toEqual({ skipped: true, connected: 0 });
+  });
+
+  it('permissão negada: nada é lido, nada conecta; concedida depois, sincroniza', async () => {
+    setPermission('denied');
+    contactsService.readDeviceContacts.mockResolvedValue(agendaOf(1));
+    const { result } = await setup();
+    let outcome: unknown;
+    await act(async () => {
+      outcome = await result.current.sync();
+    });
+    expect(outcome).toBeNull();
+    expect(contactsService.readDeviceContacts).not.toHaveBeenCalled();
+    expect(functionsService.syncPhoneContacts).not.toHaveBeenCalled();
+
+    setPermission('granted');
+    functionsService.syncPhoneContacts.mockResolvedValue({
+      matches: [player(0, 'b', { autoConnected: true })],
+      remainingQuota: 3000,
+      connected: 1,
+    });
+    await act(async () => {
+      outcome = await result.current.sync();
+    });
+    expect(outcome).toEqual({ skipped: false, connected: 1 });
+  });
+
+  it('sem internet: mantém o último resultado e deixa tentar de novo', async () => {
+    contactsService.readDeviceContacts.mockResolvedValue(agendaOf(2));
+    const { result } = await setup();
+    await act(async () => {
+      await result.current.sync();
+    });
+    functionsService.syncPhoneContacts.mockRejectedValue(new ApiError('unavailable', 'x'));
+    let outcome: unknown;
+    await act(async () => {
+      outcome = await result.current.sync({ force: true });
+    });
+    expect(outcome).toBeNull();
+    expect(result.current.error).toBe('offline');
+    expect(result.current.result.unmatched).toHaveLength(2);
+
+    functionsService.syncPhoneContacts.mockResolvedValue({ matches: [], remainingQuota: 3000 });
+    await act(async () => {
+      outcome = await result.current.sync({ force: true });
+    });
+    expect(outcome).toEqual({ skipped: false, connected: 0 });
+    expect(result.current.error).toBeNull();
+  });
+
+  it('falha ao consultar a permissão não apaga a agenda guardada', async () => {
+    contactsService.readDeviceContacts.mockResolvedValue(agendaOf(2));
+    const first = await setup();
+    await act(async () => {
+      await first.result.current.sync();
+    });
+    await first.unmount();
+
+    // `getContactsPermission` devolve 'restricted' quando a ponte nativa falha.
+    setPermission('restricted');
+    const second = await setup();
+    await waitFor(() => expect(second.result.current.permission).toBe('restricted'));
+    setPermission('granted');
+    const third = await setup();
+    await waitFor(() => expect(third.result.current.syncedAt).not.toBeNull());
+    expect(third.result.current.result.unmatched).toHaveLength(2);
   });
 });

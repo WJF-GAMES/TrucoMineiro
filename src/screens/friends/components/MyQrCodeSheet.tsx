@@ -4,7 +4,7 @@ import QRCode from 'react-native-qrcode-svg';
 import * as Clipboard from 'expo-clipboard';
 import { colors, radius, spacing } from '@/design-system';
 import { AppText, SecondaryButton, Sheet, StateView } from '@/components';
-import { createFriendInviteToken, FunctionsError } from '@/services/firebase/functions';
+import { createFriendInviteToken, ApiError } from '@/services/api';
 import { logEvent } from '@/services/firebase/analytics';
 import { toast } from '@/stores/toastStore';
 import type { FriendInviteToken } from '@/domain/model/types';
@@ -48,7 +48,7 @@ export function MyQrCodeSheet({
       })
       .catch((e) =>
         active
-          ? setError(e instanceof FunctionsError ? e.message : 'Não foi possível gerar o código.')
+          ? setError(e instanceof ApiError ? e.message : 'Não foi possível gerar o código.')
           : undefined,
       );
     return () => {

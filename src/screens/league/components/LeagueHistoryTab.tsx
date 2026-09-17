@@ -5,7 +5,7 @@ import { colors, spacing } from '@/design-system';
 import { leagueShield } from '@/assets';
 import { AppText, StateView, Surface } from '@/components';
 import { useAuthStore } from '@/stores/authStore';
-import { getLeagueHistory } from '@/services/firebase/firestore';
+import { getLeagueHistory } from '@/services/api';
 import { formatNumber, romanNumeral } from '@/utils/format';
 import type { LeagueHistoryEntry, WeeklyResult } from '@/domain/model/types';
 

@@ -4,7 +4,7 @@ import type { RootStackParamList } from './types';
 /**
  * Referência global da navegação.
  *
- * Serve para o que chega de fora de uma tela — convite de sala no Realtime Database, deep link,
+ * Serve para o que chega de fora de uma tela — convite de sala pelo WebSocket, deep link,
  * push — e precisa levar o usuário para algum lugar sem estar dentro da árvore de navegação.
  * Telas continuam usando a prop `navigation`: esta referência não é atalho para isso.
  */

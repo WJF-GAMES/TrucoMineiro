@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { deleteRoomInvite, subscribeRoomInvites } from '@/services/firebase/rtdb';
-import { FunctionsError, respondRoomInvite } from '@/services/firebase/functions';
+import { deleteRoomInvite, subscribeRoomInvites , ApiError, respondRoomInvite } from '@/services/api';
+
 import { logEvent } from '@/services/firebase/analytics';
 import { toast } from '@/stores/toastStore';
 import type { RoomInvite } from '@/domain/model/types';
@@ -28,7 +28,7 @@ export interface UseRoomInvites {
 }
 
 /**
- * Convites de sala recebidos de amigos (`invites/{uid}` no RTDB, escrito por
+ * Convites de sala recebidos de amigos (caixa de entrada do backend, preenchida por
  * `inviteFriendToRoom`). A lista é ao vivo: o amigo toca em "Jogar" e o convite aparece aqui.
  */
 export function useRoomInvites(
@@ -69,7 +69,7 @@ export function useRoomInvites(
         onJoined?.(invite.code);
       } catch (e) {
         // Sala cheia ou partida já começada: o convite não serve mais para nada.
-        if (e instanceof FunctionsError && e.code !== 'unavailable')
+        if (e instanceof ApiError && e.code !== 'unavailable')
           await deleteRoomInvite(uid, invite.code).catch(() => undefined);
         toast.error('Não foi possível entrar', inviteErrorMessage(e));
       } finally {

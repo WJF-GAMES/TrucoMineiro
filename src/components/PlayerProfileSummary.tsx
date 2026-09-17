@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { colors, radius, spacing } from '@/design-system';
 import { leagueShield } from '@/assets';
-import { subscribeStats } from '@/services/firebase/firestore';
+import { subscribeStats } from '@/services/api';
 import { leagueById } from '@/domain/model/leagues';
 import { formatNumber, pct } from '@/utils/format';
 import type { AvatarId, LeagueId, PlayerStats, PresenceState } from '@/domain/model/types';

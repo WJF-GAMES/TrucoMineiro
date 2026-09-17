@@ -6,7 +6,7 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { useAuthStore } from '@/stores/authStore';
 import { clearContactsSync } from '@/features/friends/contactsCache';
 import { openAppSettings } from '@/services/contacts';
-import { deleteAccount, FunctionsError } from '@/services/firebase/functions';
+import { deleteAccount, ApiError } from '@/services/api';
 import { signOut } from '@/services/firebase/auth';
 import { toast } from '@/stores/toastStore';
 import { ConsentManager, useAdStore } from '@/ads';
@@ -63,7 +63,7 @@ export function SettingsScreen({ navigation }: RootScreenProps<'Settings'>) {
             } catch (e) {
               toast.error(
                 'Não foi possível excluir',
-                e instanceof FunctionsError ? e.message : undefined,
+                e instanceof ApiError ? e.message : undefined,
               );
               setDeleting(false);
             }

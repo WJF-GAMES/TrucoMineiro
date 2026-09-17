@@ -37,8 +37,19 @@
       ],
       "port": 8082,
       "env": {
-        "EXPO_PUBLIC_USE_EMULATORS": "1"
+        "EXPO_PUBLIC_API_URL": "http://localhost:3001"
       }
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "backend",
+        "run",
+        "start:dev"
+      ],
+      "port": 3000
     }
   ]
 }

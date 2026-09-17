@@ -37,14 +37,23 @@
 | friend_qr_opened | Meu QR Code | — |
 | contacts_sync_started | toque em "Sincronizar contatos" | — |
 | contacts_permission_granted / contacts_permission_denied | diálogo do sistema | state (no denied) |
-| contacts_sync_completed | fim da sincronização | contacts, matches |
+| contacts_sync_completed | fim da sincronização | contacts, matches, connected |
 | contacts_sync_failed | erro na sincronização | reason |
 | contact_match_found | alguém da agenda já joga | count |
+| auto_friend_connected | contatos que viraram amigos sozinhos nesta sincronização | count |
+| auto_friend_suppressed | contatos com conta que não reconectaram (amizade removida) | count |
+| contact_without_account | contatos da agenda sem conta (lista CONVIDAR) | count |
 
 Convite de sala com amigos: `game_invite_created` / `game_invite_sent` (`friends`),
 `game_invite_opened` (`source`: push/link), `game_invite_accepted` (`source`, `late`),
 `game_invite_declined`, `game_invite_expired`, `room_ai_fill` (`trigger`: timeout/host),
 `late_human_reclaimed_seat`. Nenhum depende de a funcionalidade funcionar.
+
+`match_started` com `source: resume` vem de `useResumeActiveMatch`, quando o app reaberto leva o
+jogador de volta a uma partida online em andamento.
+
+Os eventos acima são todos do app (Firebase Analytics); o backend não envia eventos de Analytics —
+a telemetria do servidor são logs estruturados e métricas Prometheus em `/metrics`.
 
 Nunca enviar telefone ou OTP. `setUserId(uid)` após login; `setUserId(null)` ao sair.
 

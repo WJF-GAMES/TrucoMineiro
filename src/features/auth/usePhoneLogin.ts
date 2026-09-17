@@ -27,8 +27,8 @@ interface PhoneLogin {
  * A tela só desenha; quem fala com o Firebase é `services/firebase/auth`.
  * O número só vira E.164 aqui e nunca é logado (analytics recebe apenas o evento).
  *
- * Sem checagem de rede antes de enviar: o estado do Realtime Database não diz se o Auth
- * está acessível (visto na prática com o RTDB fora do ar e o login funcionando), e um
+ * Sem checagem de rede antes de enviar: o estado da conexão com o backend não diz se o Auth
+ * está acessível (são serviços independentes), e um
  * falso "sem conexão" travaria o acesso. Quem erra por rede é o próprio Firebase, e o
  * `AuthError` dele já vira "Sem conexão. Verifique sua internet.".
  */

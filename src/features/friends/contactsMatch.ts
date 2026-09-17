@@ -220,3 +220,13 @@ export function filterAgenda(result: AgendaMatchResult, query: string): AgendaMa
     unmatched: result.unmatched.filter((u) => u.contactName.toLowerCase().includes(term)),
   };
 }
+
+/**
+ * Aviso discreto depois da sincronização: um só para o lote inteiro, nunca um por amigo.
+ * `null` quando não há o que dizer (sincronização automática sem novidade).
+ */
+export function syncFeedback(connected: number, manual: boolean): string | null {
+  if (connected === 1) return '1 contato que já joga foi adicionado aos seus amigos.';
+  if (connected > 1) return `${connected} contatos que já jogam foram adicionados aos seus amigos.`;
+  return manual ? 'Contatos atualizados.' : null;
+}

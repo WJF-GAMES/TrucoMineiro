@@ -6,15 +6,15 @@ const mockNavigate = jest.fn();
 let mockPushListener: ((data: Record<string, string>) => void) | null = null;
 let mockInitialPush: Record<string, string> | null = null;
 
-jest.mock('@/services/firebase/functions', () => {
-  class FunctionsError extends Error {
+jest.mock('@/services/api', () => {
+  class ApiError extends Error {
     code: string;
     constructor(code: string, message: string) {
       super(message);
       this.code = code;
     }
   }
-  return { FunctionsError, respondRoomInvite: (...a: unknown[]) => mockRespond(...a) };
+  return { ApiError, respondRoomInvite: (...a: unknown[]) => mockRespond(...a) };
 });
 jest.mock('@/services/firebase/analytics', () => ({ logEvent: jest.fn() }));
 jest.mock('@/services/firebase/messaging', () => ({
@@ -42,9 +42,9 @@ import {
 import { usePendingRoomInvite } from '../usePendingRoomInvite';
 /* eslint-enable import/first */
 
-const { FunctionsError } = jest.requireMock<{
-  FunctionsError: new (code: string, message: string) => Error;
-}>('@/services/firebase/functions');
+const { ApiError } = jest.requireMock<{
+  ApiError: new (code: string, message: string) => Error;
+}>('@/services/api');
 
 const setStatus = (status: 'booting' | 'signed_out' | 'onboarding' | 'signed_in') =>
   act(() => {
@@ -107,7 +107,7 @@ describe('entrar pelo convite', () => {
   });
 
   it('teste 14/15: vencido ou cancelado explica e oferece voltar ao início', async () => {
-    mockRespond.mockRejectedValue(new FunctionsError('not-found', 'Esta sala foi cancelada.'));
+    mockRespond.mockRejectedValue(new ApiError('not-found', 'Esta sala foi cancelada.'));
     await expect(enterInvitedRoom('ABC123', 'push')).resolves.toBe(false);
     expect(mockNavigate).not.toHaveBeenCalledWith('Lobby', expect.anything());
     const [title, message, buttons] = (Alert.alert as jest.Mock).mock.calls[0];
@@ -119,7 +119,7 @@ describe('entrar pelo convite', () => {
 
   it('já em outra partida: não tira o usuário dela', async () => {
     mockRespond.mockRejectedValue(
-      new FunctionsError('failed-precondition', 'Você já está em uma partida.'),
+      new ApiError('failed-precondition', 'Você já está em uma partida.'),
     );
     await enterInvitedRoom('ABC123', 'banner');
     expect((Alert.alert as jest.Mock).mock.calls[0][1]).toBe('Você já está em uma partida.');

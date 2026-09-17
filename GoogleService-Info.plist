@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>AIzaSyAC9Y4FT9lrB2V3G9Xtev8SNRdgxGV5hn4</string>
+	<string>AIzaSyBSLJM0bGIZKnhxlbGnF5gBOec-kmcUl0k</string>
 	<key>GCM_SENDER_ID</key>
 	<string>595442235811</string>
 	<key>PLIST_VERSION</key>
@@ -14,19 +14,19 @@
 	<string>truco-mineiro-wjf</string>
 	<key>STORAGE_BUCKET</key>
 	<string>truco-mineiro-wjf.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:595442235811:ios:ae168b5eb02e75c8e28216</string>
 	<key>DATABASE_URL</key>
 	<string>https://truco-mineiro-wjf-default-rtdb.firebaseio.com</string>
-	<key>IS_ADS_ENABLED</key>
-	<false/>
-	<key>IS_ANALYTICS_ENABLED</key>
-	<true/>
-	<key>IS_APPINVITE_ENABLED</key>
-	<false/>
-	<key>IS_GCM_ENABLED</key>
-	<true/>
-	<key>IS_SIGNIN_ENABLED</key>
-	<false/>
-	<key>GOOGLE_APP_ID</key>
-	<string>1:595442235811:ios:0000000000000000ce28216</string>
 </dict>
 </plist>

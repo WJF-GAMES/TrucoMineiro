@@ -6,8 +6,7 @@ import { colors, gradients, radius, spacing } from '@/design-system';
 import { images } from '@/assets';
 import { AppText, GameHeader, Screen } from '@/components';
 import { ActionRow } from '@/screens/play/PlayScreen';
-import { createRoom, FunctionsError } from '@/services/firebase/functions';
-import { subscribeOnlineCount } from '@/services/firebase/rtdb';
+import { createRoom, ApiError , subscribeOnlineCount } from '@/services/api';
 import { flag } from '@/services/firebase/remoteConfig';
 import { logEvent } from '@/services/firebase/analytics';
 import { toast } from '@/stores/toastStore';
@@ -29,7 +28,7 @@ export function OnlineHubScreen({ navigation }: RootScreenProps<'OnlineHub'>) {
     } catch (e) {
       toast.error(
         'Não foi possível criar a sala',
-        e instanceof FunctionsError ? e.message : undefined,
+        e instanceof ApiError ? e.message : undefined,
       );
     } finally {
       setCreating(false);

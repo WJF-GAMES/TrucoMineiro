@@ -1,0 +1,896 @@
+// Truco Mineiro — banco relacional (PostgreSQL). Fonte de verdade do domínio.
+// Identidade: Firebase Auth (telefone). `User.firebaseUid` liga a conta do Auth ao usuário interno.
+// PKs internas são UUID; o `firebaseUid` é o identificador público exposto pela API (`uid`).
+// Documentação: docs/database.md.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  // `prisma migrate dev` precisa de um banco-sombra: o usuário da aplicação não cria bancos.
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------------------------
+
+enum FriendshipSource {
+  MANUAL
+  PHONE_CONTACT
+}
+
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum SuppressionReason {
+  REMOVED
+  BLOCKED
+}
+
+enum PresenceState {
+  ONLINE
+  OFFLINE
+  IN_ROOM
+  IN_MATCH
+  BACKGROUND
+  RECONNECTING
+}
+
+enum RoomStatus {
+  WAITING
+  STARTING
+  IN_MATCH
+  CLOSED
+}
+
+enum RoomSource {
+  PRIVATE
+  MATCHMAKING
+}
+
+enum RoomClosedReason {
+  CANCELLED
+  FINISHED
+  ABANDONED
+  EXPIRED
+}
+
+enum RoomFillPolicy {
+  ON_TIMEOUT
+  MANUAL
+}
+
+enum RoomInviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  AI_FILLED
+  CANCELLED
+}
+
+enum MatchmakingStatus {
+  SEARCHING
+  FOUND
+  PREPARING
+  READY
+  CANCELLED
+  TIMEOUT
+  ERROR
+}
+
+enum MatchMode {
+  ONLINE
+  AI
+}
+
+enum MatchStatus {
+  PREPARING
+  PLAYING
+  FINISHED
+  ABANDONED
+}
+
+enum SeatController {
+  HUMAN
+  AI_TEMPORARY
+  AI_PERMANENT
+}
+
+enum AiDifficulty {
+  EASY
+  NORMAL
+  HARD
+}
+
+enum ActorKind {
+  HUMAN
+  AI
+  TIMEOUT
+}
+
+enum LeagueGroupStatus {
+  FORMING
+  ACTIVE
+  FINALIZING
+  FINALIZED
+}
+
+enum LeagueSeasonStatus {
+  ACTIVE
+  FINALIZING
+  FINALIZED
+}
+
+enum WeeklyResult {
+  PROMOTED
+  STAYED
+  RELEGATED
+  TOP_LEAGUE
+  BOTTOM_LEAGUE
+}
+
+enum LeagueScoreEvent {
+  MATCH_WIN
+  MATCH_LOSS
+  BONUS
+}
+
+enum NotificationType {
+  FRIEND_REQUEST
+  ROOM_INVITE
+  REWARD
+  LEAGUE
+  SYSTEM
+}
+
+enum PushStatus {
+  PENDING
+  SENT
+  NO_DEVICE
+  FAILED
+  SKIPPED
+}
+
+enum WebhookStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  REJECTED
+}
+
+// ---------------------------------------------------------------------------------------------
+// Usuário, perfil, aparelhos, presença
+// ---------------------------------------------------------------------------------------------
+
+model User {
+  id                   String    @id @default(uuid()) @db.Uuid
+  firebaseUid          String    @unique @db.VarChar(128)
+  /// HMAC-SHA256(CONTACTS_PEPPER, telefone E.164 do Firebase Auth). Diretório de contatos: nunca o número.
+  phoneHash            String?   @unique @db.Char(64)
+  countryCode          String    @default("BR") @db.VarChar(2)
+  /// Token opaco do QR de amizade (sem telefone, sem uid).
+  inviteToken          String?   @unique @db.VarChar(64)
+  inviteTokenExpiresAt DateTime? @db.Timestamptz(3)
+  createdAt            DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(3)
+  lastSeenAt           DateTime  @default(now()) @db.Timestamptz(3)
+
+  profile          UserProfile?
+  stats            PlayerStatistics?
+  devices          UserDevice[]
+  presence         UserPresence?
+  friendshipsA     Friendship[]            @relation("FriendshipA")
+  friendshipsB     Friendship[]            @relation("FriendshipB")
+  sentRequests     FriendRequest[]         @relation("RequestFrom")
+  receivedRequests FriendRequest[]         @relation("RequestTo")
+  blocking         BlockedUser[]           @relation("Blocker")
+  blockedBy        BlockedUser[]           @relation("Blocked")
+  suppressions     FriendshipSuppression[] @relation("SuppressionOwner")
+  suppressedBy     FriendshipSuppression[] @relation("SuppressionOther")
+  contactQuota     ContactSyncQuota?
+  hostedRooms      Room[]                  @relation("RoomHost")
+  roomSeats        RoomSeat[]              @relation("SeatUser")
+  reservedSeats    RoomSeat[]              @relation("SeatReserved")
+  receivedInvites  RoomInvite[]            @relation("InviteInvitee")
+  sentInvites      RoomInvite[]            @relation("InviteInviter")
+  matchmaking      MatchmakingTicket?
+  participations   MatchParticipant[]      @relation("ParticipantUser")
+  results          MatchResult[]
+  achievements     UserAchievement[]
+  leagueProgress   LeagueProgress?
+  memberships      LeagueMembership[]
+  leagueScores     LeagueScore[]
+  leagueHistory    LeagueWeekResult[]
+  notifications    Notification[]
+  rateLimits       RateLimitBucket[]
+  idempotencyKeys  IdempotencyKey[]
+}
+
+model UserProfile {
+  userId        String   @id @db.Uuid
+  /// Vazio até o cadastro (Nome/Avatar). `onboarded` = nickname preenchido.
+  nickname      String   @default("") @db.VarChar(16)
+  nicknameLower String   @default("") @db.VarChar(16)
+  avatarId      String   @default("joao") @db.VarChar(24)
+  level         Int      @default(1)
+  xp            Int      @default(0)
+  xpToNext      Int      @default(300)
+  /// Espelho de LeagueProgress.currentLeagueId — quem manda é o sistema de ligas.
+  leagueId      String   @default("bronze") @db.VarChar(24)
+  leaguePoints  Int      @default(0)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  league League @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+
+  @@index([nicknameLower])
+}
+
+model PlayerStatistics {
+  userId         String   @id @db.Uuid
+  matches        Int      @default(0)
+  wins           Int      @default(0)
+  losses         Int      @default(0)
+  winRate        Int      @default(0)
+  aiMatches      Int      @default(0)
+  onlineMatches  Int      @default(0)
+  trucosCalled   Int      @default(0)
+  trucosAccepted Int      @default(0)
+  bestStreak     Int      @default(0)
+  currentStreak  Int      @default(0)
+  hardWins       Int      @default(0)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserDevice {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  /// Token FCM. Um aparelho pertence a uma conta por vez (troca de conta move o token).
+  token     String   @unique @db.VarChar(4096)
+  platform  String   @db.VarChar(20)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Estado de presença atual. Escrito só em mudanças de estado (conexão/desconexão/partida),
+/// nunca em heartbeat por segundo.
+model UserPresence {
+  userId     String        @id @db.Uuid
+  state      PresenceState @default(OFFLINE)
+  matchId    String?       @db.Uuid
+  roomCode   String?       @db.VarChar(6)
+  instanceId String?       @db.VarChar(64)
+  sockets    Int           @default(0)
+  updatedAt  DateTime      @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([state])
+  @@index([instanceId])
+}
+
+/// Instâncias vivas do backend (heartbeat a cada 30 s): presença órfã de instância morta é limpa.
+model BackendInstance {
+  id          String   @id @db.VarChar(64)
+  startedAt   DateTime @default(now()) @db.Timestamptz(3)
+  heartbeatAt DateTime @default(now()) @db.Timestamptz(3)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Amigos, bloqueios, contatos
+// ---------------------------------------------------------------------------------------------
+
+/// Uma linha por par (userAId < userBId): não existe "A-B" e "B-A" duplicados.
+model Friendship {
+  userAId   String           @db.Uuid
+  userBId   String           @db.Uuid
+  source    FriendshipSource @default(MANUAL)
+  createdAt DateTime         @default(now()) @db.Timestamptz(3)
+
+  userA User @relation("FriendshipA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB User @relation("FriendshipB", fields: [userBId], references: [id], onDelete: Cascade)
+
+  @@id([userAId, userBId])
+  @@index([userBId])
+}
+
+model FriendRequest {
+  id         String              @id @default(uuid()) @db.Uuid
+  fromUserId String              @db.Uuid
+  toUserId   String              @db.Uuid
+  status     FriendRequestStatus @default(PENDING)
+  resolvedBy FriendshipSource?
+  createdAt  DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime            @updatedAt @db.Timestamptz(3)
+
+  from User @relation("RequestFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  to   User @relation("RequestTo", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  /// Determinístico por par ordenado: duas chamadas simultâneas não criam duas solicitações.
+  @@unique([fromUserId, toUserId])
+  @@index([toUserId, status])
+  @@index([fromUserId, status])
+}
+
+model BlockedUser {
+  blockerId String   @db.Uuid
+  blockedId String   @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+/// "Não reconectar pela agenda": gravado quando userId remove ou bloqueia otherUserId.
+model FriendshipSuppression {
+  userId      String            @db.Uuid
+  otherUserId String            @db.Uuid
+  reason      SuppressionReason
+  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
+
+  user  User @relation("SuppressionOwner", fields: [userId], references: [id], onDelete: Cascade)
+  other User @relation("SuppressionOther", fields: [otherUserId], references: [id], onDelete: Cascade)
+
+  @@id([userId, otherUserId])
+  @@index([otherUserId])
+}
+
+/// Cota diária da sincronização de agenda (anti-enumeração).
+model ContactSyncQuota {
+  userId      String   @id @db.Uuid
+  windowStart DateTime @db.Timestamptz(3)
+  calls       Int      @default(0)
+  numbers     Int      @default(0)
+  connected   Int      @default(0)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Salas, assentos, convites, matchmaking
+// ---------------------------------------------------------------------------------------------
+
+model Room {
+  id              String            @id @default(uuid()) @db.Uuid
+  code            String            @unique @db.Char(6)
+  hostUserId      String            @db.Uuid
+  status          RoomStatus        @default(WAITING)
+  source          RoomSource        @default(PRIVATE)
+  fillPolicy      RoomFillPolicy?
+  closedReason    RoomClosedReason?
+  inviteExpiresAt DateTime?         @db.Timestamptz(3)
+  lateJoinUntil   DateTime?         @db.Timestamptz(3)
+  currentMatchId  String?           @unique @db.Uuid
+  version         Int               @default(0)
+  createdAt       DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime          @updatedAt @db.Timestamptz(3)
+
+  host         User         @relation("RoomHost", fields: [hostUserId], references: [id], onDelete: Cascade)
+  seats        RoomSeat[]
+  invites      RoomInvite[]
+  currentMatch Match?       @relation("RoomCurrentMatch", fields: [currentMatchId], references: [id], onDelete: SetNull)
+  matches      Match[]      @relation("RoomMatches")
+
+  @@index([status, updatedAt])
+  @@index([hostUserId])
+}
+
+model RoomSeat {
+  roomId            String   @db.Uuid
+  seat              Int      @db.SmallInt
+  /// Humano no assento (null = IA).
+  userId            String?  @db.Uuid
+  botKey            String?  @db.VarChar(64)
+  nickname          String   @db.VarChar(40)
+  avatarId          String   @db.VarChar(24)
+  ready             Boolean  @default(false)
+  isBot             Boolean  @default(false)
+  connected         Boolean  @default(true)
+  /// IA segurando a vaga de um convidado que ainda pode assumir.
+  reservedForUserId String?  @db.Uuid
+  joinedAt          DateTime @default(now()) @db.Timestamptz(3)
+
+  room        Room  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user        User? @relation("SeatUser", fields: [userId], references: [id], onDelete: Cascade)
+  reservedFor User? @relation("SeatReserved", fields: [reservedForUserId], references: [id], onDelete: SetNull)
+
+  @@id([roomId, seat])
+  @@unique([roomId, userId])
+  @@index([userId])
+}
+
+/// Convite de sala. `seat` preenchido = vaga reservada (sala com amigos); `seat` nulo = convite
+/// simples para uma sala existente. É também a "caixa de entrada" do convidado
+/// (enquanto `dismissedAt` for nulo).
+model RoomInvite {
+  id            String           @id @default(uuid()) @db.Uuid
+  roomId        String           @db.Uuid
+  inviteeUserId String           @db.Uuid
+  inviterUserId String           @db.Uuid
+  seat          Int?             @db.SmallInt
+  status        RoomInviteStatus @default(PENDING)
+  invitedAt     DateTime         @default(now()) @db.Timestamptz(3)
+  respondedAt   DateTime?        @db.Timestamptz(3)
+  expiresAt     DateTime         @db.Timestamptz(3)
+  dismissedAt   DateTime?        @db.Timestamptz(3)
+  pushSentAt    DateTime?        @db.Timestamptz(3)
+
+  room    Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  invitee User @relation("InviteInvitee", fields: [inviteeUserId], references: [id], onDelete: Cascade)
+  inviter User @relation("InviteInviter", fields: [inviterUserId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, inviteeUserId])
+  @@index([inviteeUserId, dismissedAt])
+}
+
+model MatchmakingTicket {
+  userId    String            @id @db.Uuid
+  status    MatchmakingStatus @default(SEARCHING)
+  joinedAt  DateTime          @default(now()) @db.Timestamptz(3)
+  matchId   String?           @db.Uuid
+  roomCode  String?           @db.VarChar(6)
+  updatedAt DateTime          @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, joinedAt])
+}
+
+// ---------------------------------------------------------------------------------------------
+// Partidas (online autoritativa e contra a IA), eventos e resultados
+// ---------------------------------------------------------------------------------------------
+
+model MatchSeries {
+  id        String   @id @default(uuid()) @db.Uuid
+  /// Hoje o produto joga "melhor de 1". A série existe para o formato "melhor de 3" futuro.
+  bestOf    Int      @default(1) @db.SmallInt
+  winsTeam0 Int      @default(0) @db.SmallInt
+  winsTeam1 Int      @default(0) @db.SmallInt
+  winner    Int?     @db.SmallInt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  matches Match[]
+}
+
+model Match {
+  id                String        @id @default(uuid()) @db.Uuid
+  mode              MatchMode
+  status            MatchStatus   @default(PLAYING)
+  difficulty        AiDifficulty?
+  roomId            String?       @db.Uuid
+  seriesId          String?       @db.Uuid
+  seriesGame        Int           @default(1) @db.SmallInt
+  /// Estado privado do motor (mãos, baralho, rng). NUNCA sai do servidor.
+  state             Json?
+  stateVersion      Int           @default(0)
+  targetScore       Int           @default(12) @db.SmallInt
+  scoreTeam0        Int           @default(0) @db.SmallInt
+  scoreTeam1        Int           @default(0) @db.SmallInt
+  winnerTeam        Int?          @db.SmallInt
+  handsPlayed       Int           @default(0)
+  abandonedByUserId String?       @db.Uuid
+  /// Chave externa de idempotência (partida contra IA: `{uid}_{matchId do cliente}`).
+  externalKey       String?       @unique @db.VarChar(160)
+  seed              BigInt?
+  aiSeed            BigInt?
+  /// Timer do servidor: quando a vez atual começou e até quando vale.
+  turnStartedAt     DateTime?     @db.Timestamptz(3)
+  turnDeadlineAt    DateTime?     @db.Timestamptz(3)
+  /// Próximo "tick" do agendador (IA, timeout, troca de controlador). Nulo = nada pendente.
+  nextTickAt        DateTime?     @db.Timestamptz(3)
+  createdAt         DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime      @updatedAt @db.Timestamptz(3)
+  finishedAt        DateTime?     @db.Timestamptz(3)
+
+  room         Room?              @relation("RoomMatches", fields: [roomId], references: [id], onDelete: SetNull)
+  currentOf    Room?              @relation("RoomCurrentMatch")
+  series       MatchSeries?       @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  participants MatchParticipant[]
+  actions      GameAction[]
+  hands        GameHand[]
+  events       MatchEvent[]
+  results      MatchResult[]
+
+  @@index([status, nextTickAt])
+  @@index([roomId])
+}
+
+model MatchParticipant {
+  matchId           String         @db.Uuid
+  seat              Int            @db.SmallInt
+  team              Int            @db.SmallInt
+  userId            String?        @db.Uuid
+  botKey            String?        @db.VarChar(64)
+  nickname          String         @db.VarChar(40)
+  avatarId          String         @db.VarChar(24)
+  controller        SeatController @default(HUMAN)
+  /// Incrementa a cada troca humano/IA: uma ação da IA calculada para a versão antiga é descartada.
+  controllerVersion Int            @default(0)
+  connected         Boolean        @default(true)
+  disconnectedAt    DateTime?      @db.Timestamptz(3)
+  reservedForUserId String?        @db.Uuid
+  pendingUserId     String?        @db.Uuid
+  replacedUserId    String?        @db.Uuid
+  trucosCalled      Int            @default(0)
+  trucosAccepted    Int            @default(0)
+  updatedAt         DateTime       @updatedAt @db.Timestamptz(3)
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User? @relation("ParticipantUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@id([matchId, seat])
+  @@index([userId])
+  @@index([pendingUserId])
+}
+
+/// Toda ação aplicada pelo motor. `clientActionId` é a chave de idempotência (única por partida).
+model GameAction {
+  id             BigInt    @id @default(autoincrement())
+  matchId        String    @db.Uuid
+  sequence       Int
+  clientActionId String    @db.VarChar(200)
+  seat           Int       @db.SmallInt
+  actor          ActorKind
+  userId         String?   @db.Uuid
+  type           String    @db.VarChar(32)
+  /// Carta/profundidade do corte. Carta virada fica aqui (tabela só do servidor).
+  payload        Json?
+  stateVersion   Int
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, clientActionId])
+  @@unique([matchId, sequence])
+}
+
+model GameHand {
+  matchId    String    @db.Uuid
+  number     Int
+  dealerSeat Int       @db.SmallInt
+  value      Int       @db.SmallInt
+  winnerTeam Int?      @db.SmallInt
+  points     Int       @default(0) @db.SmallInt
+  reason     String?   @db.VarChar(32)
+  scoreTeam0 Int       @default(0) @db.SmallInt
+  scoreTeam1 Int       @default(0) @db.SmallInt
+  startedAt  DateTime  @default(now()) @db.Timestamptz(3)
+  endedAt    DateTime? @db.Timestamptz(3)
+
+  match  Match       @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  tricks GameTrick[]
+
+  @@id([matchId, number])
+}
+
+model GameTrick {
+  matchId    String   @db.Uuid
+  handNumber Int
+  round      Int      @db.SmallInt
+  /// Nulo = cangou.
+  winnerTeam Int?     @db.SmallInt
+  winnerSeat Int      @db.SmallInt
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  hand GameHand @relation(fields: [matchId, handNumber], references: [matchId, number], onDelete: Cascade)
+
+  @@id([matchId, handNumber, round])
+}
+
+/// Eventos públicos relevantes (auditoria). Sem animação e sem carta secreta.
+model MatchEvent {
+  id        BigInt   @id @default(autoincrement())
+  matchId   String   @db.Uuid
+  sequence  Int
+  type      String   @db.VarChar(32)
+  payload   Json?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, sequence])
+}
+
+/// Resultado de um humano numa partida. A linha é a trava de idempotência da progressão
+/// (XP, estatísticas, conquistas e liga só são aplicados uma vez).
+model MatchResult {
+  id                String   @id @default(uuid()) @db.Uuid
+  /// Chave estável (`{matchId}` / `{matchId}_left_{uid}` / legada do Firestore).
+  key               String   @db.VarChar(200)
+  matchId           String   @db.Uuid
+  userId            String   @db.Uuid
+  seat              Int      @db.SmallInt
+  won               Boolean
+  forfeit           Boolean  @default(false)
+  scoreTeam0        Int      @db.SmallInt
+  scoreTeam1        Int      @db.SmallInt
+  winnerTeam        Int      @db.SmallInt
+  xpGained          Int
+  leaguePointsDelta Int
+  leveledUp         Boolean  @default(false)
+  newLevel          Int
+  newLeagueId       String   @db.VarChar(24)
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([key, userId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([matchId])
+}
+
+// ---------------------------------------------------------------------------------------------
+// Conquistas
+// ---------------------------------------------------------------------------------------------
+
+model Achievement {
+  id          String   @id @db.VarChar(40)
+  order       Int      @unique
+  title       String   @db.VarChar(80)
+  description String   @db.VarChar(200)
+  icon        String   @db.VarChar(40)
+  target      Int
+  stat        String   @db.VarChar(40)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  unlocked UserAchievement[]
+}
+
+model UserAchievement {
+  userId        String   @db.Uuid
+  achievementId String   @db.VarChar(40)
+  unlockedAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@id([userId, achievementId])
+}
+
+// ---------------------------------------------------------------------------------------------
+// Ligas semanais
+// ---------------------------------------------------------------------------------------------
+
+/// As 20 ligas (seed estrutural).
+model League {
+  id               String  @id @db.VarChar(24)
+  order            Int     @unique
+  displayName      String  @db.VarChar(40)
+  assetKey         String  @db.VarChar(40)
+  previousLeagueId String? @db.VarChar(24)
+  nextLeagueId     String? @db.VarChar(24)
+  isFirst          Boolean @default(false)
+  isLast           Boolean @default(false)
+  active           Boolean @default(true)
+
+  groups   LeagueGroup[]
+  profiles UserProfile[]
+  progress LeagueProgress[]
+}
+
+/// Uma semana de liga (`2026-W37`). O status é a trava de idempotência do fechamento semanal.
+model LeagueSeason {
+  weekKey     String             @id @db.VarChar(8)
+  startAt     DateTime           @db.Timestamptz(3)
+  endAt       DateTime           @db.Timestamptz(3)
+  status      LeagueSeasonStatus @default(ACTIVE)
+  finalizedAt DateTime?          @db.Timestamptz(3)
+  preparedAt  DateTime?          @db.Timestamptz(3)
+  createdAt   DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime           @updatedAt @db.Timestamptz(3)
+
+  groups LeagueGroup[]
+}
+
+model LeagueGroup {
+  /// Determinístico: `2026-W37__gold__001` (criação idempotente).
+  id              String            @id @db.VarChar(48)
+  weekKey         String            @db.VarChar(8)
+  leagueId        String            @db.VarChar(24)
+  division        Int
+  status          LeagueGroupStatus @default(ACTIVE)
+  memberCount     Int               @default(0)
+  targetSize      Int               @default(20)
+  promotionCount  Int               @default(0)
+  relegationCount Int               @default(0)
+  createdAt       DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime          @updatedAt @db.Timestamptz(3)
+  finalizedAt     DateTime?         @db.Timestamptz(3)
+
+  season  LeagueSeason       @relation(fields: [weekKey], references: [weekKey], onDelete: Restrict)
+  league  League             @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  members LeagueMembership[]
+
+  @@unique([weekKey, leagueId, division])
+  @@index([weekKey, leagueId, status])
+}
+
+model LeagueMembership {
+  id            String   @id @default(uuid()) @db.Uuid
+  groupId       String   @db.VarChar(48)
+  userId        String   @db.Uuid
+  weekKey       String   @db.VarChar(8)
+  weeklyPoints  Int      @default(0)
+  wins          Int      @default(0)
+  matches       Int      @default(0)
+  tiebreakScore Int      @default(0)
+  currentRank   Int      @default(0)
+  previousRank  Int      @default(0)
+  joinedAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  group LeagueGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Ninguém fica em dois grupos na mesma semana.
+  @@unique([userId, weekKey])
+  @@unique([groupId, userId])
+}
+
+/// Progresso do jogador no sistema de ligas.
+model LeagueProgress {
+  userId               String        @id @db.Uuid
+  currentLeagueId      String        @default("bronze") @db.VarChar(24)
+  currentDivision      Int           @default(1)
+  currentWeekKey       String        @db.VarChar(8)
+  currentGroupId       String?       @db.VarChar(48)
+  weeklyPoints         Int           @default(0)
+  seasonPoints         Int           @default(0)
+  lastWeeklyResult     WeeklyResult?
+  lastWeeklyRank       Int?
+  lastProcessedWeekKey String?       @db.VarChar(8)
+  lastActiveWeekKey    String?       @db.VarChar(8)
+  updatedAt            DateTime      @updatedAt @db.Timestamptz(3)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  league League @relation(fields: [currentLeagueId], references: [id], onDelete: Restrict)
+
+  @@index([seasonPoints(sort: Desc), userId])
+  @@index([currentLeagueId, lastProcessedWeekKey, lastActiveWeekKey])
+}
+
+/// Livro-razão de pontos semanais. `key` = `{matchId}__{uid}__{evento}` (idempotência).
+model LeagueScore {
+  id        BigInt           @id @default(autoincrement())
+  key       String           @unique @db.VarChar(240)
+  userId    String           @db.Uuid
+  groupId   String           @db.VarChar(48)
+  weekKey   String           @db.VarChar(8)
+  matchId   String?          @db.VarChar(160)
+  event     LeagueScoreEvent
+  points    Int
+  createdAt DateTime         @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, weekKey])
+}
+
+/// Resultado semanal do jogador (histórico da aba Liga).
+model LeagueWeekResult {
+  userId           String       @db.Uuid
+  weekKey          String       @db.VarChar(8)
+  leagueId         String       @db.VarChar(24)
+  division         Int
+  groupId          String       @db.VarChar(48)
+  groupSize        Int
+  finalRank        Int
+  weeklyPoints     Int
+  result           WeeklyResult
+  previousLeagueId String       @db.VarChar(24)
+  nextLeagueId     String       @db.VarChar(24)
+  processedAt      DateTime     @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, weekKey])
+  @@index([userId, processedAt(sort: Desc)])
+}
+
+// ---------------------------------------------------------------------------------------------
+// Notificações, webhooks, idempotência, travas, rate limit
+// ---------------------------------------------------------------------------------------------
+
+model Notification {
+  id          String           @id @default(uuid()) @db.Uuid
+  userId      String           @db.Uuid
+  type        NotificationType
+  title       String           @db.VarChar(160)
+  body        String           @db.VarChar(400)
+  data        Json?
+  collapseKey String?          @db.VarChar(160)
+  pushStatus  PushStatus       @default(PENDING)
+  readAt      DateTime?        @db.Timestamptz(3)
+  createdAt   DateTime         @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, readAt])
+}
+
+model WebhookEvent {
+  id              String        @id @default(uuid()) @db.Uuid
+  provider        String        @db.VarChar(40)
+  externalEventId String        @db.VarChar(200)
+  type            String        @db.VarChar(80)
+  status          WebhookStatus @default(RECEIVED)
+  attemptCount    Int           @default(1)
+  error           String?       @db.VarChar(500)
+  receivedAt      DateTime      @default(now()) @db.Timestamptz(3)
+  /// Início da tentativa atual: PROCESSING antigo = instância morreu no meio, pode reprocessar.
+  lastAttemptAt   DateTime      @default(now()) @db.Timestamptz(3)
+  processedAt     DateTime?     @db.Timestamptz(3)
+
+  @@unique([provider, externalEventId])
+  @@index([status, receivedAt])
+}
+
+/// Idempotência de requisições REST mutáveis (`Idempotency-Key`).
+model IdempotencyKey {
+  key        String   @db.VarChar(120)
+  userId     String   @db.Uuid
+  route      String   @db.VarChar(160)
+  statusCode Int
+  response   Json?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  expiresAt  DateTime @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, key])
+  @@index([expiresAt])
+}
+
+/// Trava lógica entre instâncias (jobs semanais, rebalanceamento). Vencida = reaproveitável.
+model JobLock {
+  id         String   @id @db.VarChar(120)
+  token      String   @db.VarChar(80)
+  acquiredAt DateTime @default(now()) @db.Timestamptz(3)
+  expiresAt  DateTime @db.Timestamptz(3)
+}
+
+/// Janela fixa por usuário e ação (compartilhada entre instâncias).
+model RateLimitBucket {
+  userId      String   @db.Uuid
+  key         String   @db.VarChar(160)
+  count       Int      @default(0)
+  windowStart DateTime @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, key])
+}
+
+/// Controle da migração Firebase → PostgreSQL (idempotência por documento de origem).
+model MigrationRecord {
+  source     String   @db.VarChar(60)
+  sourceId   String   @db.VarChar(300)
+  checksum   String   @db.Char(64)
+  migratedAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@id([source, sourceId])
+}

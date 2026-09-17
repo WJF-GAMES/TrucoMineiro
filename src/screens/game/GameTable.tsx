@@ -133,6 +133,7 @@ export function GameTable({ controller, onExit }: Props) {
     myMove,
     paused: status === 'reconnecting',
     act,
+    serverDeadline: controller.serverDeadline,
   });
   const ceremony = useCeremony({
     view,
@@ -424,12 +425,16 @@ export function GameTable({ controller, onExit }: Props) {
               pointerEvents="none"
               ref={crossRef}
             >
+              {/* Ordem de desenho fixa (sem zIndex): a faixa "Ganhando"/"Vencedora" do topo passa por
+                  cima das laterais, e a das laterais por cima da minha. Trocar o zIndex de uma carta
+                  jogada faz o Fabric reinserir a view e ela perdia a posição animada (sumia). */}
               <PlayedSlot
-                seat={top?.seat}
-                pos="top"
+                seat={mySeat}
+                pos="bottom"
                 trick={trick}
                 mySeat={mySeat}
-                style={styles.crossTop}
+                style={styles.crossBottom}
+                mine
               />
               <PlayedSlot
                 seat={left?.seat}
@@ -446,12 +451,11 @@ export function GameTable({ controller, onExit }: Props) {
                 style={styles.crossRight}
               />
               <PlayedSlot
-                seat={mySeat}
-                pos="bottom"
+                seat={top?.seat}
+                pos="top"
                 trick={trick}
                 mySeat={mySeat}
-                style={styles.crossBottom}
-                mine
+                style={styles.crossTop}
               />
             </View>
 
@@ -872,7 +876,7 @@ function PlayedSlot({
       from={pos}
       status={status}
       collectTo={collectTo}
-      style={[style, status === 'winner' || status === 'leading' ? styles.raised : null]}
+      style={style}
       testID={`played-${play.seat}`}
     />
   );
@@ -1056,7 +1060,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 40, 26, 0.7)',
     marginTop: 2,
   },
-  raised: { zIndex: 5 },
   hand: { flexDirection: 'row', justifyContent: 'center', gap: 10, minHeight: 122 },
   actions: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 10, minHeight: 48 },
   // "Aceitar | SEIS! | Correr" são três botões na mesma linha: com largura mínima fixa eles

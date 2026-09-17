@@ -16,8 +16,7 @@ import {
   Surface,
 } from '@/components';
 import { useAuthStore } from '@/stores/authStore';
-import { subscribeRoom } from '@/services/firebase/rtdb';
-import {
+import { subscribeRoom ,
   claimReservedSeat,
   fillRoomWithBots,
   inviteToRoom,
@@ -26,8 +25,9 @@ import {
   resolveLobbyTimeout,
   setReady,
   startMatch,
-  FunctionsError,
-} from '@/services/firebase/functions';
+  ApiError,
+} from '@/services/api';
+
 import type { Room } from '@/domain/model/types';
 import { toast } from '@/stores/toastStore';
 import { logEvent } from '@/services/firebase/analytics';
@@ -189,7 +189,7 @@ export function LobbyScreen({ navigation, route }: RootScreenProps<'Lobby'>) {
     try {
       await fn();
     } catch (e) {
-      toast.error(failTitle, e instanceof FunctionsError ? e.message : undefined);
+      toast.error(failTitle, e instanceof ApiError ? e.message : undefined);
     } finally {
       setBusy(null);
     }

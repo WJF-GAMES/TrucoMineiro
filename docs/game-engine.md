@@ -1,6 +1,8 @@
 # Game Engine — Truco Mineiro
 
 Pasta `src/domain/game/` — TypeScript puro, sem React/React Native/Firebase (regra de lint em `eslint.config.js`).
+O mesmo código roda no app (partida contra a IA, relógio, apresentação) e no backend NestJS
+(partida online autoritativa e validação da partida contra a IA) — ver "Execução no servidor".
 
 ## Regras implementadas
 
@@ -44,8 +46,10 @@ Pasta `src/domain/game/` — TypeScript puro, sem React/React Native/Firebase (r
   quantas vezes quiser (cada uma reembaralha **o baralho atual** com o PRNG e sobe
   `deckVersion`/`shuffleCount`) e fecha com `FINISH_SHUFFLE` (nada é reembaralhado escondido).
   Em `CUTTING` o assento seguinte faz `CUT` com `depth` (`high`/`middle`/`low` = 10/20/30 cartas
-  de cima vão para baixo, `deckVersion` sobe de novo) e o motor distribui na mesma ação
-  (`HAND_DEALT`). Só então vem `MAO_DE_ONZE`/`PLAY`. `skipCeremony(state)` é um helper de
+  de cima vão para baixo; repetível, cada corte gira o baralho que ficou do anterior e sobe
+  `deckVersion`/`cutCount`) e fecha com `FINISH_CUT` (`CUT_FINALIZED`), que é a ação em que o
+  motor distribui (`HAND_DEALT`). Sem nenhum corte, `FINISH_CUT` corta no meio antes — o corte
+  nunca é pulado. Só então vem `MAO_DE_ONZE`/`PLAY`. `skipCeremony(state)` é um helper de
   teste/ferramenta. Determinístico pelo seed: o replay no servidor reproduz misturas e corte.
 
 ## API
@@ -68,8 +72,8 @@ resolveHand(outcomes): CONTINUE (tieBreak?) | WINNER (decidedBy) | ALL_TIED
 andamento fica em `currentRound`) e, no cango, `winnerSeat` é quem cangou. `HandResult.decidedBy`
 diz como as vazas decidiram a mão.
 
-Ações: `SHUFFLE`, `FINISH_SHUFFLE`, `CUT`, `PLAY_CARD`, `PLAY_CARD_COVERED`, `REQUEST_TRUCO`, `ACCEPT_TRUCO`, `RAISE`, `RUN`, `ACCEPT_MAO_DE_ONZE`, `DECLINE_MAO_DE_ONZE`.
-Eventos (`state.events`): HAND_STARTED, SHUFFLE_PERFORMED, SHUFFLE_FINALIZED, CUT_DONE, HAND_DEALT, CARD_PLAYED (`covered`), ROUND_ENDED, TIE_BREAK_STARTED (`round`, `leadSeat`, `continued`), TRUCO_REQUESTED/ACCEPTED/RAISED, RAN, MAO_DE_ONZE_*, HAND_REVEALED, HAND_ENDED, MATCH_ENDED.
+Ações: `SHUFFLE`, `FINISH_SHUFFLE`, `CUT`, `FINISH_CUT`, `PLAY_CARD`, `PLAY_CARD_COVERED`, `REQUEST_TRUCO`, `ACCEPT_TRUCO`, `RAISE`, `RUN`, `ACCEPT_MAO_DE_ONZE`, `DECLINE_MAO_DE_ONZE`.
+Eventos (`state.events`): HAND_STARTED, SHUFFLE_PERFORMED, SHUFFLE_FINALIZED, CUT_DONE, CUT_FINALIZED, HAND_DEALT, CARD_PLAYED (`covered`), ROUND_ENDED, TIE_BREAK_STARTED (`round`, `leadSeat`, `continued`), TRUCO_REQUESTED/ACCEPTED/RAISED, RAN, MAO_DE_ONZE_*, HAND_REVEALED, HAND_ENDED, MATCH_ENDED.
 
 A IA decide a cerimônia em `ceremonyDecision` (igual nas três dificuldades): mistura de 1 a 3
 vezes (alvo sorteado no mesmo RNG, logo replicável no servidor) e corta em profundidade aleatória.
@@ -84,10 +88,65 @@ vezes (alvo sorteado no mesmo RNG, logo replicável no servidor) e corta em prof
 - Desempate por cango (`tieBreakDecision`, nas três dificuldades): sem estratégia, blefe ou pedido de truco — joga a maior carta.
 - `runAITurns` / `nextAIAction` conduzem os assentos de IA; o RNG da IA é separado (`aiSeed`) para replay no servidor.
 
+## Execução no servidor (`backend/src/game/`)
+
+O mesmo domínio roda no backend: `backend/scripts/sync-domain.js` copia `src/domain` (inclusive os
+testes) para `backend/src/domain` antes de build, testes e typecheck; a CI falha se a cópia
+versionada divergir. Não se edita `backend/src/domain` à mão.
+
+- **Estado guardado** (`stored-state.ts`): `Match.state` (JSONB) é o `MatchState` completo mais
+  `aiRngState` (RNG da IA), `recent` (eventos da última ação, para a view de reconexão),
+  `timerKey` (decisão em curso), `seq` (ações aplicadas) e `lastActionAt` (ritmo da IA). Só os
+  últimos 30 eventos ficam em `events`; `readStoredState` lê de forma defensiva. O estado **nunca**
+  sai do servidor. `newStoredState(seed, aiSeed)` usa `createMatch` com seeds gerados no servidor.
+- **Views por assento** (`game-views.ts`): `buildView` = `viewForSeat(state, seat)` +
+  `recentEvents` redigidos com `eventsForSeat` + `turnStartedAt`/`turnDeadlineAt`/`serverTime`.
+  Cada assento recebe a sua em `game.view` (sala Socket.IO do assento). `buildMeta` monta os dados
+  públicos (humanos pelo uid, IA pelo `botKey`, `controller`, `controllerVersion`, conexão,
+  reservas).
+- **Parser de ações** (`action-parser.ts`): valida só a **forma** — tipo entre as 12 ações
+  (inclusive `SHUFFLE`/`FINISH_SHUFFLE`/`CUT`/`FINISH_CUT`), assento 0–3, `cardId` no formato do
+  motor, `depth` ∈ `high`/`middle`/`low`. A regra é do motor: antes de aplicar, o `GameService`
+  confere `getAvailableActions` (`NOT_YOUR_TURN` / `INVALID_ACTION`) e traduz `InvalidActionError`
+  em `INVALID_CARD` / `INVALID_ACTION`. O assento da ação precisa ser o do usuário autenticado
+  (`NOT_YOUR_SEAT`).
+- **Aplicação** (`game.service.ts`): tudo acontece em `withMatch` — transação com
+  `SELECT … FOR UPDATE` na linha da partida, então ações humanas, jogadas da IA, timeouts e trocas
+  de controlador são serializadas entre instâncias. Cada ação aplicada vira uma linha de
+  `GameAction` (sequência, ator `HUMAN`/`AI`/`TIMEOUT`, payload com a carta — tabela só do
+  servidor); mãos, vazas e eventos públicos relevantes vão para `GameHand`, `GameTrick` e
+  `MatchEvent` (sem carta secreta). Views e meta são publicadas **depois do commit**.
+- **Idempotência por `actionId`**: a chave é única por partida (`GameAction (matchId,
+  clientActionId)`); o servidor usa `{userId}:{actionId}` para humanos. Repetir a mesma ação devolve
+  `{ version, status, duplicate: true }` sem aplicar de novo. IA e timeout usam chaves derivadas da
+  versão do estado (`bot_{versão}_{assento}_{controllerVersion}`, `timeout_{versão}_{assento}`), então
+  um tick repetido também não aplica duas vezes.
+- **IA no servidor**: `nextAIAction` com `aiForDifficulty('normal')` para todo assento cujo
+  controlador não é `HUMAN` (`AI_TEMPORARY` ou `AI_PERMANENT`), com o RNG restaurado de
+  `aiRngState` e salvo de volta depois. A IA continua vendo só a `AIObservation` do próprio assento.
+  O ritmo vem do cliente (`game.advance-bots`, mínimo 250 ms entre jogadas) ou, sem pedido, do
+  agendador depois de `BOT_FALLBACK_SECONDS`.
+- **Relógio** (`src/domain/game/rules/timing.ts`): `turnDurationMs(phase)` e `decisionKey` são a
+  mesma regra do app. A cada ação o servidor recalcula a chave da decisão; só quando ela muda grava
+  `turnStartedAt` e `turnDeadlineAt = agora + turnDurationMs(fase)` (no embaralho/corte o prazo é do
+  estágio inteiro, as misturas não o reiniciam). Vencido o prazo + `TURN_TIMING.serverGraceMs`
+  (6 s de folga para animações e rede), o `GameSchedulerService` aplica `timeoutAction` pelo
+  assento humano da vez. Ver docs/multiplayer.md.
+- **Partida contra a IA** (`replayAiMatch`): o cliente joga localmente e manda seed, aiSeed,
+  dificuldade e ações (máx. 2.000); o servidor re-executa com a IA da dificuldade nos assentos 1–3 e
+  exige que cada ação de IA seja idêntica à esperada e cada ação humana (assento 0) esteja
+  disponível. Só partida terminada é aceita.
+- **Ponto seguro de troca** (`isSafeSwapPoint`): embaralhamento, ou início da mão sem carta na
+  mesa, truco ou desempate — único momento em que um convidado atrasado assume o assento da IA.
+
 ## Testes
 
 `npm run test:engine` — 34 testes (baralho, força, empates, truco, mão de onze, views, IA válida em 900 partidas).
 `src/domain/game/__tests__/cango.test.ts` — matrizes de `resolveHand`, quem cangou, maior carta, fluxo de cada cenário no motor (com valores 1/3/6/9/12), quem abre em cada assento, truco no desempate, IA.
+`src/domain/game/__tests__/timing.test.ts` — prazos por fase, chave da decisão e jogada automática.
+Os mesmos testes rodam no backend (`npm --prefix backend test`, sobre a cópia do domínio); a
+execução no servidor é coberta por `backend/test/unit/infra.spec.ts` (parser, replay, estado e
+views) e `backend/test/integration/game.spec.ts`.
 `npm run test:sim -- 3000` — simulação em massa: 9.000 partidas (3 dificuldades) sem deadlock/loop/estado impossível; também confere que toda carta de desempate é a maior e que o desempate nunca vaza para outra fase/mão.
 
 ## Cerimônia de início de mão (UI)
@@ -99,11 +158,13 @@ Embaralhar → cortar → distribuir, agora **dirigida pelo motor** (não é mai
   `HAND_DEALT` (não do `CUT_DONE`: o corte é repetível e só o `FINISH_CUT` distribui). Quem age vem de `dealerSeat`/`cutterSeatOf`. "EMBARALHAR NOVAMENTE" envia `SHUFFLE`
   (um por vez: o botão trava até `shuffleCount` mudar ou 1,2 s), "ESTÁ BOM" envia
   `FINISH_SHUFFLE` (só com ≥ 1 mistura), "CONFIRMAR CORTE" envia `CUT` com a profundidade
-  escolhida.
-- Prazo: `useTurnTimer` com `turnDurationMs(phase)` — 10 s para embaralhar (um prazo para o
-  estágio inteiro, as misturas não o reiniciam), 8 s para cortar, 25 s para jogar. Ao estourar,
-  `timeoutAction` fecha o embaralhamento com o baralho como está / corta no meio. O prazo é local
-  ao ator; o servidor ainda não publica prazos (pendência).
+  escolhida e o fechamento do estágio envia `FINISH_CUT`.
+- Prazo: `useTurnTimer` com `turnDurationMs(phase)` (`TURN_TIMING` em
+  `src/domain/game/rules/timing.ts`) — 15 s para embaralhar (um prazo para o estágio inteiro, as
+  misturas não o reiniciam), 12 s para cortar, 30 s para jogar. Ao estourar, `timeoutAction`
+  fecha o embaralhamento com o baralho como está (`FINISH_SHUFFLE`) / fecha o corte
+  (`FINISH_CUT`, que corta no meio se ninguém cortou). Online, o servidor aplica a mesma regra
+  pelo próprio relógio (`turnDeadlineAt` + folga) caso a jogada automática do aparelho não chegue.
 - Tela: `src/screens/game/TableCeremony.tsx` — no embaralho, título/subtítulo, card "Tempo para
   embaralhar" com anel, `ShuffleAnimation` (dois montes, cartas trançando, setas), card "Mistura do
   baralho" (● ● ● + contador + feedback), botões e rodapé; quem assiste vê a mesma animação a cada
@@ -144,11 +205,15 @@ a última carta nunca aparecer e a mesa esvaziar antes de alguém entender quem 
 
 ## Relógio de turno (UI)
 
-`src/features/game/turnTimer.ts` + `useTurnTimer.ts`: 25 s por decisão (carta, resposta ao truco,
-mão de onze), prazo absoluto derivado de `view.version` (sobrevive a re-render e background). Ao
-estourar, o cliente faz **pelo próprio assento** a jogada mais conservadora entre as
-`availableActions` — carta mais fraca, correr, entregar a mão de onze — e o motor/servidor valida
-como qualquer ação. Anel + "12s" só no jogador local; os outros assentos não mostram relógio falso.
+A regra é do domínio (`src/domain/game/rules/timing.ts`, reexportada por
+`src/features/game/turnTimer.ts`) e é a mesma no app e no servidor. `useTurnTimer.ts`: 30 s por
+decisão (carta, resposta ao truco, mão de onze; alerta nos últimos 6 s), prazo absoluto derivado
+da chave da decisão (`view.version`; na cerimônia, mão + fase) — sobrevive a re-render e
+background. Online, nunca passa do prazo que o servidor publica na view (`turnDeadlineAt`,
+convertido para o relógio do aparelho). Ao estourar, o cliente faz **pelo próprio assento** a jogada mais conservadora entre as
+`availableActions` — fechar embaralho/corte, correr, entregar a mão de onze, carta mais fraca
+(no desempate, a maior, única liberada) — e o motor/servidor valida como qualquer ação. O
+servidor é a autoridade: se nada chegar até `turnDeadlineAt` + 6 s, ele joga essa mesma ação. Anel + "12s" só no jogador local; os outros assentos não mostram relógio falso.
 
 ## Mão do jogador (UI)
 

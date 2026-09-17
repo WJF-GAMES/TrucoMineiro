@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { colors, spacing } from '@/design-system';
 import { leagueShield } from '@/assets';
 import { AppText, CountryFlag, PlayerAvatar, StateView, Surface } from '@/components';
-import { getGlobalLeagueRanking, FunctionsError } from '@/services/firebase/functions';
+import { getGlobalLeagueRanking, ApiError } from '@/services/api';
 import { leagueById } from '@/domain/model/leagues';
 import { formatNumber } from '@/utils/format';
 import type { GlobalRankingEntry } from '@/domain/model/types';
@@ -37,7 +37,7 @@ export function GlobalRankingTab({
       .catch((e: unknown) => {
         if (cancelled) return;
         setError(
-          e instanceof FunctionsError ? e.message : 'Não foi possível carregar a classificação.',
+          e instanceof ApiError ? e.message : 'Não foi possível carregar a classificação.',
         );
       });
     return () => {

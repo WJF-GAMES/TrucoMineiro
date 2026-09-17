@@ -8,7 +8,7 @@ import {
   subscribeContactsChanged,
   type ContactsPermission,
 } from '@/services/contacts';
-import { FunctionsError, matchPhoneContacts } from '@/services/firebase/functions';
+import { ApiError, syncPhoneContacts } from '@/services/api';
 import { logEvent } from '@/services/firebase/analytics';
 import { reportError } from '@/services/firebase/crashlytics';
 import type { ContactMatch, FriendRelation } from '@/domain/model/types';
@@ -28,8 +28,22 @@ import {
   type ContactsSyncCache,
 } from './contactsCache';
 
-/** Igual ao limite validado pela Cloud Function (`MATCH_BATCH_LIMIT`). */
+/** Igual ao limite validado pelo backend (`POST /v1/contacts/sync`). */
 const BATCH_SIZE = 200;
+/**
+ * Com a agenda igual, a sincronização automática (ao abrir a tela) ainda volta ao servidor uma
+ * vez por dia: é assim que um contato que instalou o jogo depois vira amigo sozinho, sem gastar
+ * a cota diária a cada foco da tela.
+ */
+export const RECHECK_MS = 86_400_000;
+
+/** O que a sincronização fez — a tela usa para o aviso discreto. */
+export interface SyncOutcome {
+  /** A agenda não mudou e o servidor não foi consultado. */
+  skipped: boolean;
+  /** Amigos novos criados automaticamente nesta sincronização. */
+  connected: number;
+}
 
 export type SyncPhase = 'idle' | 'permission' | 'reading' | 'matching' | 'done' | 'error';
 
@@ -62,8 +76,11 @@ export interface UseContactsSync {
   syncing: boolean;
   progress: SyncProgress;
   error: SyncErrorKind | null;
-  /** Fluxo completo: explica, pede permissão, lê, normaliza e compara. */
-  sync: (options?: { force?: boolean }) => Promise<void>;
+  /**
+   * Fluxo completo: pede permissão, lê, normaliza, compara e conecta automaticamente quem tem
+   * conta. `null` quando não sincronizou (sem permissão, erro ou outra sincronização rodando).
+   */
+  sync: (options?: { force?: boolean }) => Promise<SyncOutcome | null>;
   /** Reavalia a permissão (ao voltar das configurações do sistema). */
   refreshPermission: () => Promise<ContactsPermission>;
   /** Atualiza a relação de um contato sem re-sincronizar (depois de adicionar/cancelar). */
@@ -75,7 +92,9 @@ export interface UseContactsSync {
  * Orquestra a sincronização da agenda.
  *
  * Sequência: permissão -> leitura paginada -> normalização/dedupe -> lotes de 200 números ->
- * junção com os nomes locais -> cache. A leitura e a normalização rodam depois das animações
+ * servidor (match + conexão automática) -> junção com os nomes locais -> cache.
+ * Uma falha (sem rede, cota) mantém o último resultado na tela; os amigos vêm do backend
+ * e não dependem da agenda. A leitura e a normalização rodam depois das animações
  * de navegação (`InteractionManager`) para a tela não engasgar ao abrir.
  */
 export function useContactsSync(
@@ -94,6 +113,8 @@ export function useContactsSync(
   const [progress, setProgress] = useState<SyncProgress>({ phase: 'idle', ratio: null });
   const [error, setError] = useState<SyncErrorKind | null>(null);
   const fingerprint = useRef<string | null>(null);
+  /** Última vez que o servidor foi consultado (desta sessão ou do cache). */
+  const lastServerSync = useRef<number | null>(null);
   const running = useRef(false);
   const mounted = useRef(true);
   /** Leitura do cache: a sincronização espera por ela para comparar com a última agenda. */
@@ -115,13 +136,16 @@ export function useContactsSync(
       if (!active) return;
       setPermission(perm);
       if (cached && perm === 'granted') {
+        lastServerSync.current = cached.syncedAt;
         setResult(cached.result);
         setSyncedAt(cached.syncedAt);
         setContactCount(cached.contactCount);
         fingerprint.current = cached.fingerprint;
         setStale(isStale(cached));
-      } else if (cached && perm !== 'granted') {
+      } else if (cached && (perm === 'denied' || perm === 'blocked')) {
         // Permissão revogada nas configurações: o resultado antigo não vale mais.
+        // Só com uma negativa explícita: 'restricted' também é o que sobra quando a consulta
+        // de permissão falha, e apagar a agenda por um erro transitório fazia os contatos sumirem.
         await clearContactsSync(uid);
       }
     })().catch(() => undefined);
@@ -136,6 +160,7 @@ export function useContactsSync(
       onContactsSyncCleared((clearedUid) => {
         if (clearedUid !== uid || !mounted.current) return;
         fingerprint.current = null;
+        lastServerSync.current = null;
         setResult(EMPTY);
         setSyncedAt(null);
         setContactCount(0);
@@ -158,8 +183,8 @@ export function useContactsSync(
   }, []);
 
   const sync = useCallback(
-    async (options?: { force?: boolean }) => {
-      if (!uid || running.current) return;
+    async (options?: { force?: boolean }): Promise<SyncOutcome | null> => {
+      if (!uid || running.current) return null;
       running.current = true;
       setError(null);
       setSyncing(true);
@@ -176,7 +201,7 @@ export function useContactsSync(
           logEvent('contacts_permission_denied', { state: perm });
           setError('permission');
           setProgress({ phase: 'idle', ratio: null });
-          return;
+          return null;
         }
         logEvent('contacts_permission_granted');
 
@@ -192,19 +217,26 @@ export function useContactsSync(
         const agenda = normalizeAgenda(device, defaultCountry, ownPhone ? [ownPhone] : []);
         const print = agendaFingerprint(agenda.phones);
         // `fingerprint` só existe depois de uma sincronização (desta sessão ou do cache).
-        if (!options?.force && print === fingerprint.current) {
-          // Nada mudou na agenda: não gasta cota nem rede à toa.
+        const recent =
+          lastServerSync.current !== null && Date.now() - lastServerSync.current < RECHECK_MS;
+        if (!options?.force && print === fingerprint.current && recent) {
+          // Nada mudou na agenda e a última consulta é recente: não gasta cota nem rede à toa.
           setStale(false);
           setProgress({ phase: 'done', ratio: 1 });
-          return;
+          return { skipped: true, connected: 0 };
         }
 
         setProgress({ phase: 'matching', ratio: agenda.phones.length ? 0 : 1 });
         const batches = chunk(agenda.phones, BATCH_SIZE);
         const matches: ContactMatch[] = [];
+        let connected = 0;
+        let suppressed = 0;
         for (let i = 0; i < batches.length; i++) {
           const batch = batches[i]!;
-          const res = await matchPhoneContacts(batch);
+          // O servidor já cria a amizade com quem tem o telefone verificado: nada de solicitação.
+          const res = await syncPhoneContacts(batch);
+          connected += res.connected ?? 0;
+          suppressed += res.suppressed ?? 0;
           // O servidor indexa dentro do lote; o app reposiciona no índice global da agenda.
           const offset = i * BATCH_SIZE;
           for (const m of res.matches) matches.push({ ...m, index: m.index + offset });
@@ -219,19 +251,28 @@ export function useContactsSync(
           result: merged,
         };
         await saveContactsSync(uid, cache);
-        if (!mounted.current) return;
+        lastServerSync.current = cache.syncedAt;
+        const outcome: SyncOutcome = { skipped: false, connected };
+        if (!mounted.current) return outcome;
         fingerprint.current = print;
         setResult(merged);
         setSyncedAt(cache.syncedAt);
         setContactCount(cache.contactCount);
         setStale(false);
         setProgress({ phase: 'done', ratio: 1 });
+        // Só contagens: nenhum telefone, nome ou uid vai para o Analytics.
         logEvent('contacts_sync_completed', {
           contacts: agenda.contacts.length,
           matches: merged.matched.length,
+          connected,
         });
         if (merged.matched.length > 0)
           logEvent('contact_match_found', { count: merged.matched.length });
+        if (connected > 0) logEvent('auto_friend_connected', { count: connected });
+        if (suppressed > 0) logEvent('auto_friend_suppressed', { count: suppressed });
+        if (merged.unmatched.length > 0)
+          logEvent('contact_without_account', { count: merged.unmatched.length });
+        return outcome;
       } catch (e) {
         const kind = classify(e);
         if (mounted.current) {
@@ -241,6 +282,7 @@ export function useContactsSync(
         logEvent('contacts_sync_failed', { reason: kind });
         // Nunca registrar a agenda nem números: só o tipo do erro.
         reportError(e instanceof Error ? e : new Error('contacts_sync'), `contacts_sync_${kind}`);
+        return null;
       } finally {
         running.current = false;
         if (mounted.current) setSyncing(false);
@@ -275,6 +317,7 @@ export function useContactsSync(
     if (uid) await clearContactsSync(uid);
     if (!mounted.current) return;
     fingerprint.current = null;
+    lastServerSync.current = null;
     setResult(EMPTY);
     setSyncedAt(null);
     setContactCount(0);
@@ -302,7 +345,7 @@ const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() 
 
 function classify(e: unknown): SyncErrorKind {
   if (e instanceof ContactsReadError) return 'read';
-  if (e instanceof FunctionsError) {
+  if (e instanceof ApiError) {
     if (e.code === 'resource-exhausted') return 'rate_limit';
     if (e.code === 'unavailable' || e.code === 'deadline-exceeded') return 'offline';
     if (e.code === 'unauthenticated') return 'app_check';

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { subscribePresence } from '@/services/firebase/rtdb';
+import { subscribePresence } from '@/services/api';
 import type { PresenceState } from '@/domain/model/types';
 
 /**

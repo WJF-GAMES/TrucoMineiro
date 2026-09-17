@@ -4,7 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, icons, spacing } from '@/design-system';
 import { AppText, GameHeader, PlayerAvatar, Screen, StateView, Surface } from '@/components';
 import { useAuthStore } from '@/stores/authStore';
-import { getMatchHistory } from '@/services/firebase/firestore';
+import { getMatchHistory } from '@/services/api';
 import type { MatchHistoryEntry } from '@/domain/model/types';
 import type { RootScreenProps } from '@/navigation/types';
 

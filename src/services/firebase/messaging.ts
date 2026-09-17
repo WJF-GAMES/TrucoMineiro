@@ -12,14 +12,14 @@ import {
   setBackgroundMessageHandler,
 } from '@react-native-firebase/messaging';
 import { firebaseApp } from './app';
-import { registerDevice, unregisterDevice } from './functions';
+import { registerDevice, unregisterDevice } from '@/services/api/backend';
 
 const messaging = getMessaging(firebaseApp);
 
 export type PushKind =
   'friend_invite' | 'room_invite' | 'reward' | 'league' | 'season' | 'news' | 'social';
 
-/** Requests permission (iOS / Android 13+) and registers the token via Cloud Function. */
+/** Pede permissão (iOS / Android 13+) e registra o token no backend. */
 export async function setupPushNotifications(): Promise<() => void> {
   try {
     const status = await requestPermission(messaging);

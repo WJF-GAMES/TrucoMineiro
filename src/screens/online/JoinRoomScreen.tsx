@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import { colors, spacing } from '@/design-system';
 import { AppText, GameHeader, PrimaryButton, Screen, TextField } from '@/components';
-import { joinRoom, FunctionsError } from '@/services/firebase/functions';
+import { joinRoom, ApiError } from '@/services/api';
 import { logEvent } from '@/services/firebase/analytics';
 import { traced } from '@/services/firebase/perf';
 import { haptic } from '@/utils/haptics';
@@ -42,9 +42,9 @@ export function JoinRoomScreen({ navigation }: RootScreenProps<'JoinRoom'>) {
       haptic.success();
       navigation.replace('Lobby', { code: normalized });
     } catch (e) {
-      const c = e instanceof FunctionsError ? e.code : 'unknown';
+      const c = e instanceof ApiError ? e.code : 'unknown';
       setError(
-        ERRORS[c] ?? (e instanceof FunctionsError ? e.message : 'Não foi possível entrar na sala.'),
+        ERRORS[c] ?? (e instanceof ApiError ? e.message : 'Não foi possível entrar na sala.'),
       );
       haptic.error();
     } finally {

@@ -33,13 +33,13 @@ import {
   createFriendInviteToken,
   createFriendRoom,
   createRoom,
-  FunctionsError,
+  ApiError,
   inviteFriendToRoom,
   removeFriend,
   respondFriendRequest,
   searchPlayers,
   sendFriendRequest,
-} from '@/services/firebase/functions';
+} from '@/services/api';
 import { flag } from '@/services/firebase/remoteConfig';
 import { openAppSettings, readContactPhones } from '@/services/contacts';
 import { logEvent } from '@/services/firebase/analytics';
@@ -49,7 +49,7 @@ import { countryOf, normalizePhoneNumber } from '@/utils/phone';
 import { useFriendRequests, useFriends } from '@/features/friends/useFriends';
 import { useContactsSync } from '@/features/friends/useContactsSync';
 import { useRoomInvites } from '@/features/friends/useRoomInvites';
-import type { MatchedContact } from '@/features/friends/contactsMatch';
+import { syncFeedback, type MatchedContact } from '@/features/friends/contactsMatch';
 import { buildFriendsDirectory, type DirectoryEntry } from '@/features/friends/friendsDirectory';
 import { usePresenceMap } from '@/features/friends/usePresenceMap';
 import { isSelectionLocked, toggleFriend } from '@/features/friends/friendSelection';
@@ -73,6 +73,8 @@ import { FriendSelectionBar } from './components/FriendSelectionBar';
 
 type Tab = 'friends' | 'requests' | 'search';
 
+type SectionAction = { label: string; onPress: () => void; testID: string };
+
 /** Cada linha da FlatList. Seções e cards viajam na mesma lista para nada sair da virtualização. */
 type Item =
   | {
@@ -80,7 +82,7 @@ type Item =
       key: string;
       title: string;
       trailing?: string;
-      action?: { label: string; onPress: () => void; testID: string };
+      action?: SectionAction;
     }
   | { kind: 'node'; key: string; node: React.ReactNode }
   /** Uma pessoa da lista única: amigo, contato que já joga ou contato para convidar. */
@@ -149,16 +151,35 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
   }, []);
 
   const directory = useMemo(
-    () => buildFriendsDirectory(friends, contacts.result, tab === 'friends' ? query : ''),
-    [friends, contacts.result, query, tab],
+    () =>
+      buildFriendsDirectory(friends, contacts.result, tab === 'friends' ? query : '', {
+        // A amizade ao vivo decide quem é amigo; o cache da agenda pode estar atrasado.
+        friendIds: friendsLoading ? null : friendIdSet,
+        blockedIds: blockedSet,
+      }),
+    [friends, contacts.result, query, tab, friendsLoading, friendIdSet, blockedSet],
   );
 
   /** Presença dos contatos que já jogam (os amigos já vêm com a deles). */
   const contactPresence = usePresenceMap(
-    useMemo(
-      () => directory.people.flatMap((p) => (p.kind === 'match' ? [p.contact.uid] : [])),
-      [directory.people],
-    ),
+    useMemo(() => directory.players.map((p) => p.contact.uid), [directory.players]),
+  );
+
+  /**
+   * Sincroniza e avisa, uma vez, quantos contatos viraram amigos. A lista em si se atualiza
+   * sozinha: as amizades novas chegam pelo evento de amigos do WebSocket.
+   */
+  const runSync = useCallback(
+    async (manual: boolean) => {
+      // Automático sem `force`: com a agenda igual e consulta recente, nem vai ao servidor.
+      const outcome = await (manual ? contacts.sync({ force: true }) : contacts.sync());
+      if (!outcome) return;
+      const message = syncFeedback(outcome.connected, manual);
+      if (!message) return;
+      if (outcome.connected > 0) toast.success('Amigos da agenda', message);
+      else toast.info(message);
+    },
+    [contacts],
   );
 
   /**
@@ -166,16 +187,16 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
    * com ela aberta) a sincronização roda sozinha. Sem permissão, ela mesma pede o diálogo do
    * sistema; se a agenda não mudou, não vai ao servidor. Só no aparelho — a web não tem agenda.
    */
-  const syncContacts = useRef(contacts.sync);
+  const syncContacts = useRef(runSync);
   useEffect(() => {
-    syncContacts.current = contacts.sync;
-  }, [contacts.sync]);
+    syncContacts.current = runSync;
+  }, [runSync]);
   useFocusEffect(
     useCallback(() => {
       if (Platform.OS === 'web' || !friendsEnabled || !uid) return;
-      void syncContacts.current();
+      void syncContacts.current(false);
       const sub = AppState.addEventListener('change', (state) => {
-        if (state === 'active') void syncContacts.current();
+        if (state === 'active') void syncContacts.current(false);
       });
       return () => sub.remove();
     }, [friendsEnabled, uid]),
@@ -243,7 +264,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
         contacts.setRelation(targetUid, 'request_sent');
         toast.success('Solicitação enviada', `${label} vai receber seu convite.`);
       } catch (e) {
-        toast.error('Não foi possível enviar', e instanceof FunctionsError ? e.message : undefined);
+        toast.error('Não foi possível enviar', e instanceof ApiError ? e.message : undefined);
         throw e;
       } finally {
         setBusy(null);
@@ -262,7 +283,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
         logEvent('friend_request_accepted');
         toast.success('Agora vocês são amigos!', label);
       } catch (e) {
-        toast.error('Não deu certo', e instanceof FunctionsError ? e.message : undefined);
+        toast.error('Não deu certo', e instanceof ApiError ? e.message : undefined);
       } finally {
         setBusy(null);
       }
@@ -291,7 +312,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
         contacts.setRelation(request.from, accept ? 'friend' : 'none');
         toast.success(accept ? 'Agora vocês são amigos!' : 'Solicitação recusada');
       } catch (e) {
-        toast.error('Não deu certo', e instanceof FunctionsError ? e.message : undefined);
+        toast.error('Não deu certo', e instanceof ApiError ? e.message : undefined);
       } finally {
         setBusy(null);
       }
@@ -308,7 +329,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
         logEvent('friend_request_cancelled');
         toast.info('Solicitação cancelada');
       } catch (e) {
-        toast.error('Não deu certo', e instanceof FunctionsError ? e.message : undefined);
+        toast.error('Não deu certo', e instanceof ApiError ? e.message : undefined);
       } finally {
         setBusy(null);
       }
@@ -343,7 +364,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
       } catch (e) {
         toast.error(
           'Não foi possível convidar',
-          e instanceof FunctionsError ? e.message : undefined,
+          e instanceof ApiError ? e.message : undefined,
         );
       } finally {
         setCreatingRoom(false);
@@ -398,7 +419,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
       } catch (e) {
         toast.error(
           'Não foi possível convidar',
-          e instanceof FunctionsError ? e.message : undefined,
+          e instanceof ApiError ? e.message : undefined,
         );
       } finally {
         setBusy(null);
@@ -417,7 +438,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
         setOpenFriendUid(null);
         toast.info('Amizade removida', `${nickname} saiu da sua lista.`);
       } catch (e) {
-        toast.error('Não deu certo', e instanceof FunctionsError ? e.message : undefined);
+        toast.error('Não deu certo', e instanceof ApiError ? e.message : undefined);
       } finally {
         setBusy(null);
       }
@@ -435,7 +456,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
         setOpenFriendUid(null);
         toast.info('Jogador bloqueado', `${nickname} não aparece mais para você.`);
       } catch (e) {
-        toast.error('Não deu certo', e instanceof FunctionsError ? e.message : undefined);
+        toast.error('Não deu certo', e instanceof ApiError ? e.message : undefined);
       } finally {
         setBusy(null);
       }
@@ -573,8 +594,9 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
     // --- Aba "Meus Amigos" ---
 
     // Montando uma partida: só amigos (o convite para a sala é deles), online primeiro.
+    // Amigos conectados pela agenda entram aqui como qualquer outro.
     if (selecting) {
-      const friendsOnly = directory.people.filter((p) => p.kind === 'friend');
+      const friendsOnly = [...directory.online, ...directory.offline];
       items.push({
         kind: 'section',
         key: 's-select',
@@ -623,33 +645,23 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
       }));
     }
 
-    // --- Lista única: amigos + contatos da agenda ---
-    // Cada pessoa aparece uma vez (o contato que já é amigo vira a linha do amigo). Permissão,
-    // progresso e erro da agenda vivem no diálogo de "Sincronizar contatos" (atalho no topo).
+    // --- Amigos e agenda em seções: ONLINE → AMIGOS → JÁ JOGAM → CONVIDAR ---
+    // Cada pessoa aparece uma vez. Quem está na agenda e tem conta já vira amigo sozinho (a
+    // sincronização conecta no servidor); "já jogam" só guarda quem teve a amizade removida ou
+    // tem solicitação pendente. Permissão, progresso e erro da agenda vivem no diálogo de
+    // "Sincronizar contatos" (atalho no topo).
     const contactsShown = contacts.permission === 'granted' && synced;
     const invites = contactsShown ? directory.invites : [];
     const visibleInvites = invites.slice(0, inviteLimit);
-    const rows = [...directory.people, ...visibleInvites];
-
-    const hasFriends = directory.people.some((p) => p.kind === 'friend');
-    items.push({
-      kind: 'section',
-      key: 's-people',
-      title: contactsShown ? 'Amigos e contatos' : 'Meus amigos',
-      trailing: `${directory.people.length + invites.length}`,
-      // Atalho para montar a partida com até 3 amigos de uma vez.
-      action: hasFriends
+    const friendCount = directory.online.length + directory.offline.length;
+    // Atalho para montar a partida com até 3 amigos de uma vez: fica na primeira seção de amigos.
+    const selectAction =
+      friendCount > 0
         ? { label: 'Jogar com amigos', onPress: startSelecting, testID: 'friends-select-start' }
-        : undefined,
-    });
-    if (contactsShown) {
-      items.push({
-        kind: 'node',
-        key: 'contacts-privacy',
-        node: <ContactsPrivacyNote style={styles.privacy} />,
-      });
-    }
+        : undefined;
+
     if (contacts.syncing && contacts.permission === 'granted') {
+      // Carregamento local: os amigos continuam na tela enquanto a agenda atualiza.
       items.push({
         kind: 'node',
         key: 'contacts-syncing',
@@ -666,19 +678,43 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
       });
     }
 
+    const pushSection = (
+      key: string,
+      title: string,
+      rows: DirectoryEntry[],
+      action?: SectionAction,
+    ) => {
+      if (rows.length === 0) return;
+      items.push({ kind: 'section', key, title, trailing: `${rows.length}`, action });
+      pushRows(rows, (person, first, last) => ({
+        kind: 'person',
+        key: person.key,
+        person,
+        first,
+        last,
+      }));
+    };
+
+    const empty = friendCount + directory.players.length + invites.length === 0;
     if (error) {
       items.push({
         kind: 'node',
         key: 'friends-error',
         node: <StateView kind="error" message={error} compact />,
       });
-    } else if (friendsLoading && rows.length === 0) {
+    } else if (friendsLoading && empty) {
       items.push({
         kind: 'node',
         key: 'friends-loading',
         node: <StateView kind="loading" compact />,
       });
-    } else if (rows.length === 0) {
+    } else if (empty) {
+      items.push({
+        kind: 'section',
+        key: 's-people',
+        title: contactsShown ? 'Amigos e contatos' : 'Meus amigos',
+        trailing: '0',
+      });
       items.push({
         kind: 'node',
         key: 'friends-empty',
@@ -713,13 +749,34 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
         ),
       });
     } else {
-      pushRows(rows, (person, first, last) => ({
-        kind: 'person',
-        key: person.key,
-        person,
-        first,
-        last,
-      }));
+      pushSection('s-online', 'Online', directory.online, selectAction);
+      pushSection(
+        's-friends',
+        'Amigos',
+        directory.offline,
+        directory.online.length === 0 ? selectAction : undefined,
+      );
+      pushSection('s-players', 'Contatos que já jogam', directory.players);
+      if (invites.length > 0) {
+        items.push({
+          kind: 'section',
+          key: 's-invites',
+          title: 'Convidar',
+          trailing: `${invites.length}`,
+        });
+        items.push({
+          kind: 'node',
+          key: 'contacts-privacy',
+          node: <ContactsPrivacyNote style={styles.privacy} />,
+        });
+        pushRows(visibleInvites, (person, first, last) => ({
+          kind: 'person',
+          key: person.key,
+          person,
+          first,
+          last,
+        }));
+      }
       if (invites.length > visibleInvites.length) {
         items.push({
           kind: 'node',
@@ -785,7 +842,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
       switch (item.kind) {
         case 'section':
           return (
-            <View style={styles.sectionRow}>
+            <View style={styles.sectionRow} testID={`section-${item.key}`}>
               <View style={styles.sectionTitleRow}>
                 <AppText variant="h3" style={styles.sectionTitle} numberOfLines={1}>
                   {item.title}
@@ -1038,7 +1095,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
   );
 
   // A flag desliga a funcionalidade inteira (inclusive os atalhos): sem ela, tudo aqui depende de
-  // Cloud Functions que também estariam desligadas.
+  // rotas de amigos do backend que também estariam desligadas.
   if (!friendsEnabled) {
     return (
       <Screen withTabBar testID="screen-friends">
@@ -1075,7 +1132,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
           !selecting && tab === 'friends' && contacts.permission === 'granted' && synced ? (
             <RefreshControl
               refreshing={contacts.syncing}
-              onRefresh={() => void contacts.sync({ force: true })}
+              onRefresh={() => void runSync(true)}
               tintColor={colors.primaryBright}
               colors={[colors.primary]}
               progressBackgroundColor={colors.cardSolid}
@@ -1102,7 +1159,7 @@ export function FriendsScreen({ navigation, route }: TabScreenProps<'Friends'>) 
         progress={contacts.progress}
         error={contacts.error}
         matchCount={synced ? contacts.result.matched.length : null}
-        onSync={() => void contacts.sync({ force: synced })}
+        onSync={() => void runSync(true)}
         onOpenSettings={() => {
           void openAppSettings();
           // Ao voltar das configurações a permissão pode ter mudado.

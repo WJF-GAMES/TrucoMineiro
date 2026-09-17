@@ -47,7 +47,7 @@ const PAGES: Record<
       },
       {
         heading: 'Compartilhamento',
-        body: 'Não vendemos dados. Utilizamos serviços do Google Firebase (Authentication, Firestore, Realtime Database, Analytics, Crashlytics).',
+        body: 'Não vendemos dados. Seu perfil e seu progresso ficam nos servidores do Truco Mineiro. Também usamos serviços do Google Firebase (Authentication, Cloud Messaging, Analytics, Crashlytics e Remote Config).',
       },
       {
         heading: 'Seus direitos',

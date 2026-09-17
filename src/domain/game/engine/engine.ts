@@ -595,7 +595,7 @@ export function viewForSeat(state: MatchState, seat: Seat): SeatView {
 
 /**
  * Uma jogada como `seat` a enxerga: carta virada só mostra a identidade para quem a jogou.
- * O formato é sempre o mesmo (`covered` presente), o que também serve ao RTDB.
+ * O formato é sempre o mesmo (`covered` presente), estável para o JSON que vai ao cliente.
  */
 export function playForSeat(play: PlayedCard, seat: Seat): TablePlay {
   if (!play.covered) return { seat: play.seat, card: play.card, covered: false };

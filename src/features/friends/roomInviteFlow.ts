@@ -2,7 +2,7 @@ import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { respondRoomInvite } from '@/services/firebase/functions';
+import { respondRoomInvite } from '@/services/api';
 import { INVITE_UNAVAILABLE, inviteErrorMessage } from './inviteErrors';
 import { logEvent } from '@/services/firebase/analytics';
 import { navigationRef } from '@/navigation/navigationRef';

@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { colors, radius, spacing } from '@/design-system';
 import { AppText, PillButton, PlayerAvatar, Sheet, StateView } from '@/components';
-import { getProfile } from '@/services/firebase/firestore';
-import { FunctionsError, unblockUser } from '@/services/firebase/functions';
+import { getProfile , ApiError, unblockUser } from '@/services/api';
+
 import { logEvent } from '@/services/firebase/analytics';
 import { toast } from '@/stores/toastStore';
 import type { Profile } from '@/domain/model/types';
@@ -55,7 +55,7 @@ export function BlockedSheet({
       logEvent('friend_unblocked');
       toast.success('Desbloqueado', `${label} pode te encontrar de novo.`);
     } catch (e) {
-      toast.error('Não deu certo', e instanceof FunctionsError ? e.message : undefined);
+      toast.error('Não deu certo', e instanceof ApiError ? e.message : undefined);
     } finally {
       setBusy(null);
     }

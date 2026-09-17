@@ -20,9 +20,9 @@ launch() {
   if [ "${DEV_CLIENT:-0}" = "1" ]; then
     # O reverse some sempre que o emulador reinicia; sem ele o dev client não acha o Metro.
     timeout 15 "$ADB" reverse tcp:8081 tcp:8081 > /dev/null
-    # O emulador do RTDB anuncia "127.0.0.1:9000" no handshake e o SDK Android reconecta nesse
-    # endereço (login, troca de token). Sem o reverse, a presença nunca conecta ("Reconectando…").
-    timeout 15 "$ADB" reverse tcp:9000 tcp:9000 > /dev/null
+    # Backend local (REST + Socket.IO). O app em dev usa http://10.0.2.2:3000, que já chega ao host;
+    # o reverse deixa também http://localhost:3000 funcionar (EXPO_PUBLIC_API_URL apontando para ele).
+    timeout 15 "$ADB" reverse tcp:3000 tcp:3000 > /dev/null
     timeout 30 "$ADB" shell am start -a android.intent.action.VIEW       -d "trucomineiro://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081" $PKG > /dev/null
     local n=0
     until timeout 20 "$ADB" logcat -d 2>/dev/null | grep -q 'Running "main"'; do

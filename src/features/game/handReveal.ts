@@ -25,7 +25,7 @@ export interface HandRevealState {
 export function revealFromBatch(batch: readonly GameEvent[], now: number): HandRevealState | null {
   const e = batch.find((x) => x.type === 'HAND_REVEALED');
   if (!e || e.type !== 'HAND_REVEALED') return null;
-  // O RTDB pode devolver buracos nos arrays: nada de carta `undefined` na mesa.
+  // Payload pode vir com buracos nos arrays (versões antigas): nada de carta `undefined` na mesa.
   const hands = [0, 1, 2, 3].map((seat) => {
     const h = e.hands?.[seat];
     return Array.isArray(h) ? h.filter(Boolean) : [];
