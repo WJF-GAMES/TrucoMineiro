@@ -1,6 +1,6 @@
 /**
- * Persistent data model shared by the app and Cloud Functions (kept framework-free).
- * Firestore documents carry their id in `id` after being read.
+ * Modelo de dados compartilhado pelo app e pelo backend (sem dependência de framework).
+ * Entidades trazem o identificador público em `id` (o uid do Firebase Auth para jogadores).
  */
 
 export type AvatarId = 'joao' | 'maria' | 'cachorro' | 'galo' | 'seu_ze' | 'seu_antonio' | 'tiao';
@@ -80,7 +80,7 @@ export interface LeagueDefinition {
   id: LeagueId;
   order: number; // 1..20
   displayName: string;
-  /** Chave do brasão (`shield_gold`). O caminho local nunca vai para o Firestore. */
+  /** Chave do brasão (`shield_gold`). O caminho local nunca vai para o servidor. */
   assetKey: string;
   previousLeagueId: LeagueId | null;
   nextLeagueId: LeagueId | null;
@@ -222,9 +222,17 @@ export interface Season {
   endsAt: number;
 }
 
+/**
+ * Como a amizade surgiu. Só para auditoria/analytics — a tela não diferencia.
+ * `phone_contact`: conexão automática (o telefone verificado de um estava na agenda do outro).
+ */
+export type FriendshipSource = 'manual' | 'phone_contact';
+
 export interface Friendship {
   id: string; // friend uid
   since: number;
+  /** Ausente nas amizades gravadas antes da conexão automática (todas manuais). */
+  source?: FriendshipSource;
 }
 
 export interface FriendRequest {
@@ -238,6 +246,8 @@ export interface FriendRequest {
   toAvatarId?: AvatarId;
   status: 'pending' | 'accepted' | 'declined';
   createdAt: number;
+  /** Quando a solicitação foi encerrada por uma conexão automática da agenda. */
+  resolvedBy?: FriendshipSource;
 }
 
 export interface MatchHistoryEntry {
@@ -333,7 +343,7 @@ export interface Room {
 }
 
 /**
- * Convite de sala que um amigo enviou: `invites/{uid}/{code}` no RTDB.
+ * Convite de sala que um amigo enviou (caixa de entrada: `GET /v1/invites` + evento `room.invites`).
  * Escrito pelas Functions (`inviteFriendToRoom`); o destinatário só pode ler e apagar o seu.
  */
 export interface RoomInvite {
@@ -377,6 +387,13 @@ export interface SessionPlayer {
   pendingUid?: string | null;
   /** Humano que saiu no meio e cuja vaga passou para a IA. */
   replacedUid?: string | null;
+  /**
+   * Quem controla o assento agora: o humano, a IA temporária (humano caiu) ou a IA definitiva
+   * (vaga de bot ou de quem saiu). Decidido só pelo servidor.
+   */
+  controller?: 'HUMAN' | 'AI_TEMPORARY' | 'AI_PERMANENT';
+  /** Incrementa a cada troca de controlador (proteção contra corrida humano × IA). */
+  controllerVersion?: number;
 }
 
 export interface SessionMeta {
@@ -423,12 +440,18 @@ export interface ContactMatch {
   avatarId: AvatarId;
   level: number;
   relation: FriendRelation;
+  /** A amizade foi criada agora, por esta sincronização (sem solicitação). */
+  autoConnected?: boolean;
 }
 
 export interface MatchPhoneContactsResult {
   matches: ContactMatch[];
   /** Quantos números ainda cabem na cota diária do usuário. */
   remainingQuota: number;
+  /** Jogadores conectados automaticamente nesta chamada (sem repetir). */
+  connected?: number;
+  /** Encontrados que não conectaram porque a amizade tinha sido removida (só a contagem). */
+  suppressed?: number;
 }
 
 /** Documento de `blocks/{uid}/blocked/{otherUid}`. */

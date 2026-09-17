@@ -46,7 +46,7 @@ export interface TablePlay {
 
 /**
  * Uma vaza **já resolvida** (vaza em andamento fica em `currentRound`, nunca aqui). Por isso
- * `winner: null` só significa cango — e o formato continua compatível com o RTDB, que apaga nulls.
+ * `winner: null` só significa cango — e o formato tolera JSON sem a chave (payloads antigos sem nulls).
  * Para a regra use `trickOutcome()`, que devolve o resultado explícito (`Team | 'TIE'`).
  */
 export interface RoundResult {

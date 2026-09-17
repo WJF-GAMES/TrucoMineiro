@@ -6,6 +6,7 @@ export * from './rules/hand';
 export * from './state/types';
 export * from './engine/engine';
 export * from './engine/rng';
+export * from './rules/timing';
 export * from './ai/observation';
 export * from './ai/ai';
 export * from './ai/driver';

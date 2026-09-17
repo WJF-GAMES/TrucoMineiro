@@ -5,10 +5,13 @@ import type {
   RoomPlayer,
   RoomSeatInvite,
 } from '../domain/model/types';
+import type { ErrorCode } from '../common/errors';
+import { MESSAGES } from '../common/errors';
+import { botKey } from '../common/ids';
 
 /**
- * Regras puras da sala (sem Firebase): assentos, reservas dos convidados, preenchimento por IA e
- * fechamento. As callables só leem, aplicam isto dentro de uma transação e gravam.
+ * Regras puras da sala (sem banco): assentos, reservas dos convidados, preenchimento por IA e
+ * fechamento. O serviço lê a sala (com trava), aplica isto e grava.
  *
  * Times: assento % 2 (0 e 2 contra 1 e 3). Com amigos A, B e C nos assentos 1, 2 e 3, o dono joga
  * com B contra A e C.
@@ -26,11 +29,11 @@ const BOT_POOL: { nickname: string; avatarId: AvatarId }[] = [
 export const playersOf = (room: Room) => Object.values(room.players ?? {});
 export const invitesOf = (room: Room) => Object.values(room.invites ?? {});
 
-/** Vagas guardadas para convidados que ainda podem chegar (pendentes). */
+/** Vagas guardadas para convidados que ainda podem chegar (pendentes, com assento). */
 export function reservedSeats(room: Room): Set<number> {
   return new Set(
     invitesOf(room)
-      .filter((i) => i.status === 'PENDING')
+      .filter((i) => i.status === 'PENDING' && i.seat >= 0)
       .map((i) => i.seat),
   );
 }
@@ -43,7 +46,7 @@ export function freeSeat(room: Room): number | null {
   return null;
 }
 
-/** Assento sem jogador (reservado ou não) — o dono pode chamar outro amigo para ele. */
+/** Assento sem jogador e sem reserva — o dono pode chamar outro amigo para ele. */
 export function openSeatForInvite(room: Room): number | null {
   const taken = new Set(playersOf(room).map((p) => p.seat));
   const reserved = reservedSeats(room);
@@ -51,17 +54,11 @@ export function openSeatForInvite(room: Room): number | null {
   return null;
 }
 
-function botFor(
-  seat: number,
-  used: Set<string>,
-  t: number,
-  reservedFor: string | null,
-): RoomPlayer {
+function botFor(seat: number, used: Set<string>, t: number, reservedFor: string | null): RoomPlayer {
   const bot = BOT_POOL.find((b) => !used.has(b.nickname)) ?? BOT_POOL[seat % BOT_POOL.length]!;
   used.add(bot.nickname);
-  const uid = `bot_${seat}_${Math.random().toString(36).slice(2, 8)}`;
   return {
-    uid,
+    uid: botKey(seat),
     seat,
     nickname: bot.nickname,
     avatarId: bot.avatarId,
@@ -98,7 +95,7 @@ export function fillWithAi(room: Room, t: number): Room {
   const taken = new Set(Object.values(players).map((p) => p.seat));
   const pendingBySeat = new Map(
     Object.values(invites)
-      .filter((i) => i.status === 'PENDING')
+      .filter((i) => i.status === 'PENDING' && i.seat >= 0)
       .map((i) => [i.seat, i] as const),
   );
   for (const s of SEATS) {
@@ -138,26 +135,12 @@ export type AcceptOutcome =
   | { kind: 'joined'; room: Room }
   | { kind: 'already_inside' }
   | { kind: 'late'; seat: number }
-  | {
-      kind: 'error';
-      code: 'not-found' | 'failed-precondition' | 'resource-exhausted';
-      message: string;
-    };
-
-export const INVITE_MESSAGES = {
-  unavailable: 'Este convite não está mais disponível.',
-  cancelled: 'Esta sala foi cancelada.',
-  full: 'A sala já está completa.',
-  started: 'A partida já começou.',
-  finished: 'Esta partida já terminou.',
-  starting: 'A partida está começando. Tente de novo em instantes.',
-  busy: 'Você já está em uma partida.',
-} as const;
+  | { kind: 'error'; code: ErrorCode; message: string };
 
 /**
  * Convidado aceitando. Idempotente: quem já está na sala só é devolvido para ela (push aberto duas
  * vezes, dois aparelhos). Com a partida em andamento, o convidado cuja vaga está com a IA entra
- * como "assumir depois" (`late`) — a troca em si acontece na sessão, num ponto seguro.
+ * como "assumir depois" (`late`) — a troca em si acontece na partida, num ponto seguro.
  */
 export function acceptInvite(
   room: Room,
@@ -167,36 +150,35 @@ export function acceptInvite(
 ): AcceptOutcome {
   if (room.players?.[uid]) return { kind: 'already_inside' };
   const invite = room.invites?.[uid];
-  if (!invite) return { kind: 'error', code: 'not-found', message: INVITE_MESSAGES.unavailable };
+  if (!invite) return { kind: 'error', code: 'INVITE_NOT_FOUND', message: MESSAGES.unavailable };
   if (room.status === 'closed') {
+    if (room.closedReason === 'cancelled')
+      return { kind: 'error', code: 'ROOM_CANCELLED', message: MESSAGES.cancelled };
     const message =
-      room.closedReason === 'cancelled'
-        ? INVITE_MESSAGES.cancelled
-        : room.closedReason === 'finished' || room.closedReason === 'abandoned'
-          ? INVITE_MESSAGES.finished
-          : INVITE_MESSAGES.unavailable;
-    return { kind: 'error', code: 'not-found', message };
+      room.closedReason === 'finished' || room.closedReason === 'abandoned'
+        ? MESSAGES.finished
+        : MESSAGES.unavailable;
+    return { kind: 'error', code: 'INVITE_EXPIRED', message };
   }
   const lateOver = room.lateJoinUntil != null && t > room.lateJoinUntil;
   if (invite.status === 'CANCELLED' || invite.status === 'EXPIRED' || lateOver)
-    return { kind: 'error', code: 'not-found', message: INVITE_MESSAGES.unavailable };
+    return { kind: 'error', code: 'INVITE_EXPIRED', message: MESSAGES.unavailable };
   if (room.status === 'starting')
-    return { kind: 'error', code: 'failed-precondition', message: INVITE_MESSAGES.starting };
+    return { kind: 'error', code: 'ROOM_STARTING', message: MESSAGES.starting };
   if (room.status === 'in_match') {
     const holder = playersOf(room).find((p) => p.seat === invite.seat);
     if (holder?.bot && holder.reservedFor === uid) return { kind: 'late', seat: invite.seat };
-    return { kind: 'error', code: 'failed-precondition', message: INVITE_MESSAGES.started };
+    return { kind: 'error', code: 'ROOM_STARTED', message: MESSAGES.started };
   }
   // Sala aguardando: a vaga reservada é dele, a não ser que tenha recusado e alguém a ocupado.
-  const occupied = playersOf(room).some((p) => p.seat === invite.seat);
+  const occupied = invite.seat < 0 || playersOf(room).some((p) => p.seat === invite.seat);
   let seat = invite.seat;
   if (occupied) {
     const other = freeSeat({
       ...room,
       invites: { ...room.invites, [uid]: { ...invite, status: 'DECLINED' } },
     });
-    if (other === null)
-      return { kind: 'error', code: 'resource-exhausted', message: INVITE_MESSAGES.full };
+    if (other === null) return { kind: 'error', code: 'ROOM_FULL', message: MESSAGES.full };
     seat = other;
   }
   const player: RoomPlayer = {
