@@ -92,7 +92,6 @@ export function useAiGame(
       return { state: next, recentEvents };
     });
   }, []);
-  const [busy, setBusy] = useState(false);
   const [botsPaused, setBotsPaused] = useState(false);
   const aiSeed = useMemo(() => (seed * 31 + 7) >>> 0, [seed]);
   const actions = useRef<GameAction[]>([]);
@@ -120,19 +119,24 @@ export function useAiGame(
     }
   }, [state, onFinished, matchId, seed, aiSeed, difficulty]);
 
-  // Drive AI turns with pacing. `busy` = há uma jogada de IA agendada. Ela é desligada na limpeza
-  // do efeito: assim uma pausa (cerimônia) que cancela o timer não deixa a mesa travada em "busy".
-  const commitBusy = useCallback((b: boolean) => setBusy(b), []);
-  useEffect(() => {
-    if (state.status !== 'PLAYING' || botsPaused) return;
+  /**
+   * Jogada que a IA fará agora, DERIVADA do estado (o sorteio é puro: consultar não muda nada).
+   * `null` = a vez é do humano. Serve também de "mesa ocupada": enquanto houver jogada de IA
+   * pendente o jogador não age — sem precisar de estado paralelo que o efeito teria de ligar e
+   * desligar (e que travaria a mesa se uma pausa cancelasse o timer).
+   */
+  const pendingBotAction = useMemo(() => {
+    if (state.status !== 'PLAYING' || botsPaused) return null;
     // Truco pedido contra nós ou mão de onze: a dupla inteira pode responder, mas quem decide é o
     // humano — senão a parceira IA responde em 900 ms e o jogador nunca vê os botões.
-    if (state.hand.phase !== 'PLAY' && getAvailableActions(state, 0).length > 0) return;
-    // Sorteio derivado do estado: este efeito roda a cada re-render, e consultar a jogada não
-    // pode mudar o resultado — senão o servidor não consegue re-simular a partida (sem XP).
-    const action = nextAIAction(state, aiSeats, decisionRng(aiSeed, state));
-    if (!action) return;
-    commitBusy(true);
+    if (state.hand.phase !== 'PLAY' && getAvailableActions(state, 0).length > 0) return null;
+    return nextAIAction(state, aiSeats, decisionRng(aiSeed, state));
+  }, [state, aiSeats, aiSeed, botsPaused]);
+
+  // Ritmo das jogadas da IA: a pausa deixa a mesa legível. O timer é cancelado a cada mudança de
+  // estado (ou quando a cerimônia pausa os bots), então nunca sobra jogada agendada de um estado velho.
+  useEffect(() => {
+    if (!pendingBotAction) return;
     const lastEvent = state.events[state.events.length - 1];
     const ceremony = state.hand.phase === 'SHUFFLING' || state.hand.phase === 'CUTTING';
     const pause = botPauseMs(
@@ -140,12 +144,9 @@ export function useAiGame(
       ceremony ? 'ceremony' : 'play',
       lastEvent?.type === 'ROUND_ENDED' || lastEvent?.type === 'HAND_ENDED',
     );
-    const timer = setTimeout(() => apply(action), pause);
-    return () => {
-      clearTimeout(timer);
-      commitBusy(false);
-    };
-  }, [state, aiSeats, botsPaused, apply, commitBusy]);
+    const timer = setTimeout(() => apply(pendingBotAction), pause);
+    return () => clearTimeout(timer);
+  }, [pendingBotAction, state, apply]);
 
   const act = useCallback(
     (action: GameAction) => {
@@ -184,7 +185,8 @@ export function useAiGame(
     players,
     recentEvents,
     availableActions: view.availableActions,
-    busy,
+    // Mesa ocupada = há jogada de IA a caminho.
+    busy: pendingBotAction !== null,
     act,
     leave: () => undefined,
     setBotsPaused,
