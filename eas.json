@@ -30,7 +30,8 @@
       "extends": "base",
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_APP_ENV": "staging"
+        "EXPO_PUBLIC_APP_ENV": "staging",
+        "EXPO_PUBLIC_API_URL": "https://api-truco-mineiro-636596425561.us-east1.run.app"
       },
       "android": {
         "buildType": "apk"
@@ -41,7 +42,8 @@
       "autoIncrement": true,
       "environment": "production",
       "env": {
-        "EXPO_PUBLIC_APP_ENV": "production"
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_API_URL": "https://api-truco-mineiro-636596425561.us-east1.run.app"
       },
       "android": {
         "buildType": "app-bundle"

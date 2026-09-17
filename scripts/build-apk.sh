@@ -16,6 +16,9 @@
 # APK itself and are the ones that must be registered in the Firebase Console for Phone Auth to work.
 set -euo pipefail
 
+# Backend de produção (o app.config.js exige URL https em build de release).
+export EXPO_PUBLIC_API_URL="${EXPO_PUBLIC_API_URL:-https://api-truco-mineiro-636596425561.us-east1.run.app}"
+
 ABIS="${1:-armeabi-v7a,arm64-v8a}"
 [ "$ABIS" = "all" ] && ABIS=""
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

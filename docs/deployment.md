@@ -2,16 +2,26 @@
 
 ## Ambientes
 
-| | dev (local) | staging | production |
-|---|---|---|---|
-| Backend | `npm run backend:dev` (porta 3000) | Cloud Run `truco-backend-staging` | Cloud Run `truco-backend-production` |
-| Banco | PostgreSQL 17 local compartilhado (`127.0.0.1:5432`, banco `truco_mineiro_db`) | Cloud SQL próprio | Cloud SQL próprio (backups automáticos + PITR) |
-| Auth | Auth Emulator (`FIREBASE_AUTH_EMULATOR_HOST`) ou `AUTH_MODE=test` | Firebase Auth real | Firebase Auth real |
-| Jobs | `JOBS_MODE=cron` | `JOBS_MODE=external` (Cloud Scheduler) | `JOBS_MODE=external` |
-| Várias instâncias | não | Redis (Memorystore) | Redis (Memorystore) |
-| App | `EXPO_PUBLIC_API_URL` vazio (10.0.2.2 / localhost) | EAS env `staging` | EAS env `production` |
+| | dev (local) | produção |
+|---|---|---|
+| Backend | `npm run backend:dev` (porta 3000) | Cloud Run `api-truco-mineiro`, projeto `wjf-games`, região `us-east1` |
+| URL | http://localhost:3000 | https://api-truco-mineiro-636596425561.us-east1.run.app |
+| Banco | PostgreSQL 17 local compartilhado (`127.0.0.1:5432`, `truco_mineiro_db`) | PostgreSQL 17 **fora do GCP** (VPS em `db.wjfdeveloper.com.br:32768`, banco `truco_mineiro_db`) |
+| Auth | Auth Emulator ou `AUTH_MODE=test` | Firebase Auth do projeto `truco-mineiro-wjf` |
+| Jobs | `JOBS_MODE=cron` | `JOBS_MODE=cron` + Cloud Scheduler (OIDC) para o que precisa rodar com o jogo vazio |
+| Várias instâncias | não | não (máximo 1 instância; mais que isso exige Redis) |
+| App | `EXPO_PUBLIC_API_URL` vazio (10.0.2.2 / localhost) | `EXPO_PUBLIC_API_URL` no `eas.json` (perfis `preview` e `production`) |
 
-Cada ambiente tem **banco e segredos próprios**. Staging nunca aponta para o banco de produção.
+Não existe ambiente de staging no GCP: o `preview` do EAS aponta para a mesma API de produção.
+Ao criar um staging, ele precisa de **banco e segredos próprios** e nunca deve apontar para o banco
+de produção.
+
+### Por que us-east1
+O banco está num VPS nos EUA (região de Boston). Uma requisição do backend faz várias consultas em
+sequência, então a distância **backend ↔ banco** pesa muito mais que **jogador ↔ backend**: em
+`us-east1` cada consulta leva ~20-30 ms, contra ~130 ms se o backend estivesse em São Paulo (a
+mesma tela levaria segundos). O jogador brasileiro paga ~120 ms por ação, uma vez.
+Se um dia o banco mudar para o Brasil, mover o serviço para `southamerica-east1` junto.
 
 ## Garantias do boot (`backend/src/config/env.ts`)
 
@@ -43,45 +53,57 @@ docker build backend --target runtime -t truco-backend
 docker build backend --target migrate -t truco-backend-migrate
 ```
 
-## Infra no Google Cloud (uma vez por ambiente)
+## Infra de produção (já criada)
 
-1. **Artifact Registry**: repositório Docker `truco` em `southamerica-east1`.
-2. **Cloud SQL** PostgreSQL 17: instância, banco `truco`, usuário da aplicação sem superusuário.
-   Ative backups automáticos e point-in-time recovery em produção. Conexões: a soma de
-   `connection_limit` (na `DATABASE_URL`) × instâncias máximas precisa caber no limite do banco
-   (ex.: 10 × 10 instâncias = 100).
-3. **Memorystore (Redis)** + **conector VPC** (Socket.IO entre instâncias).
-4. **Secret Manager** (`truco-<ambiente>-…`):
-   - `database-url` — `postgresql://<usuario>:<senha>@localhost/truco?host=/cloudsql/<instância>&connection_limit=10`
-   - `contacts-pepper` — ≥ 32 caracteres, **nunca muda** depois de gerado (invalida os hashes)
-   - `admin-secret` — ≥ 32 caracteres
-   - `webhook-secret` — ≥ 32 caracteres
-5. **Service account** `truco-backend@<projeto>`: Cloud SQL Client, Secret Manager Secret Accessor,
-   Firebase Authentication Admin (verificar token, listar/apagar usuário), Firebase Cloud Messaging
-   API Admin, Firebase App Check (verificação de token). Nenhuma chave JSON: o Cloud Run usa a
-   identidade do serviço.
-6. **Cloud Scheduler** chamando `POST <url>/webhooks/scheduler` com OIDC — comandos em
-   `docs/webhooks.md`.
+| Recurso | Valor |
+|---|---|
+| Projeto | `wjf-games` (número 636596425561) |
+| Região | `us-east1` |
+| Serviço | `api-truco-mineiro` (público; a autenticação é o ID Token do Firebase) |
+| Imagens | Artifact Registry `us-east1-docker.pkg.dev/wjf-games/truco` |
+| Conta de serviço (runtime) | `truco-backend@wjf-games.iam.gserviceaccount.com` |
+| Conta de serviço (jobs) | `truco-scheduler@wjf-games.iam.gserviceaccount.com` |
+| Segredos | `truco-prod-database-url`, `truco-prod-contacts-pepper`, `truco-prod-admin-secret` |
+| Banco | VPS próprio (não é Cloud SQL): sem Cloud SQL, sem conector VPC, sem Redis |
 
-## Deploy
+Variáveis do serviço: `NODE_ENV=production`, `FIREBASE_PROJECT_ID=truco-mineiro-wjf`,
+`AUTH_MODE=firebase`, `JOBS_MODE=cron`, `PUSH_ENABLED=false`, `ENFORCE_APP_CHECK=false`,
+`LOG_LEVEL=info`, `SWAGGER_ENABLED=false`, `WEBHOOK_SCHEDULER_OIDC_AUDIENCE` (URL do serviço) e
+`WEBHOOK_SCHEDULER_SERVICE_ACCOUNT`.
 
-```bash
-export SQL_INSTANCE=<projeto>:southamerica-east1:<instância>
-export VPC_CONNECTOR=<conector>
-export REDIS_URL=redis://<ip-memorystore>:6379
-ENVIRONMENT=staging ./scripts/deploy.sh
-ENVIRONMENT=production ./scripts/deploy.sh --confirm-production
-```
+### Configuração escolhida (custo baixo sem perder qualidade)
 
-O script: `npm --prefix backend run check` → build/push das duas imagens (tag = commit; produção
-recusa árvore suja) → Cloud Run Job de migração (`--wait`) → deploy do serviço → smoke test →
-Remote Config (só em produção: staging usa o mesmo projeto Firebase do app, então o deploy de
-staging nunca publica Remote Config nem regras). `--lockdown-firebase-rules` (só produção) publica
-as regras deny-all de Firestore/RTDB — **só na virada** (`docs/production-runbook.md`).
+| Ajuste | Valor | Por quê |
+|---|---|---|
+| Faturamento | por requisição | só paga enquanto atende; com o jogo vazio o custo vai a ~zero |
+| Instâncias | mínimo 0, máximo 1 | sem Redis, uma instância só mantém salas, presença e partidas coerentes; 0 no mínimo evita pagar o jogo parado |
+| Concorrência | 200 por instância | cabe bem acima do público atual; a carga medida foi ~500 jogadores por instância |
+| CPU / memória | 1 vCPU / 1 GiB | 512 MiB arrisca ficar sem memória com muitos sockets (derrubaria todo mundo) |
+| Startup CPU boost | ligado | cold start medido em ~0,5 s (sem custo extra) |
+| Tempo limite | 3600 s | WebSocket precisa de conexão longa |
+| Afinidade de sessão | ligada | mantém o socket na mesma instância |
 
-Parâmetros do serviço: porta 8080, `--timeout 3600` (WebSocket), `--session-affinity`,
-`--concurrency 250`, 1 vCPU / 1 GiB, mínimo de 1 instância em produção (sockets e timers de partida
-não gostam de cold start), `--allow-unauthenticated` (a autenticação é o ID token do Firebase).
+Enquanto o máximo for 1 instância, **não** ligue Redis: ele só é necessário a partir da segunda.
+Para crescer: subir `--max-instances`, criar o Redis (Memorystore) e preencher `REDIS_URL`.
+
+### Jobs (Cloud Scheduler)
+
+O serviço roda os jobs frequentes sozinho (`JOBS_MODE=cron`) enquanto existe instância viva — que é
+justamente quando há gente jogando. O que precisa acontecer mesmo com o jogo vazio fica no Cloud
+Scheduler, chamando `POST /webhooks/scheduler` com token OIDC (sem segredo para girar):
+
+| Job | Quando (America/Sao_Paulo) |
+|---|---|
+| `truco-league-rollover` → `league.weekly-rollover` | segunda, 00:05 |
+| `truco-league-rankings` → `league.refresh-rankings` | a cada 6 h |
+| `truco-maintenance-prune` → `maintenance.prune` | 04:30 |
+| `truco-accounts-reconcile` → `accounts.reconcile` | 04:45 |
+
+### Entrega contínua
+
+`cloudbuild.yaml` (raiz): constrói a imagem do backend, aplica migrations e seed, e publica a
+revisão. O gatilho do Cloud Build observa a `main` e só dispara quando o commit toca `backend/`
+(mudança só de app não gera deploy). Deploy manual quando precisar: `./scripts/deploy.sh`.
 
 ### Desligamento e várias instâncias
 
@@ -105,7 +127,7 @@ Logs são JSON no formato do Cloud Logging (`severity`, `requestId`, sem token/t
 
 `gcloud run services update-traffic truco-backend-<ambiente> --to-revisions <revisão-anterior>=100`.
 Migrations precisam ser compatíveis com a revisão anterior (expandir → migrar → contrair); se uma
-migration precisar ser desfeita, restaure pelo PITR do Cloud SQL
+migration precisar ser desfeita, restaure pelo backup do banco (VPS)
 (nunca `prisma migrate reset` fora do dev).
 
 ## App (EAS)
