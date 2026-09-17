@@ -1,5 +1,5 @@
 import { applyAction, seatsToAct, viewForSeat } from '../engine/engine';
-import { Rng } from '../engine/rng';
+import { createRng, Rng } from '../engine/rng';
 import { MatchState, Seat } from '../state/types';
 import { AIPlayer } from './ai';
 import { observe } from './observation';
@@ -36,6 +36,16 @@ export function runAITurns(
     current = applyAction(current, ai.decide(observe(viewForSeat(current, aiActor)), rng));
   }
   throw new Error('runAITurns exceeded maxSteps: possible loop');
+}
+
+/**
+ * Sorteio da decisão da IA numa partida contra a IA, derivado do ESTADO (semente da partida +
+ * versão), não de um fluxo compartilhado. Perguntar duas vezes "qual é a jogada da IA?" para o
+ * mesmo estado devolve sempre a mesma resposta — é isso que deixa o servidor re-simular a partida
+ * do app e conceder XP (a UI consulta a jogada a cada re-render, o servidor uma vez por ação).
+ */
+export function decisionRng(aiSeed: number, state: MatchState): Rng {
+  return createRng((aiSeed ^ Math.imul(state.version + 1, 0x9e3779b1)) >>> 0);
 }
 
 /** Returns the single next AI action without applying it (used for animated play in the UI). */

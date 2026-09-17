@@ -8,7 +8,7 @@ import {
   aiForDifficulty,
   applyAction,
   createMatch,
-  createRng,
+  decisionRng,
   eventsForSeat,
   getAvailableActions,
   nextAIAction,
@@ -95,7 +95,6 @@ export function useAiGame(
   const [busy, setBusy] = useState(false);
   const [botsPaused, setBotsPaused] = useState(false);
   const aiSeed = useMemo(() => (seed * 31 + 7) >>> 0, [seed]);
-  const rng = useRef(createRng(aiSeed));
   const actions = useRef<GameAction[]>([]);
   const matchId = useMemo(() => `ai_${seed.toString(36)}_${aiSeed.toString(36)}`, [seed, aiSeed]);
   const finished = useRef(false);
@@ -129,7 +128,9 @@ export function useAiGame(
     // Truco pedido contra nós ou mão de onze: a dupla inteira pode responder, mas quem decide é o
     // humano — senão a parceira IA responde em 900 ms e o jogador nunca vê os botões.
     if (state.hand.phase !== 'PLAY' && getAvailableActions(state, 0).length > 0) return;
-    const action = nextAIAction(state, aiSeats, rng.current);
+    // Sorteio derivado do estado: este efeito roda a cada re-render, e consultar a jogada não
+    // pode mudar o resultado — senão o servidor não consegue re-simular a partida (sem XP).
+    const action = nextAIAction(state, aiSeats, decisionRng(aiSeed, state));
     if (!action) return;
     commitBusy(true);
     const lastEvent = state.events[state.events.length - 1];

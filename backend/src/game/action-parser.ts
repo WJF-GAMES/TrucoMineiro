@@ -6,7 +6,7 @@ import {
   aiForDifficulty,
   applyAction,
   createMatch,
-  createRng,
+  decisionRng,
   getAvailableActions,
   nextAIAction,
 } from '../domain/game';
@@ -95,13 +95,13 @@ export function replayAiMatch(req: AiReplayRequest): MatchState {
     [2, ai],
     [3, ai],
   ]);
-  const rng = createRng(req.aiSeed);
   let state = createMatch(req.seed);
   for (const action of req.actions) {
     if (state.status !== 'PLAYING')
       throw new AppError('AI_REPLAY_MISMATCH', 'Ações após o fim da partida.');
     if (aiSeats.has(action.seat)) {
-      const expected = nextAIAction(state, aiSeats, rng);
+      // Mesmo sorteio que o app usa: derivado do estado, não de um fluxo compartilhado.
+      const expected = nextAIAction(state, aiSeats, decisionRng(req.aiSeed, state));
       if (!expected || JSON.stringify(expected) !== JSON.stringify(action))
         throw new AppError('AI_REPLAY_MISMATCH', 'Jogada da IA não confere com a simulação.');
     } else if (action.seat !== 0) {
