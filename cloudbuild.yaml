@@ -29,7 +29,19 @@ steps:
       - -f=backend/Dockerfile
       - backend
 
-  # 3) Migrations + seed estrutural ANTES de trocar o tráfego (as migrations são compatíveis com a
+  # 3) Publica as imagens no Artifact Registry ANTES do deploy (a publicação automática do
+  #    Cloud Build só acontece no fim do build, tarde demais para o passo de deploy).
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        docker push ${_REPO}/backend:${SHORT_SHA}
+        docker push ${_REPO}/backend:latest
+        docker push ${_REPO}/backend-migrate:${SHORT_SHA}
+
+  # 4) Migrations + seed estrutural ANTES de trocar o tráfego (as migrations são compatíveis com a
   #    revisão anterior, então a que está no ar continua funcionando enquanto isso).
   - id: migrate
     name: gcr.io/cloud-builders/docker
@@ -39,7 +51,7 @@ steps:
       - -c
       - docker run --rm -e DATABASE_URL="$$DATABASE_URL" ${_REPO}/backend-migrate:${SHORT_SHA}
 
-  # 4) Publica a revisão nova (mantém env/segredos já configurados no serviço).
+  # 5) Publica a revisão nova (mantém env e segredos já configurados no serviço).
   - id: deploy
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
     entrypoint: gcloud
@@ -56,11 +68,6 @@ availableSecrets:
   secretManager:
     - versionName: projects/${PROJECT_ID}/secrets/truco-prod-database-url/versions/latest
       env: DATABASE_URL
-
-images:
-  - ${_REPO}/backend:${SHORT_SHA}
-  - ${_REPO}/backend:latest
-  - ${_REPO}/backend-migrate:${SHORT_SHA}
 
 options:
   logging: CLOUD_LOGGING_ONLY
