@@ -18,7 +18,10 @@ const log = moduleLogger('bootstrap');
 export async function createApp(): Promise<{ app: INestApplication; adapter: AppIoAdapter }> {
   // Falha cedo: segredo crítico faltando derruba o processo antes de aceitar tráfego.
   const config = loadConfig();
-  const logger = new JsonLogger(config.logLevel, { service: 'truco-backend', instance: config.instanceId });
+  const logger = new JsonLogger(config.logLevel, {
+    service: 'truco-backend',
+    instance: config.instanceId,
+  });
   setRootLogger(logger);
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -30,13 +33,27 @@ export async function createApp(): Promise<{ app: INestApplication; adapter: App
   app.disable('x-powered-by');
   // Respostas dinâmicas por usuário: sem ETag/304 (o cliente sempre recebe o corpo).
   app.set('etag', false);
-  app.useBodyParser('json', { limit: '256kb' });
-  app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'same-site' } }));
+  // 2 MB cobre a partida contra a IA com muitas embaralhadas (~20 mil ações); o resto das rotas
+  // manda payload pequeno.
+  app.useBodyParser('json', { limit: '2mb' });
+  app.use(
+    helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'same-site' } }),
+  );
   app.enableCors({
     // O app móvel não envia Origin; a lista vale para ferramentas web (build web, painel).
-    origin: config.corsOrigins.length ? config.corsOrigins : config.nodeEnv === 'production' ? false : true,
+    origin: config.corsOrigins.length
+      ? config.corsOrigins
+      : config.nodeEnv === 'production'
+        ? false
+        : true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-    allowedHeaders: ['authorization', 'content-type', 'idempotency-key', 'x-request-id', 'x-firebase-appcheck'],
+    allowedHeaders: [
+      'authorization',
+      'content-type',
+      'idempotency-key',
+      'x-request-id',
+      'x-firebase-appcheck',
+    ],
     maxAge: 600,
   });
   app.use(requestIdMiddleware(app.get(MetricsService)));
@@ -51,7 +68,10 @@ export async function createApp(): Promise<{ app: INestApplication; adapter: App
         let first = errors[0];
         while (first && !first.constraints && first.children?.length) first = first.children[0];
         const raw = first?.constraints ? Object.values(first.constraints)[0] : undefined;
-        const message = raw && /[áéíóúãõç]|inválid/i.test(raw) ? raw : `Dados inválidos (${first?.property ?? 'payload'}).`;
+        const message =
+          raw && /[áéíóúãõç]|inválid/i.test(raw)
+            ? raw
+            : `Dados inválidos (${first?.property ?? 'payload'}).`;
         return new AppError('VALIDATION_FAILED', message, { field: first?.property, reason: raw });
       },
     }),
@@ -86,7 +106,12 @@ async function main() {
   server.keepAliveTimeout = 65_000;
   server.headersTimeout = 66_000;
   await app.listen(config.port, '0.0.0.0');
-  log.info('listening', { port: config.port, env: config.nodeEnv, jobs: config.jobsMode, redis: Boolean(config.redisUrl) });
+  log.info('listening', {
+    port: config.port,
+    env: config.nodeEnv,
+    jobs: config.jobsMode,
+    redis: Boolean(config.redisUrl),
+  });
 
   let closing = false;
   const shutdown = async (signal: string) => {
@@ -106,12 +131,16 @@ async function main() {
   };
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
   process.on('SIGINT', () => void shutdown('SIGINT'));
-  process.on('unhandledRejection', (reason) => log.error('unhandled_rejection', { reason: String(reason) }));
+  process.on('unhandledRejection', (reason) =>
+    log.error('unhandled_rejection', { reason: String(reason) }),
+  );
 }
 
 if (require.main === module) {
   main().catch((e) => {
-    console.error(JSON.stringify({ severity: 'CRITICAL', message: 'boot_failed', error: (e as Error).message }));
+    console.error(
+      JSON.stringify({ severity: 'CRITICAL', message: 'boot_failed', error: (e as Error).message }),
+    );
     process.exit(1);
   });
 }

@@ -50,7 +50,12 @@ export function parseAction(v: unknown): GameAction {
   if (typeof seat !== 'number' || ![0, 1, 2, 3].includes(seat)) invalid('action.seat inválido.');
   if (type === 'PLAY_CARD' || type === 'PLAY_CARD_COVERED') {
     const cardId = o.cardId;
-    if (typeof cardId !== 'string' || cardId.length < 2 || cardId.length > 3 || !CARD_ID.test(cardId))
+    if (
+      typeof cardId !== 'string' ||
+      cardId.length < 2 ||
+      cardId.length > 3 ||
+      !CARD_ID.test(cardId)
+    )
       invalid('cardId inválido.');
     return { type, seat: seat as Seat, cardId };
   }
@@ -70,14 +75,20 @@ export interface AiReplayRequest {
   actions: GameAction[];
 }
 
-export const MAX_AI_ACTIONS = 2000;
+/**
+ * Teto de ações numa partida contra a IA. NÃO é regra de jogo: embaralhar muitas vezes é jogo
+ * legítimo e uma partida real fica MUITO abaixo disso. Serve só para recusar corpo absurdo
+ * (memória/CPU do servidor) — o limite de tamanho do corpo HTTP cobre o resto.
+ */
+export const MAX_AI_ACTIONS = 20_000;
 
 /**
  * Re-executa uma partida local contra a IA. Ações humanas são validadas pelo motor e cada ação da
  * IA precisa ser exatamente a que a IA determinística produziria: o cliente não forja vitória.
  */
 export function replayAiMatch(req: AiReplayRequest): MatchState {
-  if (req.actions.length > MAX_AI_ACTIONS) throw new AppError('MATCH_TOO_LONG', 'Partida grande demais.');
+  if (req.actions.length > MAX_AI_ACTIONS)
+    throw new AppError('MATCH_TOO_LONG', 'Partida grande demais.');
   const ai = aiForDifficulty(req.difficulty);
   const aiSeats = new Map<Seat, typeof ai>([
     [1, ai],
@@ -104,6 +115,7 @@ export function replayAiMatch(req: AiReplayRequest): MatchState {
       throw new AppError('AI_REPLAY_MISMATCH', (e as Error).message);
     }
   }
-  if (state.status !== 'FINISHED') throw new AppError('MATCH_NOT_FINISHED', 'A partida não terminou.');
+  if (state.status !== 'FINISHED')
+    throw new AppError('MATCH_NOT_FINISHED', 'A partida não terminou.');
   return state;
 }

@@ -139,6 +139,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const res = ctx.getResponse<Response>();
     const req = ctx.getRequest<Request>();
     const { status, body } = toErrorBody(exception);
+    if (status >= 400 && status < 500) {
+      // Sem isso, uma recusa em produção vira só um número no log de acesso.
+      log.warn('request_rejected', {
+        requestId: body.error.requestId,
+        method: req.method,
+        route: (req.route?.path as string | undefined) ?? 'unmatched',
+        status,
+        code: body.error.code,
+        detail: body.error.message.slice(0, 200),
+      });
+    }
     if (status >= 500) {
       log.error('request_failed', {
         requestId: body.error.requestId,

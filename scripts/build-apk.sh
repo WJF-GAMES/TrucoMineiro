@@ -17,7 +17,7 @@
 set -euo pipefail
 
 # Backend de produção (o app.config.js exige URL https em build de release).
-export EXPO_PUBLIC_API_URL="${EXPO_PUBLIC_API_URL:-https://api-truco-mineiro-636596425561.us-east1.run.app}"
+export EXPO_PUBLIC_API_URL="${EXPO_PUBLIC_API_URL:-https://truco-api.wjfdeveloper.com.br}"
 
 ABIS="${1:-armeabi-v7a,arm64-v8a}"
 [ "$ABIS" = "all" ] && ABIS=""

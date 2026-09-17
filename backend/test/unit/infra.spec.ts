@@ -4,10 +4,15 @@ import { loadConfig } from '../../src/config/env';
 import { redact } from '../../src/common/logger';
 import { toErrorBody } from '../../src/common/http-exception.filter';
 import { AppError, ERROR_CODES, KIND_STATUS } from '../../src/common/errors';
-import { parseAction, replayAiMatch } from '../../src/game/action-parser';
+import { MAX_AI_ACTIONS, parseAction, replayAiMatch } from '../../src/game/action-parser';
 import { signWebhook } from '../../src/webhooks/webhooks.service';
 import { isSafeSwapPoint } from '../../src/game/game.service';
-import { newStoredState, readStoredState, timerKeyOf, trimState } from '../../src/game/stored-state';
+import {
+  newStoredState,
+  readStoredState,
+  timerKeyOf,
+  trimState,
+} from '../../src/game/stored-state';
 import { buildView } from '../../src/game/game-views';
 import { applyAction, createMatch, skipCeremony } from '../../src/domain/game';
 import { countryFromPhone, NICK_RE } from '../../src/users/users.service';
@@ -18,7 +23,9 @@ const base = { DATABASE_URL: 'postgresql://x' } as NodeJS.ProcessEnv;
 
 describe('config: falha no boot quando segredo crítico falta', () => {
   it('produção exige segredos fortes e proíbe modo de teste/emulador', () => {
-    expect(() => loadConfig({ ...base, NODE_ENV: 'production' })).toThrow(/CONTACTS_PEPPER|FIREBASE_PROJECT_ID/);
+    expect(() => loadConfig({ ...base, NODE_ENV: 'production' })).toThrow(
+      /CONTACTS_PEPPER|FIREBASE_PROJECT_ID/,
+    );
     const strong = {
       ...base,
       NODE_ENV: 'production',
@@ -28,21 +35,38 @@ describe('config: falha no boot quando segredo crítico falta', () => {
     } as NodeJS.ProcessEnv;
     expect(loadConfig(strong).nodeEnv).toBe('production');
     expect(() => loadConfig({ ...strong, AUTH_MODE: 'test' })).toThrow(/proibido/);
-    expect(() => loadConfig({ ...strong, FIREBASE_AUTH_EMULATOR_HOST: 'x:1' })).toThrow(/emulador|EMULATOR/i);
+    expect(() => loadConfig({ ...strong, FIREBASE_AUTH_EMULATOR_HOST: 'x:1' })).toThrow(
+      /emulador|EMULATOR/i,
+    );
     expect(() => loadConfig({ ...strong, CONTACTS_PEPPER: 'curto' })).toThrow(/32/);
-    expect(() => loadConfig({ ...strong, JOBS_MODE: 'external' })).toThrow(/WEBHOOK_SCHEDULER_SECRET/);
-    expect(() => loadConfig({ ...strong, JOBS_MODE: 'external', WEBHOOK_SCHEDULER_SECRET: 'curto' })).toThrow(/32/);
-    const oidc = { WEBHOOK_SCHEDULER_OIDC_AUDIENCE: 'https://api', WEBHOOK_SCHEDULER_SERVICE_ACCOUNT: 'sa@p.iam' };
+    expect(() => loadConfig({ ...strong, JOBS_MODE: 'external' })).toThrow(
+      /WEBHOOK_SCHEDULER_SECRET/,
+    );
+    expect(() =>
+      loadConfig({ ...strong, JOBS_MODE: 'external', WEBHOOK_SCHEDULER_SECRET: 'curto' }),
+    ).toThrow(/32/);
+    const oidc = {
+      WEBHOOK_SCHEDULER_OIDC_AUDIENCE: 'https://api',
+      WEBHOOK_SCHEDULER_SERVICE_ACCOUNT: 'sa@p.iam',
+    };
     expect(loadConfig({ ...strong, JOBS_MODE: 'external', ...oidc }).schedulerOidc).toEqual({
       audience: 'https://api',
       serviceAccount: 'sa@p.iam',
     });
-    expect(() => loadConfig({ ...strong, WEBHOOK_SCHEDULER_OIDC_AUDIENCE: 'https://api' })).toThrow(/juntos/);
-    expect(() => loadConfig({ NODE_ENV: 'development' } as NodeJS.ProcessEnv)).toThrow(/DATABASE_URL/);
+    expect(() => loadConfig({ ...strong, WEBHOOK_SCHEDULER_OIDC_AUDIENCE: 'https://api' })).toThrow(
+      /juntos/,
+    );
+    expect(() => loadConfig({ NODE_ENV: 'development' } as NodeJS.ProcessEnv)).toThrow(
+      /DATABASE_URL/,
+    );
   });
 
   it('prazos vêm do ambiente em segundos', () => {
-    const c = loadConfig({ ...base, PRIVATE_ROOM_WAIT_SECONDS: '12', DISCONNECT_AI_GRACE_SECONDS: 'abc' });
+    const c = loadConfig({
+      ...base,
+      PRIVATE_ROOM_WAIT_SECONDS: '12',
+      DISCONNECT_AI_GRACE_SECONDS: 'abc',
+    });
     expect(c.lobbyWaitMs).toBe(12_000);
     expect(c.disconnectAiGraceMs).toBe(8_000);
     expect(c.pushEnabled).toBe(true);
@@ -70,7 +94,8 @@ describe('logger: não vaza dado sensível', () => {
 
 describe('erros padronizados', () => {
   it('todo código tem status HTTP', () => {
-    for (const kind of Object.values(ERROR_CODES)) expect(KIND_STATUS[kind]).toBeGreaterThanOrEqual(400);
+    for (const kind of Object.values(ERROR_CODES))
+      expect(KIND_STATUS[kind]).toBeGreaterThanOrEqual(400);
   });
 
   it('mapeia AppError, HttpException, banco fora e erro desconhecido sem vazar detalhes', () => {
@@ -79,12 +104,24 @@ describe('erros padronizados', () => {
       body: { error: { code: 'ROOM_FULL', kind: 'resource-exhausted', message: 'cheia' } },
     });
     expect(toErrorBody(new NotFoundException()).status).toBe(404);
-    expect(toErrorBody(new HttpException('x', 413)).body.error).toMatchObject({ code: 'VALIDATION_FAILED', kind: 'invalid-argument' });
+    expect(toErrorBody(new HttpException('x', 413)).body.error).toMatchObject({
+      code: 'VALIDATION_FAILED',
+      kind: 'invalid-argument',
+    });
     expect(toErrorBody(new HttpException('x', 405)).body.error.code).toBe('NOT_FOUND');
-    expect(toErrorBody(new HttpException('x', 403)).body.error).toMatchObject({ code: 'FORBIDDEN', kind: 'permission-denied' });
+    expect(toErrorBody(new HttpException('x', 403)).body.error).toMatchObject({
+      code: 'FORBIDDEN',
+      kind: 'permission-denied',
+    });
     expect(toErrorBody(new HttpException('x', 429)).body.error.code).toBe('RATE_LIMITED');
-    const db = new Prisma.PrismaClientKnownRequestError('timeout do pool', { code: 'P2024', clientVersion: '6' });
-    expect(toErrorBody(db)).toMatchObject({ status: 503, body: { error: { code: 'SERVICE_UNAVAILABLE' } } });
+    const db = new Prisma.PrismaClientKnownRequestError('timeout do pool', {
+      code: 'P2024',
+      clientVersion: '6',
+    });
+    expect(toErrorBody(db)).toMatchObject({
+      status: 503,
+      body: { error: { code: 'SERVICE_UNAVAILABLE' } },
+    });
     const boom = toErrorBody(new Error('SELECT * FROM senha'));
     expect(boom.status).toBe(500);
     expect(JSON.stringify(boom.body)).not.toContain('SELECT');
@@ -93,8 +130,16 @@ describe('erros padronizados', () => {
 
 describe('ações e replay da partida contra IA', () => {
   it('valida a forma da intenção (o motor valida a regra)', () => {
-    expect(parseAction({ type: 'PLAY_CARD', seat: 2, cardId: '7C' })).toEqual({ type: 'PLAY_CARD', seat: 2, cardId: '7C' });
-    expect(parseAction({ type: 'CUT', seat: 1, depth: 'low' })).toEqual({ type: 'CUT', seat: 1, depth: 'low' });
+    expect(parseAction({ type: 'PLAY_CARD', seat: 2, cardId: '7C' })).toEqual({
+      type: 'PLAY_CARD',
+      seat: 2,
+      cardId: '7C',
+    });
+    expect(parseAction({ type: 'CUT', seat: 1, depth: 'low' })).toEqual({
+      type: 'CUT',
+      seat: 1,
+      depth: 'low',
+    });
     expect(parseAction({ type: 'RUN', seat: 3, extra: 1 })).toEqual({ type: 'RUN', seat: 3 });
     for (const bad of [
       null,
@@ -107,10 +152,17 @@ describe('ações e replay da partida contra IA', () => {
       expect(() => parseAction(bad)).toThrow(AppError);
   });
 
-  it('replay recusa partida longa demais', () => {
-    expect(() =>
-      replayAiMatch({ seed: 1, aiSeed: 1, difficulty: 'easy', actions: Array.from({ length: 2001 }, () => ({ type: 'RUN', seat: 0 })) }),
-    ).toThrow(/grande/);
+  it('replay aceita partida longa (embaralhar muito é jogo) e só recusa corpo absurdo', () => {
+    const run = (length: number) =>
+      replayAiMatch({
+        seed: 1,
+        aiSeed: 1,
+        difficulty: 'easy',
+        actions: Array.from({ length }, () => ({ type: 'RUN', seat: 0 })),
+      });
+    // Abaixo do teto a recusa vem da REGRA (sequência inválida), não do tamanho.
+    expect(() => run(MAX_AI_ACTIONS - 1)).toThrow(/Jogada inválida/);
+    expect(() => run(MAX_AI_ACTIONS + 1)).toThrow(/grande/);
   });
 });
 
@@ -134,7 +186,11 @@ describe('estado privado e views', () => {
     const dealt = skipCeremony(state);
     expect(isSafeSwapPoint(dealt)).toBe(true);
     const seat = dealt.hand.turnSeat;
-    const played = applyAction(dealt, { type: 'PLAY_CARD', seat, cardId: `${dealt.hand.hands[seat]![0]!.rank}${{ paus: 'P', copas: 'C', espadas: 'E', ouros: 'O' }[dealt.hand.hands[seat]![0]!.suit]}` });
+    const played = applyAction(dealt, {
+      type: 'PLAY_CARD',
+      seat,
+      cardId: `${dealt.hand.hands[seat]![0]!.rank}${{ paus: 'P', copas: 'C', espadas: 'E', ouros: 'O' }[dealt.hand.hands[seat]![0]!.suit]}`,
+    });
     expect(isSafeSwapPoint(played)).toBe(false);
   });
 });
@@ -158,8 +214,15 @@ describe('utilidades', () => {
   });
 
   it('presença do app: três estados simples + detalhe', () => {
-    expect(toDomainPresence('IN_MATCH', new Date(5), 'm')).toMatchObject({ state: 'in_match', sessionId: 'm', lastChanged: 5 });
-    expect(toDomainPresence('BACKGROUND', null, null)).toMatchObject({ state: 'online', detail: 'BACKGROUND' });
+    expect(toDomainPresence('IN_MATCH', new Date(5), 'm')).toMatchObject({
+      state: 'in_match',
+      sessionId: 'm',
+      lastChanged: 5,
+    });
+    expect(toDomainPresence('BACKGROUND', null, null)).toMatchObject({
+      state: 'online',
+      detail: 'BACKGROUND',
+    });
     expect(toDomainPresence(undefined, undefined, undefined).state).toBe('offline');
   });
 });
@@ -168,13 +231,15 @@ describe('KeyedMutex', () => {
   it('serializa por chave, não trava chaves diferentes e sobrevive a erro', async () => {
     const m = new KeyedMutex();
     const order: string[] = [];
-    const task = (id: string, ms: number, fail = false) => async () => {
-      order.push(`start:${id}`);
-      await new Promise((r) => setTimeout(r, ms));
-      order.push(`end:${id}`);
-      if (fail) throw new Error(id);
-      return id;
-    };
+    const task =
+      (id: string, ms: number, fail = false) =>
+      async () => {
+        order.push(`start:${id}`);
+        await new Promise((r) => setTimeout(r, ms));
+        order.push(`end:${id}`);
+        if (fail) throw new Error(id);
+        return id;
+      };
     const results = await Promise.allSettled([
       m.run('a', task('a1', 20, true)),
       m.run('a', task('a2', 1)),

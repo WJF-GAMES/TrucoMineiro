@@ -5,7 +5,7 @@
 | | dev (local) | produção |
 |---|---|---|
 | Backend | `npm run backend:dev` (porta 3000) | Cloud Run `api-truco-mineiro`, projeto `wjf-games`, região `us-east1` |
-| URL | http://localhost:3000 | https://api-truco-mineiro-636596425561.us-east1.run.app |
+| URL | http://localhost:3000 | https://truco-api.wjfdeveloper.com.br |
 | Banco | PostgreSQL 17 local compartilhado (`127.0.0.1:5432`, `truco_mineiro_db`) | PostgreSQL 17 **fora do GCP** (VPS em `db.wjfdeveloper.com.br:32768`, banco `truco_mineiro_db`) |
 | Auth | Auth Emulator ou `AUTH_MODE=test` | Firebase Auth do projeto `truco-mineiro-wjf` |
 | Jobs | `JOBS_MODE=cron` | `JOBS_MODE=cron` + Cloud Scheduler (OIDC) para o que precisa rodar com o jogo vazio |

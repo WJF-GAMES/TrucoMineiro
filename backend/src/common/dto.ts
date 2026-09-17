@@ -23,7 +23,8 @@ import { AVATAR_IDS } from '../domain/model/types';
 
 /** DTOs de entrada da API. Tudo validado pelo ValidationPipe global (whitelist + forbidNonWhitelisted). */
 
-const upper = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim().toUpperCase() : value);
+const upper = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim().toUpperCase() : value;
 
 export const ROOM_CODE_RE = /^[A-Z0-9]{6}$/;
 export const UID_RE = /^[\w-]{4,128}$/;
@@ -75,7 +76,13 @@ export class SearchQuery {
 }
 
 export class PageQuery {
-  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(80) cursor?: string;
 }
 
@@ -131,7 +138,10 @@ export class RoomInviteDto {
 
 export class DirectInviteDto {
   @ApiProperty() @Matches(UID_RE) friendUid!: string;
-  @ApiPropertyOptional({ type: [String], description: 'Telefones do contato (prova de vínculo, não gravados).' })
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Telefones do contato (prova de vínculo, não gravados).',
+  })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(5)
@@ -168,17 +178,24 @@ export class FinalizeAiMatchDto {
   @ApiProperty() @IsString() @Length(4, 80) matchId!: string;
   @ApiProperty() @IsNumber() seed!: number;
   @ApiProperty() @IsNumber() aiSeed!: number;
-  @ApiProperty({ enum: ['easy', 'normal', 'hard'] }) @IsIn(['easy', 'normal', 'hard']) difficulty!: 'easy' | 'normal' | 'hard';
+  @ApiProperty({ enum: ['easy', 'normal', 'hard'] }) @IsIn(['easy', 'normal', 'hard']) difficulty!:
+    'easy' | 'normal' | 'hard';
   @ApiProperty({ type: [GameActionBody] })
   @IsArray()
-  @ArrayMaxSize(2000)
+  @ArrayMaxSize(20_000)
   @ValidateNested({ each: true })
   @Type(() => GameActionBody)
   actions!: GameActionBody[];
 }
 
 export class RankingQuery {
-  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }
 
 export class AdminWeekQuery {
