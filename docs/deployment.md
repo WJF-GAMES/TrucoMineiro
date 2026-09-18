@@ -5,7 +5,7 @@
 | | dev (local) | produção |
 |---|---|---|
 | Backend | `npm run backend:dev` (porta 3000) | Cloud Run `api-truco-mineiro`, projeto `wjf-games`, região `us-east1` |
-| URL | http://localhost:3000 | https://truco-api.wjfdeveloper.com.br |
+| URL | http://localhost:11002 | https://truco-api.wjfdeveloper.com.br |
 | Banco | PostgreSQL 17 local compartilhado (`127.0.0.1:5432`, `truco_mineiro_db`) | PostgreSQL 17 **fora do GCP** (VPS em `db.wjfdeveloper.com.br:32768`, banco `truco_mineiro_db`) |
 | Auth | Auth Emulator ou `AUTH_MODE=test` | Firebase Auth do projeto `truco-mineiro-wjf` |
 | Jobs | `JOBS_MODE=cron` | `JOBS_MODE=cron` + Cloud Scheduler (OIDC) para o que precisa rodar com o jogo vazio |
@@ -145,7 +145,7 @@ cp backend/.env.example backend/.env        # preencher credenciais do PostgreSQ
 npm --prefix backend ci
 npm --prefix backend run prisma:migrate && npm --prefix backend run seed
 npm run emulators                            # Auth Emulator
-npm run backend:dev                          # http://localhost:3000, Swagger em /docs
+npm run backend:dev                          # http://localhost:11002, Swagger em /docs
 EXPO_PUBLIC_USE_EMULATORS=1 npm start
 ```
 

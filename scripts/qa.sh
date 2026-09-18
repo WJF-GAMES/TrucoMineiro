@@ -19,11 +19,11 @@ launch() {
   timeout 20 "$ADB" shell am force-stop $PKG
   if [ "${DEV_CLIENT:-0}" = "1" ]; then
     # O reverse some sempre que o emulador reinicia; sem ele o dev client não acha o Metro.
-    timeout 15 "$ADB" reverse tcp:8081 tcp:8081 > /dev/null
-    # Backend local (REST + Socket.IO). O app em dev usa http://10.0.2.2:3000, que já chega ao host;
-    # o reverse deixa também http://localhost:3000 funcionar (EXPO_PUBLIC_API_URL apontando para ele).
-    timeout 15 "$ADB" reverse tcp:3000 tcp:3000 > /dev/null
-    timeout 30 "$ADB" shell am start -a android.intent.action.VIEW       -d "trucomineiro://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081" $PKG > /dev/null
+    timeout 15 "$ADB" reverse tcp:11003 tcp:11003 > /dev/null
+    # Backend local (REST + Socket.IO). O app em dev usa http://10.0.2.2:11002, que já chega ao host;
+    # o reverse deixa também http://localhost:11002 funcionar (EXPO_PUBLIC_API_URL apontando para ele).
+    timeout 15 "$ADB" reverse tcp:11002 tcp:11002 > /dev/null
+    timeout 30 "$ADB" shell am start -a android.intent.action.VIEW       -d "trucomineiro://expo-development-client/?url=http%3A%2F%2Flocalhost%3A11003" $PKG > /dev/null
     local n=0
     until timeout 20 "$ADB" logcat -d 2>/dev/null | grep -q 'Running "main"'; do
       sleep 4; n=$((n+1)); [ $n -ge 30 ] && break

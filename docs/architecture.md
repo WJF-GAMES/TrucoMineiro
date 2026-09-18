@@ -123,7 +123,7 @@ Crashlytics, Performance, Remote Config, App Check e AdMob.
   assinaturas registradas (`whileConnected`) — sala, partida, presença e liga nunca ficam velhas
   depois de uma queda. `emit` devolve o ack ou lança `ApiError` no mesmo formato do REST.
 - `config.ts`: `EXPO_PUBLIC_API_URL` / `EXPO_PUBLIC_WS_URL` (WS padrão = mesma URL da API). Em
-  desenvolvimento sem variável: `http://10.0.2.2:3000` no emulador Android e `http://localhost:3000`
+  desenvolvimento sem variável: `http://10.0.2.2:11002` no emulador Android e `http://localhost:11002`
   nos demais. Fora de desenvolvimento a URL precisa ser `https://` (exceto com
   `EXPO_PUBLIC_ALLOW_INSECURE_API=1`, só para QA local); `app.config.js` recusa build de
   staging/produção sem URL https própria do ambiente.

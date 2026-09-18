@@ -12,7 +12,7 @@ npm run check             # lint + typecheck + testes (app e backend)
 npm test                  # jest (engine, IA, utils)
 npm run test:sim -- 3000  # 9.000 partidas IA x IA (deadlock/loop/estado impossível)
 npm run emulators         # Firebase Auth Emulator (9099)
-npm run backend:dev       # backend em http://localhost:3000 (usa backend/.env; Swagger em /docs)
+npm run backend:dev       # backend em http://localhost:11002 (usa backend/.env; Swagger em /docs)
 npm --prefix backend run test:integration  # integração no PostgreSQL (backend/.env.test, schema próprio)
 npm --prefix backend run prisma:migrate    # aplica migrations (banco local: 127.0.0.1:5432/truco_mineiro_db)
 npm --prefix backend run smoke -- --url <api>  # smoke test pós-deploy
@@ -27,7 +27,7 @@ python scripts/visual-diff.py   # comparações com references/
 python scripts/optimize-assets.py [--apply]  # PNG de assets/images -> WebP no tamanho de uso (relatório sem --apply)
 python scripts/generate-app-icons.py     # ícones iOS/Android a partir de references/app-icon.png
 python scripts/extract-screen-assets.py  # artes das telas a partir dos prints em references/
-npx expo start --port 8081               # http://localhost:8081 abre a build web (inspeção rápida de tela)
+npx expo start --port 11003              # Metro do app (http://localhost:11003); backend local em 11002
 ```
 
 ## Regras do projeto

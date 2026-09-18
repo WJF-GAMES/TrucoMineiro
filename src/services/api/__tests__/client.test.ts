@@ -32,7 +32,7 @@ describe('config da API', () => {
       wsUrl: 'https://api.x',
     });
     expect(resolveEndpoints({ api: 'https://api.x', ws: 'https://ws.x', dev: false }).wsUrl).toBe('https://ws.x');
-    expect(resolveEndpoints({ dev: true }).apiUrl).toMatch(/^http:\/\/(10\.0\.2\.2|localhost):3000$/);
+    expect(resolveEndpoints({ dev: true }).apiUrl).toMatch(/^http:\/\/(10\.0\.2\.2|localhost):11002$/);
   });
 });
 

@@ -14,7 +14,7 @@ const arg = (name: string, def = '') => {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 ? (process.argv[i + 1] ?? '') : def;
 };
-const URL_BASE = arg('url', process.env.SMOKE_URL || 'http://localhost:3000').replace(/\/$/, '');
+const URL_BASE = arg('url', process.env.SMOKE_URL || 'http://localhost:11002').replace(/\/$/, '');
 const TOKEN = process.argv.includes('--test-token')
   ? 'test:smoke-user:+5531900000001'
   : process.env.SMOKE_ID_TOKEN || '';

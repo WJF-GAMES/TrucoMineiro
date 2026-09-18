@@ -8,7 +8,7 @@ jobs e webhooks em [webhooks.md](webhooks.md).
 
 | Item | Valor |
 |---|---|
-| Base | `https://<host>` (dev: `http://localhost:3000`, `PORT`) |
+| Base | `https://<host>` (dev: `http://localhost:11002`, `PORT`) |
 | Versão | prefixo `/v1` em todas as rotas de produto. Fora do prefixo: `/health`, `/health/ready`, `/metrics`, `/webhooks/:provider` |
 | Corpo | JSON, limite de 256 kB (`useBodyParser('json', { limit: '256kb' })`) |
 | Validação | `ValidationPipe` global com `whitelist` + `forbidNonWhitelisted` + `transform`: campo desconhecido é erro |

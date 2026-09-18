@@ -49,7 +49,7 @@ então nunca apontam para dev, staging ou produção.
 ```
 # alvo com AUTH_MODE=test (ambiente local ou de carga — nunca produção)
 npm --prefix backend run load:test -- --url http://localhost:3200 --users 500 --matches 25 --duration 60
-npm --prefix backend run smoke -- --url http://localhost:3000 --test-token
+npm --prefix backend run smoke -- --url http://localhost:11002 --test-token
 SMOKE_ID_TOKEN=<ID token de uma conta de teste> npm --prefix backend run smoke -- --url https://<api-staging>
 ```
 - O teste de carga usa tokens de teste, então **exige** um backend com `AUTH_MODE=test` (que não sobe
@@ -140,9 +140,9 @@ partida contra a IA com progressão vinda de `POST /v1/matches/ai` → sala com 
 
 ## QA no emulador (mesa)
 
-- `scripts/qa.sh launch` (com `DEV_CLIENT=1`) refaz o `adb reverse tcp:8081` — ele some sempre
-  que o emulador reinicia e, sem ele, o dev client mostra "Failed to connect to localhost:8081".
-  O backend local é alcançado pelo emulador em `http://10.0.2.2:3000` (padrão de desenvolvimento).
+- `scripts/qa.sh launch` (com `DEV_CLIENT=1`) refaz o `adb reverse tcp:11003` — ele some sempre
+  que o emulador reinicia e, sem ele, o dev client mostra "Failed to connect to localhost:11003".
+  O backend local é alcançado pelo emulador em `http://10.0.2.2:11002` (padrão de desenvolvimento).
 - `scripts/qa-record.sh <nome> <segundos> [x y ...]` grava a tela (`screenrecord`) enquanto toca e
   gera uma folha de contato dos quadros em `artifacts/screenshots/<nome>.png`. Atenção: o
   `screenrecord` só emite quadros quando a tela muda, então pausas longas *parecem* mais longas

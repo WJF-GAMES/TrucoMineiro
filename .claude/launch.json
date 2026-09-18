@@ -8,7 +8,7 @@
         "run",
         "start"
       ],
-      "port": 8081
+      "port": 11003
     },
     {
       "name": "start-emulators",
@@ -18,9 +18,9 @@
         "start",
         "--dev-client",
         "--port",
-        "8081"
+        "11003"
       ],
-      "port": 8081,
+      "port": 11003,
       "env": {
         "EXPO_PUBLIC_USE_EMULATORS": "1"
       }
@@ -37,7 +37,7 @@
       ],
       "port": 8082,
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://localhost:3001"
+        "EXPO_PUBLIC_API_URL": "http://localhost:11002"
       }
     },
     {
@@ -49,7 +49,7 @@
         "run",
         "start:dev"
       ],
-      "port": 3000
+      "port": 11002
     }
   ]
 }

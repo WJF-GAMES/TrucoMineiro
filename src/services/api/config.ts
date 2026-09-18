@@ -41,7 +41,7 @@ export function resolveEndpoints(
     allowInsecure: process.env.EXPO_PUBLIC_ALLOW_INSECURE_API === '1',
   },
 ): ApiEndpoints {
-  const api = clean(env.api) ?? (env.dev ? `http://${DEV_HOST}:3000` : null);
+  const api = clean(env.api) ?? (env.dev ? `http://${DEV_HOST}:11002` : null);
   if (!api) throw new ApiConfigError('EXPO_PUBLIC_API_URL não configurada nesta build.');
   if (!env.dev && !env.allowInsecure && !api.startsWith('https://'))
     throw new ApiConfigError('EXPO_PUBLIC_API_URL precisa ser https em builds de release.');
